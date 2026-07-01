@@ -10,7 +10,7 @@ const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
 
 const jetBrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
-  subsets: ["latin", "arabic"],
+  subsets: ["latin"],
 });
 
 export const metadata: Metadata = {

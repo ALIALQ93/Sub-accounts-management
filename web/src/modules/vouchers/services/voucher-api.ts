@@ -196,12 +196,18 @@ export const voucherApi = {
       .eq("id", voucher.journal_entry_id)
       .single();
     throwIfSupabaseError(journalError);
+    if (!journal?.entry_no) {
+      throw new ApiError({
+        code: "POSTING_FAILED",
+        message: "تم الترحيل لكن لم يتم العثور على رقم قيد اليومية.",
+      });
+    }
 
     return {
       voucher_id: voucher.id,
       status: "posted",
       journal_entry_id: voucher.journal_entry_id,
-      journal_entry_no: journal.entry_no as string,
+      journal_entry_no: journal.entry_no,
     };
   },
 
