@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
@@ -41,6 +42,7 @@ export function VoucherForm({
   const [voucherDate, setVoucherDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [journalEntryId, setJournalEntryId] = useState("");
   const [status, setStatus] = useState<VoucherStatus>("draft");
   const [description, setDescription] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -207,6 +209,7 @@ export function VoucherForm({
 
       const response = await voucherApi.postVoucher(activeId);
       setStatus("posted");
+      setJournalEntryId(response.journal_entry_id);
       setFeedback(`تم ترحيل السند بنجاح. رقم القيد: ${response.journal_entry_no}`);
     } catch (error) {
       setFeedback(getErrorMessage(error));
@@ -221,8 +224,10 @@ export function VoucherForm({
 
     setIsSaving(true);
     try {
-      await voucherApi.reverseVoucher(voucherId);
-      setFeedback("تم إرسال طلب عكس السند بنجاح.");
+      const reversal = await voucherApi.reverseVoucher(voucherId);
+      setFeedback(
+        `تم عكس السند بنجاح. رقم السند العكسي: ${reversal.reversed_voucher_id}`,
+      );
     } catch (error) {
       setFeedback(getErrorMessage(error));
     } finally {
@@ -257,6 +262,7 @@ export function VoucherForm({
         setVoucherType(details.header.voucher_type);
         setSettlementMode(details.header.settlement_mode);
         setVoucherDate(details.header.voucher_date);
+        setJournalEntryId(details.header.journal_entry_id ?? "");
         setStatus(details.header.status);
         setDescription(details.header.description ?? "");
         setCustomerId(details.header.customer_id ?? "");
@@ -441,6 +447,14 @@ export function VoucherForm({
           >
             عكس
           </button>
+          {journalEntryId && (
+            <Link
+              href={`/journals/${journalEntryId}`}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              فتح القيد الناتج
+            </Link>
+          )}
         </div>
         {feedback && (
           <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700">

@@ -66,6 +66,7 @@ export interface Account {
   is_postable: boolean;
   is_active: boolean;
   parent_id: string | null;
+  level?: number;
 }
 
 export interface VoucherListItem {
@@ -118,6 +119,21 @@ export interface JournalEntryListItem {
   source_id: string | null;
 }
 
+export interface JournalEntryLineDetail {
+  id: string;
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  debit: number;
+  credit: number;
+  line_description: string | null;
+}
+
+export interface JournalEntryDetails {
+  header: JournalEntryListItem;
+  lines: JournalEntryLineDetail[];
+}
+
 export interface TrialBalanceRow {
   account_id: string;
   account_code: string;
@@ -125,4 +141,21 @@ export interface TrialBalanceRow {
   debit: number;
   credit: number;
   balance: number;
+}
+
+export interface DashboardLastMovement {
+  type: "voucher" | "journal";
+  id: string;
+  reference: string;
+  date: string;
+  description: string | null;
+  status: string;
+}
+
+export interface DashboardStats {
+  voucher_count: number;
+  today_journal_count: number;
+  total_debit: number;
+  total_credit: number;
+  last_movement: DashboardLastMovement | null;
 }
