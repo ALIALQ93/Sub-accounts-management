@@ -12,5 +12,5 @@ Core accounting bootstrap files:
 
 Frontend app:
 
-- `web/`: Next.js + TypeScript UI scaffold with initial voucher form and allocation screens.
+- `web/`: Next.js + TypeScript frontend with home, vouchers list/form, and accounts screens connected to Supabase.
 - `.github/workflows/web-ci.yml`: GitHub Actions workflow for web lint and build.

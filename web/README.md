@@ -24,8 +24,16 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Main implemented routes:
 
+- `/`
+- `/vouchers`
 - `/vouchers/new`
 - `/vouchers/[id]`
+- `/accounts`
+- `/customers`
+- `/vendors`
+- `/open-movements`
+- `/journals`
+- `/reports/trial-balance`
 
 The voucher service is connected to Supabase tables directly via:
 

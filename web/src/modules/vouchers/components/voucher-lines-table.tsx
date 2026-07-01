@@ -1,9 +1,14 @@
 "use client";
 
-import type { VoucherLine, VoucherLineSide } from "@/modules/vouchers/types";
+import type {
+  Account,
+  VoucherLine,
+  VoucherLineSide,
+} from "@/modules/vouchers/types";
 
 interface VoucherLinesTableProps {
   lines: VoucherLine[];
+  accounts: Account[];
   readOnly: boolean;
   onChange: (lines: VoucherLine[]) => void;
 }
@@ -21,6 +26,7 @@ const DEFAULT_LINE: VoucherLine = {
 
 export function VoucherLinesTable({
   lines,
+  accounts,
   readOnly,
   onChange,
 }: VoucherLinesTableProps) {
@@ -78,15 +84,29 @@ export function VoucherLinesTable({
             {lines.map((line) => (
               <tr key={line.id} className="odd:bg-white even:bg-slate-50/60">
                 <td className="border-b border-slate-100 p-2">
-                  <input
-                    value={line.account_code ?? ""}
+                  <select
+                    value={line.account_id ?? ""}
                     onChange={(event) =>
-                      updateLine(line.id, { account_code: event.target.value })
+                      updateLine(line.id, {
+                        account_id: event.target.value,
+                        account_code:
+                          accounts.find((account) => account.id === event.target.value)
+                            ?.code ?? "",
+                        account_name:
+                          accounts.find((account) => account.id === event.target.value)
+                            ?.name_ar ?? "",
+                      })
                     }
                     disabled={readOnly}
                     className="w-full rounded-md border border-slate-300 px-2 py-1 outline-none focus:border-blue-900"
-                    placeholder="كود الحساب"
-                  />
+                  >
+                    <option value="">اختر الحساب</option>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.code} - {account.name_ar}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="border-b border-slate-100 p-2">
                   <select

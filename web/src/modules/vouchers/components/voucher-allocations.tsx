@@ -1,9 +1,13 @@
 "use client";
 
-import type { VoucherAllocation } from "@/modules/vouchers/types";
+import type {
+  OpenMovement,
+  VoucherAllocation,
+} from "@/modules/vouchers/types";
 
 interface VoucherAllocationsProps {
   allocations: VoucherAllocation[];
+  openMovements: OpenMovement[];
   readOnly: boolean;
   visible: boolean;
   onChange: (allocations: VoucherAllocation[]) => void;
@@ -11,6 +15,7 @@ interface VoucherAllocationsProps {
 
 export function VoucherAllocations({
   allocations,
+  openMovements,
   readOnly,
   visible,
   onChange,
@@ -82,17 +87,32 @@ export function VoucherAllocations({
             {allocations.map((allocation) => (
               <tr key={allocation.id} className="odd:bg-white even:bg-slate-50/60">
                 <td className="border-b border-slate-100 p-2">
-                  <input
-                    value={allocation.target_reference ?? ""}
+                  <select
+                    value={allocation.target_journal_line_id ?? ""}
                     onChange={(event) =>
                       updateAllocation(allocation.id, {
-                        target_reference: event.target.value,
+                        target_journal_line_id: event.target.value,
+                        target_reference:
+                          openMovements.find(
+                            (movement) =>
+                              movement.target_journal_line_id === event.target.value,
+                          )?.entry_no ?? "",
                       })
                     }
                     disabled={readOnly}
                     className="w-full rounded-md border border-slate-300 px-2 py-1 outline-none focus:border-blue-900"
-                    placeholder="INV-2026-0001"
-                  />
+                  >
+                    <option value="">اختر حركة مفتوحة</option>
+                    {openMovements.map((movement) => (
+                      <option
+                        key={movement.target_journal_line_id}
+                        value={movement.target_journal_line_id}
+                      >
+                        {movement.entry_no} | {movement.account_code} |{" "}
+                        {movement.open_amount.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="border-b border-slate-100 p-2 font-mono">
                   <input

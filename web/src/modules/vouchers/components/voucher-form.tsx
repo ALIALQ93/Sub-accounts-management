@@ -9,6 +9,8 @@ import {
   voucherApi,
 } from "@/modules/vouchers/services/voucher-api";
 import type {
+  Account,
+  OpenMovement,
   SettlementMode,
   VoucherAllocation,
   VoucherHeader,
@@ -46,6 +48,8 @@ export function VoucherForm({
   const [lines, setLines] = useState<VoucherLine[]>(DEFAULT_LINES);
   const [allocations, setAllocations] =
     useState<VoucherAllocation[]>(DEFAULT_ALLOCATIONS);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [openMovements, setOpenMovements] = useState<OpenMovement[]>([]);
   const [feedback, setFeedback] = useState("");
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
@@ -230,12 +234,21 @@ export function VoucherForm({
     let cancelled = false;
 
     const loadVoucher = async () => {
-      if (initialMode !== "edit" || !initialVoucherId) {
-        setIsLoading(false);
-        return;
-      }
-
       try {
+        const [accountsData, openMovementsData] = await Promise.all([
+          voucherApi.listAccounts(),
+          voucherApi.listOpenMovements(),
+        ]);
+        if (!cancelled) {
+          setAccounts(accountsData);
+          setOpenMovements(openMovementsData);
+        }
+
+        if (initialMode !== "edit" || !initialVoucherId) {
+          if (!cancelled) setIsLoading(false);
+          return;
+        }
+
         const details = await voucherApi.getVoucherById(initialVoucherId);
         if (cancelled) return;
 
@@ -376,12 +389,14 @@ export function VoucherForm({
 
       <VoucherLinesTable
         lines={lines}
+        accounts={accounts}
         onChange={setLines}
         readOnly={readOnly || isSaving}
       />
 
       <VoucherAllocations
         allocations={allocations}
+        openMovements={openMovements}
         onChange={setAllocations}
         readOnly={readOnly || isSaving}
         visible={isAllocationVisible}
