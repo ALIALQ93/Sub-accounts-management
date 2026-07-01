@@ -39,3 +39,7 @@ The voucher service is connected to Supabase tables directly via:
 
 - `src/lib/supabase/client.ts`
 - `src/modules/vouchers/services/voucher-api.ts`
+
+Shared app shell (sidebar + topbar):
+
+- `src/components/app-shell.tsx`

@@ -113,6 +113,21 @@ export const voucherApi = {
     return data as Customer;
   },
 
+  async updateCustomer(
+    id: string,
+    payload: Partial<Customer>,
+  ): Promise<Customer> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("customers")
+      .update(payload)
+      .eq("id", id)
+      .select("*")
+      .single();
+    throwIfSupabaseError(error);
+    return data as Customer;
+  },
+
   async listVendors(): Promise<Vendor[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
@@ -128,6 +143,18 @@ export const voucherApi = {
     const { data, error } = await supabase
       .from("vendors")
       .insert(payload)
+      .select("*")
+      .single();
+    throwIfSupabaseError(error);
+    return data as Vendor;
+  },
+
+  async updateVendor(id: string, payload: Partial<Vendor>): Promise<Vendor> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("vendors")
+      .update(payload)
+      .eq("id", id)
       .select("*")
       .single();
     throwIfSupabaseError(error);

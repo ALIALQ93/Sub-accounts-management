@@ -16,6 +16,11 @@ export default function VendorsPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [payableAccountId, setPayableAccountId] = useState("");
+  const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
+  const [editNameAr, setEditNameAr] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPayableAccountId, setEditPayableAccountId] = useState("");
 
   const reloadVendors = async () => {
     try {
@@ -90,6 +95,62 @@ export default function VendorsPage() {
     }
   };
 
+  const startEdit = (vendor: Vendor) => {
+    setEditingVendorId(vendor.id);
+    setEditNameAr(vendor.name_ar);
+    setEditPhone(vendor.phone ?? "");
+    setEditEmail(vendor.email ?? "");
+    setEditPayableAccountId(vendor.payable_account_id);
+  };
+
+  const cancelEdit = () => {
+    setEditingVendorId(null);
+    setEditNameAr("");
+    setEditPhone("");
+    setEditEmail("");
+    setEditPayableAccountId("");
+  };
+
+  const saveEdit = async () => {
+    if (!editingVendorId) return;
+    if (!editNameAr.trim() || !editPayableAccountId) {
+      setError("الاسم وحساب الذمم مطلوبان.");
+      return;
+    }
+
+    setIsSaving(true);
+    setError("");
+    try {
+      await voucherApi.updateVendor(editingVendorId, {
+        name_ar: editNameAr.trim(),
+        phone: editPhone.trim() || null,
+        email: editEmail.trim() || null,
+        payable_account_id: editPayableAccountId,
+      });
+      cancelEdit();
+      await reloadVendors();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل تعديل المورد.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const toggleActive = async (vendor: Vendor) => {
+    setIsSaving(true);
+    setError("");
+    try {
+      await voucherApi.updateVendor(vendor.id, {
+        is_active: !vendor.is_active,
+      });
+      await reloadVendors();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل تغيير حالة المورد.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <main className="mx-auto w-full max-w-6xl p-6">
       <h1 className="mb-4 text-2xl font-bold text-slate-900">الموردين</h1>
@@ -157,7 +218,9 @@ export default function VendorsPage() {
                   <th className="border-b border-slate-200 p-2">الاسم</th>
                   <th className="border-b border-slate-200 p-2">الهاتف</th>
                   <th className="border-b border-slate-200 p-2">البريد</th>
+                  <th className="border-b border-slate-200 p-2">حساب الذمم</th>
                   <th className="border-b border-slate-200 p-2">الحالة</th>
+                  <th className="border-b border-slate-200 p-2">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -166,18 +229,112 @@ export default function VendorsPage() {
                     <td className="border-b border-slate-100 p-2 font-mono">
                       {vendor.vendor_code}
                     </td>
-                    <td className="border-b border-slate-100 p-2">{vendor.name_ar}</td>
-                    <td className="border-b border-slate-100 p-2">{vendor.phone || "-"}</td>
-                    <td className="border-b border-slate-100 p-2">{vendor.email || "-"}</td>
+                    <td className="border-b border-slate-100 p-2">
+                      {editingVendorId === vendor.id ? (
+                        <input
+                          value={editNameAr}
+                          onChange={(event) => setEditNameAr(event.target.value)}
+                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      ) : (
+                        vendor.name_ar
+                      )}
+                    </td>
+                    <td className="border-b border-slate-100 p-2">
+                      {editingVendorId === vendor.id ? (
+                        <input
+                          value={editPhone}
+                          onChange={(event) => setEditPhone(event.target.value)}
+                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      ) : (
+                        vendor.phone || "-"
+                      )}
+                    </td>
+                    <td className="border-b border-slate-100 p-2">
+                      {editingVendorId === vendor.id ? (
+                        <input
+                          value={editEmail}
+                          onChange={(event) => setEditEmail(event.target.value)}
+                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                        />
+                      ) : (
+                        vendor.email || "-"
+                      )}
+                    </td>
+                    <td className="border-b border-slate-100 p-2">
+                      {editingVendorId === vendor.id ? (
+                        <select
+                          value={editPayableAccountId}
+                          onChange={(event) =>
+                            setEditPayableAccountId(event.target.value)
+                          }
+                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                        >
+                          <option value="">اختر الحساب</option>
+                          {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.code} - {account.name_ar}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        accounts.find((account) => account.id === vendor.payable_account_id)
+                          ?.code ?? "-"
+                      )}
+                    </td>
                     <td className="border-b border-slate-100 p-2">
                       {vendor.is_active ? "نشط" : "غير نشط"}
+                    </td>
+                    <td className="border-b border-slate-100 p-2">
+                      <div className="flex flex-wrap gap-2">
+                        {editingVendorId === vendor.id ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={saveEdit}
+                              disabled={isSaving}
+                              className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                            >
+                              حفظ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEdit}
+                              disabled={isSaving}
+                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-50"
+                            >
+                              إلغاء
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => startEdit(vendor)}
+                              disabled={isSaving}
+                              className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                            >
+                              تعديل
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleActive(vendor)}
+                              disabled={isSaving}
+                              className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                            >
+                              {vendor.is_active ? "تعطيل" : "تفعيل"}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {vendors.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={7}
                       className="border-b border-slate-100 p-4 text-center text-slate-500"
                     >
                       لا توجد بيانات موردين.
