@@ -21,8 +21,9 @@ const REPORTS: ReportCard[] = [
   },
   {
     title: "كشف حساب",
-    description: "حركة حساب واحد مع رصيد افتتاحي وتراكمي — متوفر من دليل الحسابات.",
-    href: "/accounts",
+    description:
+      "حركة حساب واحد مع رصيد افتتاحي وتراكمي — اختيار مباشر للحساب والفترة.",
+    href: "/reports/account-statement",
     status: "available",
     phase: "جاهز",
   },

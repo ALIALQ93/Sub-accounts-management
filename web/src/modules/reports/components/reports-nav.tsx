@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 interface ReportsNavProps {
-  active?: "hub" | "trial-balance";
+  active?: "hub" | "trial-balance" | "account-statement";
 }
 
 export function ReportsNav({ active = "hub" }: ReportsNavProps) {
@@ -22,6 +22,12 @@ export function ReportsNav({ active = "hub" }: ReportsNavProps) {
         className={itemClass(active === "trial-balance")}
       >
         ميزان المراجعة
+      </Link>
+      <Link
+        href="/reports/account-statement"
+        className={itemClass(active === "account-statement")}
+      >
+        كشف حساب
       </Link>
     </nav>
   );
