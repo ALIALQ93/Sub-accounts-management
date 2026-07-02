@@ -1,15 +1,21 @@
 "use client";
 
+import { useMemo } from "react";
 import type { Account, CostCenter, VoucherLine, VoucherLineCategory } from "@/modules/vouchers/types";
+import type { Currency } from "@/modules/currencies/types";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import { VoucherLineCategoryFields } from "@/modules/vouchers/components/voucher-line-category-fields";
+import { formatVoucherAmount } from "@/modules/vouchers/utils/voucher-currency-utils";
 
 interface ReceiptVoucherLinesTableProps {
   lines: VoucherLine[];
   accounts: Account[];
   costCenters: CostCenter[];
   lineCategories: VoucherLineCategory[];
+  currencies: Currency[];
+  voucherCurrencyId: string;
+  amountStep: string;
   readOnly: boolean;
   onChange: (lines: VoucherLine[]) => void;
 }
@@ -35,9 +41,17 @@ export function ReceiptVoucherLinesTable({
   accounts,
   costCenters,
   lineCategories,
+  currencies,
+  voucherCurrencyId,
+  amountStep,
   readOnly,
   onChange,
 }: ReceiptVoucherLinesTableProps) {
+  const selectedCurrency = useMemo(
+    () => currencies.find((currency) => currency.id === voucherCurrencyId),
+    [currencies, voucherCurrencyId],
+  );
+
   const updateLine = (id: string, patch: Partial<VoucherLine>) => {
     onChange(
       lines.map((line) =>
@@ -65,8 +79,9 @@ export function ReceiptVoucherLinesTable({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">أسطر الدائن</h2>
           <p className="text-xs text-slate-500">
-            سند قبض — كل سطر دائن بحساب مقابل. المدين يُولَّد تلقائياً على حساب
-            القبض.
+            سند قبض — كل سطر دائن يُولّد معه سطر مدين على حساب القبض بنفس
+            المبلغ ومركز الكلفة
+            {selectedCurrency ? ` (${selectedCurrency.code})` : ""}.
           </p>
         </div>
         <button
@@ -97,6 +112,8 @@ export function ReceiptVoucherLinesTable({
                 <td className="min-w-[240px] border-b border-slate-100 p-2">
                   <AccountSearchField
                     accounts={accounts}
+                    currencies={currencies}
+                    filterCurrencyId={voucherCurrencyId || undefined}
                     value={line.account_id ?? ""}
                     hideLabel
                     onChange={(accountId, account) =>
@@ -106,7 +123,7 @@ export function ReceiptVoucherLinesTable({
                         account_name: account?.name_ar ?? "",
                       })
                     }
-                    disabled={readOnly}
+                    disabled={readOnly || !voucherCurrencyId}
                   />
                 </td>
                 <td className="border-b border-slate-100 p-2 font-mono">
@@ -118,7 +135,7 @@ export function ReceiptVoucherLinesTable({
                     }
                     disabled={readOnly}
                     min={0}
-                    step="0.01"
+                    step={amountStep}
                     className="w-full min-w-[120px] rounded-md border border-slate-300 px-2 py-1"
                   />
                 </td>
@@ -189,10 +206,11 @@ export function ReceiptVoucherLinesTable({
 
       <div className="mt-3 grid gap-2 rounded-md bg-emerald-50 p-3 text-sm sm:grid-cols-2">
         <p className="font-mono text-emerald-900">
-          إجمالي الدائن: {totalCredit.toFixed(2)}
+          إجمالي الدائن: {formatVoucherAmount(totalCredit, selectedCurrency)}
         </p>
         <p className="font-mono text-emerald-900">
-          مدين حساب القبض (تلقائي): {totalCredit.toFixed(2)}
+          مدين حساب القبض (تلقائي):{" "}
+          {formatVoucherAmount(totalCredit, selectedCurrency)}
         </p>
       </div>
     </section>
@@ -221,27 +239,34 @@ export function buildReceiptVoucherLinesForSave(
   const validCredits = creditLines.filter(
     (line) => line.account_id && Number(line.amount || 0) > 0,
   );
-  const total = validCredits.reduce(
-    (sum, line) => sum + Number(line.amount || 0),
-    0,
-  );
 
-  if (!receiptAccountId || total <= 0) {
+  if (!receiptAccountId) {
     return validCredits.map((line) => ({ ...line, side: "credit" as const }));
   }
 
-  const debitLine: VoucherLine = {
-    id: crypto.randomUUID(),
-    voucher_id: "draft",
-    account_id: receiptAccountId,
-    side: "debit",
-    amount: total,
-    line_description: "قبض — حساب القبض",
-    cost_center_id: null,
-  };
+  const pairedLines: VoucherLine[] = [];
 
-  return [
-    debitLine,
-    ...validCredits.map((line) => ({ ...line, side: "credit" as const })),
-  ];
+  for (const credit of validCredits) {
+    const amount = Number(credit.amount);
+    const description = credit.line_description?.trim();
+
+    pairedLines.push({
+      id: crypto.randomUUID(),
+      voucher_id: "draft",
+      account_id: receiptAccountId,
+      side: "debit",
+      amount,
+      line_description: description ? `قبض — ${description}` : "قبض — حساب القبض",
+      cost_center_id: credit.cost_center_id ?? null,
+      line_category_id: null,
+      category_quantity: null,
+    });
+
+    pairedLines.push({
+      ...credit,
+      side: "credit",
+    });
+  }
+
+  return pairedLines;
 }

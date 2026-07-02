@@ -164,6 +164,9 @@ export interface JournalEntryLineDetail {
   debit: number;
   credit: number;
   line_description: string | null;
+  cost_center_id?: string | null;
+  cost_center_code?: string | null;
+  cost_center_name?: string | null;
 }
 
 export interface JournalEntryDetails {

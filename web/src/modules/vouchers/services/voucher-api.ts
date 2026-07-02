@@ -579,7 +579,9 @@ export const voucherApi = {
 
     const { data: lines, error: linesError } = await supabase
       .from("journal_entry_lines")
-      .select("id, account_id, debit, credit, line_description, accounts(code, name_ar)")
+      .select(
+        "id, account_id, debit, credit, line_description, cost_center_id, accounts(code, name_ar), cost_centers(code, name_ar)",
+      )
       .eq("journal_entry_id", id)
       .order("created_at", { ascending: true });
     throwIfSupabaseError(linesError);
@@ -587,6 +589,9 @@ export const voucherApi = {
     const mappedLines: JournalEntryLineDetail[] = (lines ?? []).map((line) => {
       const account = (line as { accounts?: { code?: string; name_ar?: string } })
         .accounts;
+      const costCenter = (line as {
+        cost_centers?: { code?: string; name_ar?: string } | null;
+      }).cost_centers;
 
       return {
         id: (line as { id: string }).id,
@@ -597,6 +602,9 @@ export const voucherApi = {
         credit: Number((line as { credit?: number }).credit ?? 0),
         line_description: (line as { line_description: string | null })
           .line_description,
+        cost_center_id: (line as { cost_center_id?: string | null }).cost_center_id ?? null,
+        cost_center_code: costCenter?.code ?? null,
+        cost_center_name: costCenter?.name_ar ?? null,
       };
     });
 

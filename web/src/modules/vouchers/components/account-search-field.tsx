@@ -16,14 +16,19 @@ interface AccountSearchFieldProps {
   required?: boolean;
   hideLabel?: boolean;
   placeholder?: string;
+  currencies?: Array<{ id: string; code: string }>;
+  filterCurrencyId?: string;
 }
 
-export function accountToSearchOption(account: Account): SearchSelectOption {
+export function accountToSearchOption(
+  account: Account,
+  currencyCode?: string,
+): SearchSelectOption {
   return {
     id: account.id,
     label: `${account.code} — ${account.name_ar}`,
-    sublabel: account.name_en ?? undefined,
-    searchText: `${account.code} ${account.name_ar} ${account.name_en ?? ""}`,
+    sublabel: [currencyCode, account.name_en].filter(Boolean).join(" · ") || undefined,
+    searchText: `${account.code} ${account.name_ar} ${account.name_en ?? ""} ${currencyCode ?? ""}`,
   };
 }
 
@@ -36,10 +41,30 @@ export function AccountSearchField({
   required,
   hideLabel,
   placeholder = "ابحث بالكود أو الاسم...",
+  currencies,
+  filterCurrencyId,
 }: AccountSearchFieldProps) {
+  const currencyById = useMemo(
+    () => new Map((currencies ?? []).map((currency) => [currency.id, currency.code])),
+    [currencies],
+  );
+
+  const visibleAccounts = useMemo(() => {
+    if (!filterCurrencyId) return accounts;
+    return accounts.filter((account) => account.currency_id === filterCurrencyId);
+  }, [accounts, filterCurrencyId]);
+
   const options = useMemo(
-    () => accounts.map(accountToSearchOption),
-    [accounts],
+    () =>
+      visibleAccounts.map((account) =>
+        accountToSearchOption(
+          account,
+          account.currency_id
+            ? currencyById.get(account.currency_id)
+            : undefined,
+        ),
+      ),
+    [visibleAccounts, currencyById],
   );
 
   const accountById = useMemo(

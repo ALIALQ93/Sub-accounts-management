@@ -1,45 +1,13 @@
--- =============================================================================
--- patch_voucher_line_categories.sql
--- =============================================================================
+-- Add cost_center_id to journal lines + carry it when posting vouchers
+-- Run in Supabase SQL Editor on existing databases.
 
-create table if not exists public.voucher_line_categories (
-  id uuid primary key default gen_random_uuid(),
-  voucher_type varchar(20) not null
-    check (voucher_type in ('receipt', 'payment', 'settlement')),
-  code varchar(30) not null,
-  name_ar varchar(200) not null,
-  name_en varchar(200) null,
-  requires_quantity boolean not null default false,
-  quantity_label varchar(100) null,
-  sort_order int not null default 0,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (voucher_type, code)
-);
+alter table public.journal_entry_lines
+  add column if not exists cost_center_id uuid null
+  references public.cost_centers(id) on delete restrict;
 
-create index if not exists idx_voucher_line_categories_type_active
-  on public.voucher_line_categories(voucher_type, is_active);
+create index if not exists idx_journal_lines_cost_center_id
+  on public.journal_entry_lines(cost_center_id);
 
-alter table public.voucher_lines
-  add column if not exists line_category_id uuid null references public.voucher_line_categories(id) on delete restrict,
-  add column if not exists category_quantity numeric(18, 4) null check (category_quantity is null or category_quantity >= 0);
-
-create index if not exists idx_voucher_lines_category_id on public.voucher_lines(line_category_id);
-
-drop trigger if exists trg_voucher_line_categories_updated_at on public.voucher_line_categories;
-create trigger trg_voucher_line_categories_updated_at
-before update on public.voucher_line_categories
-for each row execute function public.set_updated_at();
-
-insert into public.voucher_line_categories (voucher_type, code, name_ar, requires_quantity, quantity_label, sort_order)
-values
-  ('payment', 'PAY-FOOD', 'اطعام', false, null, 10),
-  ('payment', 'PAY-NUTR', 'تغذية', false, null, 20),
-  ('payment', 'PAY-CONST', 'انشائية', true, 'العدد', 30)
-on conflict (voucher_type, code) do nothing;
-
--- تحديث دالة الترحيل (نسخ من 01_schema.sql — vouchers_before_update_handle_posting)
 create or replace function public.vouchers_before_update_handle_posting()
 returns trigger
 language plpgsql

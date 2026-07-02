@@ -34,6 +34,13 @@ import type {
 import { getSettlementModeLabel } from "@/modules/vouchers/utils/voucher-type-config";
 import type { Currency } from "@/modules/currencies/types";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
+import {
+  accountMatchesVoucherCurrency,
+  formatVoucherAmount,
+  getAmountStep,
+  getCurrencyById,
+  validateReceiptVoucherAccounts,
+} from "@/modules/vouchers/utils/voucher-currency-utils";
 
 interface ReceiptVoucherFormProps {
   initialMode?: "create" | "edit";
@@ -75,6 +82,8 @@ export function ReceiptVoucherForm({
   >([]);
 
   const [receiptAccountId, setReceiptAccountId] = useState("");
+  const [defaultReceiptAccountFromSettings, setDefaultReceiptAccountFromSettings] =
+    useState("");
 
   const [feedback, setFeedback] = useState("");
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
@@ -87,6 +96,13 @@ export function ReceiptVoucherForm({
   const isInvoiceMode = settlementMode === "invoice";
 
   const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
+  const receiptAccount = accounts.find((account) => account.id === receiptAccountId);
+  const isBaseCurrency = selectedCurrency?.is_base ?? false;
+  const amountStep = getAmountStep(selectedCurrency?.decimal_places ?? 2);
+
+  const receiptAccountCurrencyMismatch =
+    Boolean(currencyId && receiptAccount) &&
+    !accountMatchesVoucherCurrency(receiptAccount, currencyId);
 
   const totalCredit = useMemo(
     () =>
@@ -104,7 +120,9 @@ export function ReceiptVoucherForm({
 
   const canPost =
     !readOnly &&
+    Boolean(currencyId) &&
     Boolean(receiptAccountId) &&
+    !receiptAccountCurrencyMismatch &&
     validCreditLines.length > 0 &&
     totalCredit > 0 &&
     exchangeRate > 0 &&
@@ -189,14 +207,31 @@ export function ReceiptVoucherForm({
   };
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
+    if (!currencyId) {
+      setFeedback("اختر عملة السند.");
+      return null;
+    }
     if (!receiptAccountId) {
-      setFeedback("حساب القبض مطلوب.");
+      setFeedback("حساب القبض غير معرّف. عيّنه من إعدادات السندات.");
       return null;
     }
     if (validCreditLines.length === 0) {
       setFeedback("أضف سطراً دائنًا واحداً على الأقل.");
       return null;
     }
+
+    const accountError = validateReceiptVoucherAccounts({
+      currencyId,
+      receiptAccountId,
+      creditLines: validCreditLines,
+      accounts,
+      currencies,
+    });
+    if (accountError) {
+      setFeedback(accountError);
+      return null;
+    }
+
     for (const line of validCreditLines) {
       const categoryError = validateLineCategory(line, lineCategories);
       if (categoryError) {
@@ -246,19 +281,36 @@ export function ReceiptVoucherForm({
     setCustomerId(id);
     if (!customer?.receivable_account_id) return;
 
+    const receivableAccount = accounts.find(
+      (item) => item.id === customer.receivable_account_id,
+    );
+    if (
+      currencyId &&
+      receivableAccount &&
+      !accountMatchesVoucherCurrency(receivableAccount, currencyId)
+    ) {
+      const accountCurrency = getCurrencyById(
+        currencies,
+        receivableAccount.currency_id ?? "",
+      );
+      setFeedback(
+        `حساب ذمم العميل (${receivableAccount.code}) بعملة ${
+          accountCurrency?.code ?? "—"
+        } لا يطابق عملة السند (${selectedCurrency?.code ?? "—"}).`,
+      );
+      return;
+    }
+
     const emptyLine = creditLines.find((line) => !line.account_id);
     if (emptyLine) {
-      const account = accounts.find(
-        (item) => item.id === customer.receivable_account_id,
-      );
       setCreditLines(
         creditLines.map((line) =>
           line.id === emptyLine.id
             ? {
                 ...line,
                 account_id: customer.receivable_account_id,
-                account_code: account?.code ?? "",
-                account_name: account?.name_ar ?? "",
+                account_code: receivableAccount?.code ?? "",
+                account_name: receivableAccount?.name_ar ?? "",
               }
             : line,
         ),
@@ -270,7 +322,39 @@ export function ReceiptVoucherForm({
     setCurrencyId(nextCurrencyId);
     const currency = currencies.find((item) => item.id === nextCurrencyId);
     if (currency) {
-      setExchangeRate(currency.exchange_rate);
+      setExchangeRate(currency.is_base ? 1 : currency.exchange_rate);
+    }
+
+    setCreditLines((current) =>
+      current.map((line) => {
+        if (!line.account_id) return line;
+        const account = accounts.find((item) => item.id === line.account_id);
+        if (accountMatchesVoucherCurrency(account, nextCurrencyId)) {
+          return line;
+        }
+        return {
+          ...line,
+          account_id: "",
+          account_code: "",
+          account_name: "",
+        };
+      }),
+    );
+
+    const currentReceiptAccount = accounts.find(
+      (item) => item.id === receiptAccountId,
+    );
+    if (accountMatchesVoucherCurrency(currentReceiptAccount, nextCurrencyId)) {
+      return;
+    }
+
+    const settingsAccount = accounts.find(
+      (item) => item.id === defaultReceiptAccountFromSettings,
+    );
+    if (accountMatchesVoucherCurrency(settingsAccount, nextCurrencyId)) {
+      setReceiptAccountId(defaultReceiptAccountFromSettings);
+    } else {
+      setReceiptAccountId("");
     }
   };
 
@@ -317,6 +401,7 @@ export function ReceiptVoucherForm({
         setAutoNumberEnabled(settings.auto_number_enabled);
 
         const defaultReceiptAccount = typeDefaults.default_account_id ?? "";
+        setDefaultReceiptAccountFromSettings(defaultReceiptAccount);
         setReceiptAccountId(defaultReceiptAccount);
 
         const baseCurrency =
@@ -328,7 +413,9 @@ export function ReceiptVoucherForm({
         const defaultCurrency = currenciesData.find(
           (currency) => currency.id === defaultCurrencyId,
         );
-        setExchangeRate(defaultCurrency?.exchange_rate ?? 1);
+        setExchangeRate(
+          defaultCurrency?.is_base ? 1 : defaultCurrency?.exchange_rate ?? 1,
+        );
 
         if (initialMode !== "edit" || !initialVoucherId) {
           if (settings.auto_number_enabled) {
@@ -358,9 +445,11 @@ export function ReceiptVoucherForm({
             currency.id === (details.header.currency_id ?? defaultCurrencyId),
         );
         setExchangeRate(
-          details.header.exchange_rate ??
-            loadedCurrency?.exchange_rate ??
-            1,
+          loadedCurrency?.is_base
+            ? 1
+            : details.header.exchange_rate ??
+                loadedCurrency?.exchange_rate ??
+                1,
         );
         setReceiptAccountId(loadedReceiptAccount);
         setJournalEntryId(details.header.journal_entry_id ?? "");
@@ -495,11 +584,13 @@ export function ReceiptVoucherForm({
               step="0.000001"
               value={exchangeRate || ""}
               onChange={(event) => setExchangeRate(Number(event.target.value))}
-              disabled={readOnly || isSaving}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+              disabled={readOnly || isSaving || isBaseCurrency}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono disabled:bg-slate-50"
             />
             <p className="text-xs text-slate-500">
-              يُحمَّل من العملة المختارة ويمكن تعديله لهذا السند.
+              {isBaseCurrency
+                ? "العملة الأساسية — سعر الصرف ثابت = 1"
+                : "يُحمَّل من قسم العملات ويمكن تعديله لهذا السند."}
             </p>
           </label>
 
@@ -507,17 +598,25 @@ export function ReceiptVoucherForm({
             <AccountSearchField
               label="حساب القبض (مدين — تلقائي)"
               accounts={accounts}
+              currencies={currencies}
+              filterCurrencyId={currencyId || undefined}
               value={receiptAccountId}
               onChange={(id) => setReceiptAccountId(id)}
-              disabled={readOnly || isSaving}
+              disabled={readOnly || isSaving || !currencyId}
             />
             <p className="mt-1 text-xs text-slate-500">
               الافتراضي من{" "}
               <Link href="/vouchers/settings" className="text-blue-800 underline">
                 إعدادات السندات
               </Link>
-              . يُولَّد سطر مدين بمجموع أسطر الدائن.
+              — يمكن تغييره لهذا السند. يُولَّد سطر مدين مقابل كل سطر دائن
+              بنفس المبلغ ومركز الكلفة.
             </p>
+            {receiptAccountCurrencyMismatch && (
+              <p className="mt-1 text-xs text-amber-800">
+                عملة حساب القبض لا تطابق عملة السند.
+              </p>
+            )}
           </div>
 
           {isInvoiceMode && (
@@ -550,6 +649,9 @@ export function ReceiptVoucherForm({
         accounts={accounts}
         costCenters={costCenters}
         lineCategories={lineCategories}
+        currencies={currencies}
+        voucherCurrencyId={currencyId}
+        amountStep={amountStep}
         onChange={setCreditLines}
         readOnly={readOnly || isSaving}
       />
@@ -565,11 +667,10 @@ export function ReceiptVoucherForm({
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
           <p className="font-mono text-emerald-900">
-            إجمالي الدائن: {totalCredit.toFixed(2)}
-            {selectedCurrency ? ` ${selectedCurrency.code}` : ""}
+            إجمالي الدائن: {formatVoucherAmount(totalCredit, selectedCurrency)}
           </p>
           <p className="font-mono text-emerald-900">
-            مدين حساب القبض: {totalCredit.toFixed(2)}
+            مدين حساب القبض: {formatVoucherAmount(totalCredit, selectedCurrency)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

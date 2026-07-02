@@ -109,6 +109,7 @@ export default function JournalDetailPage({ params }: JournalDetailPageProps) {
                     <th className="border-b border-slate-200 p-2">اسم الحساب</th>
                     <th className="border-b border-slate-200 p-2">مدين</th>
                     <th className="border-b border-slate-200 p-2">دائن</th>
+                    <th className="border-b border-slate-200 p-2">مركز الكلفة</th>
                     <th className="border-b border-slate-200 p-2">الوصف</th>
                   </tr>
                 </thead>
@@ -124,6 +125,11 @@ export default function JournalDetailPage({ params }: JournalDetailPageProps) {
                       </td>
                       <td className="border-b border-slate-100 p-2 font-mono">
                         {line.credit.toFixed(2)}
+                      </td>
+                      <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                        {line.cost_center_code
+                          ? `${line.cost_center_code} — ${line.cost_center_name ?? ""}`
+                          : "—"}
                       </td>
                       <td className="border-b border-slate-100 p-2">
                         {line.line_description ?? "-"}

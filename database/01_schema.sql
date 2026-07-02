@@ -85,11 +85,14 @@ create table public.journal_entry_lines (
   debit numeric(18, 2) not null default 0 check (debit >= 0),
   credit numeric(18, 2) not null default 0 check (credit >= 0),
   line_description text null,
+  cost_center_id uuid null references public.cost_centers(id) on delete restrict,
   created_at timestamptz not null default now(),
   constraint journal_lines_single_side check (
     (debit > 0 and credit = 0) or (credit > 0 and debit = 0)
   )
 );
+
+create index idx_journal_lines_cost_center_id on public.journal_entry_lines(cost_center_id);
 
 create index idx_journal_lines_entry_id on public.journal_entry_lines(journal_entry_id);
 create index idx_journal_lines_account_id on public.journal_entry_lines(account_id);
@@ -791,7 +794,8 @@ begin
       account_id,
       debit,
       credit,
-      line_description
+      line_description,
+      cost_center_id
     )
     select
       v_je_id,
@@ -812,7 +816,8 @@ begin
             end
           else null
         end
-      ))
+      )),
+      vl.cost_center_id
     from public.voucher_lines vl
     left join public.voucher_line_categories vlc on vlc.id = vl.line_category_id
     where vl.voucher_id = new.id;
