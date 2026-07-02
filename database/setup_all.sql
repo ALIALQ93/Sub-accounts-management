@@ -22,6 +22,9 @@ drop table if exists public.voucher_type_defaults cascade;
 drop table if exists public.voucher_number_sequences cascade;
 drop table if exists public.voucher_settings cascade;
 drop table if exists public.party_settings cascade;
+drop table if exists public.company_settings cascade;
+drop table if exists public.profiles cascade;
+drop type if exists public.app_role cascade;
 drop table if exists public.journal_entry_lines cascade;
 drop table if exists public.journal_entries cascade;
 drop table if exists public.customers cascade;
@@ -40,6 +43,8 @@ drop function if exists public.accounts_on_child_insert_make_parent_non_postable
 drop function if exists public.prevent_account_delete_when_used() cascade;
 drop function if exists public.journal_lines_validate_account_is_postable() cascade;
 drop function if exists public.journal_entry_validate_balance_before_post() cascade;
+drop function if exists public.handle_new_user() cascade;
+drop function if exists public.is_admin() cascade;
 drop function if exists public.customers_vendors_validate_accounts() cascade;
 drop function if exists public.vouchers_validate_parties() cascade;
 drop function if exists public.voucher_lines_validate_account_is_postable() cascade;
@@ -199,6 +204,40 @@ create table public.vendors (
 );
 
 create index idx_vendors_payable_account_id on public.vendors(payable_account_id);
+
+-- ---------------------------------------------------------------------------
+-- المصادقة والإعدادات العامة
+-- ---------------------------------------------------------------------------
+
+create type public.app_role as enum ('admin', 'accountant', 'viewer');
+
+create table public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  full_name_ar text not null,
+  full_name_en text null,
+  role public.app_role not null default 'accountant',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index idx_profiles_role on public.profiles(role);
+create index idx_profiles_is_active on public.profiles(is_active);
+
+create table public.company_settings (
+  id int primary key default 1 check (id = 1),
+  legal_name_ar text not null default 'شركتي',
+  legal_name_en text null,
+  tax_number text null,
+  address text null,
+  phone text null,
+  email text null,
+  fiscal_year_start_month int not null default 1
+    check (fiscal_year_start_month between 1 and 12),
+  base_currency_id uuid null references public.currencies(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
 
 -- ---------------------------------------------------------------------------
 -- إعدادات العملاء والموردين (حساب أب افتراضي)
@@ -1007,6 +1046,59 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- المصادقة والملفات الشخصية
+-- ---------------------------------------------------------------------------
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and role = 'admin'
+      and is_active = true
+  );
+$$;
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role public.app_role;
+  v_count int;
+begin
+  select count(*) into v_count from public.profiles;
+
+  if v_count = 0 then
+    v_role := 'admin';
+  else
+    v_role := 'accountant';
+  end if;
+
+  insert into public.profiles (id, email, full_name_ar, role)
+  values (
+    new.id,
+    coalesce(new.email, ''),
+    coalesce(
+      new.raw_user_meta_data->>'full_name_ar',
+      split_part(coalesce(new.email, 'user'), '@', 1)
+    ),
+    v_role
+  );
+
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- قواعد العمل: السندات
 -- ---------------------------------------------------------------------------
 
@@ -1397,6 +1489,19 @@ create trigger trg_voucher_allocations_validate_delete
 before delete on public.voucher_allocations
 for each row execute function public.voucher_allocations_validate();
 
+create trigger trg_profiles_updated_at
+before update on public.profiles
+for each row execute function public.set_updated_at();
+
+create trigger trg_company_settings_updated_at
+before update on public.company_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
 -- ---------------------------------------------------------------------------
 -- البيانات الأولية
 -- ---------------------------------------------------------------------------
@@ -1444,6 +1549,9 @@ values
 
 insert into public.party_settings (id)
 values (1);
+
+insert into public.company_settings (id, legal_name_ar)
+values (1, 'شركتي');
 
 insert into public.voucher_settings (id)
 values (1);
@@ -1493,6 +1601,8 @@ alter table public.journal_entries enable row level security;
 alter table public.journal_entry_lines enable row level security;
 alter table public.customers enable row level security;
 alter table public.vendors enable row level security;
+alter table public.profiles enable row level security;
+alter table public.company_settings enable row level security;
 alter table public.party_settings enable row level security;
 alter table public.voucher_settings enable row level security;
 alter table public.voucher_number_sequences enable row level security;
@@ -1586,6 +1696,45 @@ create policy "vendors_insert_all" on public.vendors
 drop policy if exists "vendors_update_all" on public.vendors;
 create policy "vendors_update_all" on public.vendors
   for update to anon, authenticated using (true) with check (true);
+
+-- profiles
+drop policy if exists "profiles_select" on public.profiles;
+create policy "profiles_select" on public.profiles
+  for select to authenticated
+  using (auth.uid() = id or public.is_admin());
+
+drop policy if exists "profiles_update_admin" on public.profiles;
+create policy "profiles_update_admin" on public.profiles
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "profiles_update_self" on public.profiles;
+create policy "profiles_update_self" on public.profiles
+  for update to authenticated
+  using (auth.uid() = id)
+  with check (
+    auth.uid() = id
+    and role = (select p.role from public.profiles p where p.id = auth.uid())
+    and is_active = (select p.is_active from public.profiles p where p.id = auth.uid())
+  );
+
+-- company_settings
+drop policy if exists "company_settings_select" on public.company_settings;
+create policy "company_settings_select" on public.company_settings
+  for select to authenticated, anon
+  using (true);
+
+drop policy if exists "company_settings_update_admin" on public.company_settings;
+create policy "company_settings_update_admin" on public.company_settings
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "company_settings_insert_admin" on public.company_settings;
+create policy "company_settings_insert_admin" on public.company_settings
+  for insert to authenticated
+  with check (public.is_admin());
 
 -- party_settings
 drop policy if exists "party_settings_select_all" on public.party_settings;

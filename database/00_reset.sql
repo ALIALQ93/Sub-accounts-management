@@ -15,6 +15,9 @@ drop table if exists public.voucher_type_defaults cascade;
 drop table if exists public.voucher_number_sequences cascade;
 drop table if exists public.voucher_settings cascade;
 drop table if exists public.party_settings cascade;
+drop table if exists public.company_settings cascade;
+drop table if exists public.profiles cascade;
+drop type if exists public.app_role cascade;
 drop table if exists public.journal_entry_lines cascade;
 drop table if exists public.journal_entries cascade;
 drop table if exists public.customers cascade;
@@ -33,6 +36,8 @@ drop function if exists public.accounts_on_child_insert_make_parent_non_postable
 drop function if exists public.prevent_account_delete_when_used() cascade;
 drop function if exists public.journal_lines_validate_account_is_postable() cascade;
 drop function if exists public.journal_entry_validate_balance_before_post() cascade;
+drop function if exists public.handle_new_user() cascade;
+drop function if exists public.is_admin() cascade;
 drop function if exists public.customers_vendors_validate_accounts() cascade;
 drop function if exists public.vouchers_validate_parties() cascade;
 drop function if exists public.voucher_lines_validate_account_is_postable() cascade;

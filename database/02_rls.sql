@@ -12,6 +12,8 @@ alter table public.journal_entries enable row level security;
 alter table public.journal_entry_lines enable row level security;
 alter table public.customers enable row level security;
 alter table public.vendors enable row level security;
+alter table public.profiles enable row level security;
+alter table public.company_settings enable row level security;
 alter table public.party_settings enable row level security;
 alter table public.voucher_settings enable row level security;
 alter table public.voucher_number_sequences enable row level security;
@@ -105,6 +107,45 @@ create policy "vendors_insert_all" on public.vendors
 drop policy if exists "vendors_update_all" on public.vendors;
 create policy "vendors_update_all" on public.vendors
   for update to anon, authenticated using (true) with check (true);
+
+-- profiles
+drop policy if exists "profiles_select" on public.profiles;
+create policy "profiles_select" on public.profiles
+  for select to authenticated
+  using (auth.uid() = id or public.is_admin());
+
+drop policy if exists "profiles_update_admin" on public.profiles;
+create policy "profiles_update_admin" on public.profiles
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "profiles_update_self" on public.profiles;
+create policy "profiles_update_self" on public.profiles
+  for update to authenticated
+  using (auth.uid() = id)
+  with check (
+    auth.uid() = id
+    and role = (select p.role from public.profiles p where p.id = auth.uid())
+    and is_active = (select p.is_active from public.profiles p where p.id = auth.uid())
+  );
+
+-- company_settings
+drop policy if exists "company_settings_select" on public.company_settings;
+create policy "company_settings_select" on public.company_settings
+  for select to authenticated, anon
+  using (true);
+
+drop policy if exists "company_settings_update_admin" on public.company_settings;
+create policy "company_settings_update_admin" on public.company_settings
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "company_settings_insert_admin" on public.company_settings;
+create policy "company_settings_insert_admin" on public.company_settings
+  for insert to authenticated
+  with check (public.is_admin());
 
 -- party_settings
 drop policy if exists "party_settings_select_all" on public.party_settings;

@@ -24,7 +24,8 @@ database/setup_all.sql
 | 1 | `00_reset.sql` | حذف الجداول والدوال والمحفزات |
 | 2 | `01_schema.sql` | إنشاء المخطط الكامل + البيانات الأولية |
 | 3 | `02_rls.sql` | سياسات Row Level Security |
-| 4 | `03_test_cases.sql` | *(اختياري)* سيناريوهات اختبار |
+| 4 | `04_auth.sql` | *(اختياري إذا لم تُشغَّل `setup_all`)* مصادقة، ملفات شخصية، إعدادات الشركة |
+| 5 | `03_test_cases.sql` | *(اختياري)* سيناريوهات اختبار |
 
 ## ما يشمله المخطط الحالي
 
@@ -38,6 +39,7 @@ database/setup_all.sql
 - **الترحيل التلقائي** — من السند إلى قيد يومية عند `status = posted`
 - **عرض** `account_direct_balances` — أرصدة مباشرة من القيود المرحّلة (`security_invoker = true` لاحترام RLS)
 - **كود فرعي** `sub_code` — حقل مرجعي للمستخدم على الحسابات ومراكز الكلفة (منفصل عن كود النظام)
+- **المصادقة** — `profiles` + `company_settings` + trigger على `auth.users` (أول مستخدم = admin)
 
 ## تحذير Supabase: Security Definer View
 

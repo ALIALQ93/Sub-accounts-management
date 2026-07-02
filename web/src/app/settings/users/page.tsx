@@ -1,0 +1,345 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Modal } from "@/components/modal";
+import { useAuth } from "@/modules/auth/auth-context";
+import { SettingsNav } from "@/modules/settings/components/settings-nav";
+import { settingsApi } from "@/modules/settings/services/settings-api";
+import type { AppRole, CreateUserFormValues, UserProfile } from "@/modules/settings/types";
+import { ROLE_LABELS } from "@/modules/settings/types";
+
+const EMPTY_CREATE_FORM: CreateUserFormValues = {
+  email: "",
+  password: "",
+  full_name_ar: "",
+  full_name_en: "",
+  role: "accountant",
+};
+
+export default function UsersSettingsPage() {
+  const { isAdmin, profile: currentProfile } = useAuth();
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<CreateUserFormValues>(EMPTY_CREATE_FORM);
+
+  const reload = useCallback(async () => {
+    const data = await settingsApi.listProfiles();
+    setProfiles(data);
+    return data;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        await reload();
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : "فشل تحميل المستخدمين.");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [reload]);
+
+  const updateProfileField = async (
+    profile: UserProfile,
+    payload: Partial<Pick<UserProfile, "role" | "is_active" | "full_name_ar" | "full_name_en">>,
+  ) => {
+    if (!isAdmin) return;
+    setIsSaving(true);
+    setSuccess("");
+    setLoadError("");
+    try {
+      await settingsApi.updateProfile(profile.id, payload);
+      await reload();
+      setSuccess("تم تحديث المستخدم.");
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "فشل التحديث.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const onCreateUser = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!createForm.email.trim() || !createForm.password || !createForm.full_name_ar.trim()) {
+      setFormError("البريد وكلمة المرور والاسم مطلوبة.");
+      return;
+    }
+
+    setIsSaving(true);
+    setFormError("");
+    setSuccess("");
+    try {
+      await settingsApi.createUserViaApi(createForm);
+      await reload();
+      setCreateForm(EMPTY_CREATE_FORM);
+      setIsModalOpen(false);
+      setSuccess("تم إنشاء المستخدم.");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "فشل إنشاء المستخدم.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!isAdmin) {
+    return (
+      <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
+        <h1 className="text-2xl font-bold text-slate-900">المستخدمون</h1>
+        <SettingsNav />
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          هذه الصفحة متاحة لمدير النظام فقط.
+        </p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">المستخدمون</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            إدارة حسابات الدخول والصلاحيات.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setFormError("");
+            setIsModalOpen(true);
+          }}
+          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+        >
+          + إضافة مستخدم
+        </button>
+      </section>
+
+      <SettingsNav />
+
+      {loadError && (
+        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {loadError}
+        </p>
+      )}
+      {success && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {success}
+        </p>
+      )}
+
+      <section className="rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+        {isLoading ? (
+          <p className="text-sm text-slate-600">جاري تحميل المستخدمين...</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] border-collapse text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-right text-slate-700">
+                  <th className="border border-slate-200 p-2">الاسم</th>
+                  <th className="border border-slate-200 p-2">البريد</th>
+                  <th className="border border-slate-200 p-2">الصلاحية</th>
+                  <th className="border border-slate-200 p-2">الحالة</th>
+                  <th className="border border-slate-200 p-2">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profiles.map((profile) => (
+                  <tr key={profile.id} className="odd:bg-white even:bg-slate-50/60">
+                    <td className="border border-slate-100 p-2 font-medium">
+                      {profile.full_name_ar}
+                    </td>
+                    <td className="border border-slate-100 p-2" dir="ltr">
+                      {profile.email}
+                    </td>
+                    <td className="border border-slate-100 p-2">
+                      <select
+                        value={profile.role}
+                        disabled={isSaving || profile.id === currentProfile?.id}
+                        onChange={(event) =>
+                          void updateProfileField(profile, {
+                            role: event.target.value as AppRole,
+                          })
+                        }
+                        className="rounded-md border border-slate-300 px-2 py-1 text-sm disabled:opacity-60"
+                      >
+                        {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => (
+                          <option key={role} value={role}>
+                            {ROLE_LABELS[role]}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="border border-slate-100 p-2">
+                      {profile.is_active ? (
+                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
+                          نشط
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                          معطّل
+                        </span>
+                      )}
+                    </td>
+                    <td className="border border-slate-100 p-2">
+                      {profile.id !== currentProfile?.id && (
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() =>
+                            void updateProfileField(profile, {
+                              is_active: !profile.is_active,
+                            })
+                          }
+                          className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                        >
+                          {profile.is_active ? "تعطيل" : "تفعيل"}
+                        </button>
+                      )}
+                      {profile.id === currentProfile?.id && (
+                        <span className="text-xs text-slate-500">أنت</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {profiles.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="border border-slate-100 p-6 text-center text-slate-500">
+                      لا يوجد مستخدمون — أنشئ أول مستخدم من Supabase Auth أو اضغط «إضافة مستخدم».
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <p className="text-xs text-slate-500">
+        لإنشاء مستخدمين من الواجهة، أضف{" "}
+        <code className="rounded bg-slate-100 px-1">SUPABASE_SERVICE_ROLE_KEY</code>{" "}
+        في متغيرات الخادم. بدونه، أنشئ المستخدمين من لوحة Supabase → Authentication.
+      </p>
+
+      <Modal
+        open={isModalOpen}
+        title="إضافة مستخدم"
+        description="يُنشأ حساب دخول جديد مع صلاحية محددة."
+        onClose={() => {
+          if (isSaving) return;
+          setIsModalOpen(false);
+          setFormError("");
+        }}
+      >
+        <form onSubmit={(event) => void onCreateUser(event)} className="grid gap-4">
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">الاسم (عربي) *</span>
+            <input
+              value={createForm.full_name_ar}
+              onChange={(event) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  full_name_ar: event.target.value,
+                }))
+              }
+              required
+              disabled={isSaving}
+              className="rounded-md border border-slate-300 px-3 py-2"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">البريد الإلكتروني *</span>
+            <input
+              type="email"
+              value={createForm.email}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, email: event.target.value }))
+              }
+              required
+              disabled={isSaving}
+              className="rounded-md border border-slate-300 px-3 py-2"
+              dir="ltr"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">كلمة المرور *</span>
+            <input
+              type="password"
+              value={createForm.password}
+              onChange={(event) =>
+                setCreateForm((current) => ({ ...current, password: event.target.value }))
+              }
+              required
+              minLength={6}
+              disabled={isSaving}
+              className="rounded-md border border-slate-300 px-3 py-2"
+              dir="ltr"
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">الصلاحية</span>
+            <select
+              value={createForm.role}
+              onChange={(event) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  role: event.target.value as AppRole,
+                }))
+              }
+              disabled={isSaving}
+              className="rounded-md border border-slate-300 px-3 py-2"
+            >
+              {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {formError && (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {formError}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {isSaving ? "جاري الإنشاء..." : "إنشاء"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              disabled={isSaving}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700"
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </main>
+  );
+}

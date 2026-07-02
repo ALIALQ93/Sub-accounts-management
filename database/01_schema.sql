@@ -141,6 +141,40 @@ create table public.vendors (
 create index idx_vendors_payable_account_id on public.vendors(payable_account_id);
 
 -- ---------------------------------------------------------------------------
+-- المصادقة والإعدادات العامة
+-- ---------------------------------------------------------------------------
+
+create type public.app_role as enum ('admin', 'accountant', 'viewer');
+
+create table public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null,
+  full_name_ar text not null,
+  full_name_en text null,
+  role public.app_role not null default 'accountant',
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index idx_profiles_role on public.profiles(role);
+create index idx_profiles_is_active on public.profiles(is_active);
+
+create table public.company_settings (
+  id int primary key default 1 check (id = 1),
+  legal_name_ar text not null default 'شركتي',
+  legal_name_en text null,
+  tax_number text null,
+  address text null,
+  phone text null,
+  email text null,
+  fiscal_year_start_month int not null default 1
+    check (fiscal_year_start_month between 1 and 12),
+  base_currency_id uuid null references public.currencies(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
 -- إعدادات العملاء والموردين (حساب أب افتراضي)
 -- ---------------------------------------------------------------------------
 
@@ -947,6 +981,59 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- المصادقة والملفات الشخصية
+-- ---------------------------------------------------------------------------
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and role = 'admin'
+      and is_active = true
+  );
+$$;
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role public.app_role;
+  v_count int;
+begin
+  select count(*) into v_count from public.profiles;
+
+  if v_count = 0 then
+    v_role := 'admin';
+  else
+    v_role := 'accountant';
+  end if;
+
+  insert into public.profiles (id, email, full_name_ar, role)
+  values (
+    new.id,
+    coalesce(new.email, ''),
+    coalesce(
+      new.raw_user_meta_data->>'full_name_ar',
+      split_part(coalesce(new.email, 'user'), '@', 1)
+    ),
+    v_role
+  );
+
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- قواعد العمل: السندات
 -- ---------------------------------------------------------------------------
 
@@ -1337,6 +1424,19 @@ create trigger trg_voucher_allocations_validate_delete
 before delete on public.voucher_allocations
 for each row execute function public.voucher_allocations_validate();
 
+create trigger trg_profiles_updated_at
+before update on public.profiles
+for each row execute function public.set_updated_at();
+
+create trigger trg_company_settings_updated_at
+before update on public.company_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
 -- ---------------------------------------------------------------------------
 -- البيانات الأولية
 -- ---------------------------------------------------------------------------
@@ -1384,6 +1484,9 @@ values
 
 insert into public.party_settings (id)
 values (1);
+
+insert into public.company_settings (id, legal_name_ar)
+values (1, 'شركتي');
 
 insert into public.voucher_settings (id)
 values (1);

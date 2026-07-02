@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { AuthProvider } from "@/modules/auth/auth-context";
 import "./globals.css";
 
 const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
@@ -31,7 +32,9 @@ export default function RootLayout({
       className={`${ibmPlexSansArabic.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <body className="h-full overflow-hidden">
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );
