@@ -3,11 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
-import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import { CustomerSearchField } from "@/modules/vouchers/components/customer-search-field";
+import {
+  buildReceiptVoucherLinesForSave,
+  ReceiptVoucherLinesTable,
+  splitReceiptVoucherLines,
+} from "@/modules/vouchers/components/receipt-voucher-lines-table";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
-import { VoucherLinesTable } from "@/modules/vouchers/components/voucher-lines-table";
 import {
   ApiError,
   voucherApi,
@@ -47,12 +50,12 @@ export function ReceiptVoucherForm({
     new Date().toISOString().split("T")[0],
   );
   const [currencyId, setCurrencyId] = useState("");
-  const [costCenterId, setCostCenterId] = useState("");
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
   const [journalEntryId, setJournalEntryId] = useState("");
   const [status, setStatus] = useState<VoucherStatus>("draft");
   const [description, setDescription] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [lines, setLines] = useState<VoucherLine[]>(EMPTY_LINES);
+  const [creditLines, setCreditLines] = useState<VoucherLine[]>(EMPTY_LINES);
   const [allocations, setAllocations] =
     useState<VoucherAllocation[]>(EMPTY_ALLOCATIONS);
 
@@ -64,9 +67,7 @@ export function ReceiptVoucherForm({
     Awaited<ReturnType<typeof voucherApi.listOpenMovements>>
   >([]);
 
-  const [debitAccountId, setDebitAccountId] = useState("");
-  const [creditAccountId, setCreditAccountId] = useState("");
-  const [quickAmount, setQuickAmount] = useState<number>(0);
+  const [receiptAccountId, setReceiptAccountId] = useState("");
 
   const [feedback, setFeedback] = useState("");
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
@@ -78,23 +79,29 @@ export function ReceiptVoucherForm({
     readOnly || (autoNumberEnabled && (Boolean(voucherId) || isCreate));
   const isInvoiceMode = settlementMode === "invoice";
 
-  const totals = useMemo(() => {
-    const debit = lines
-      .filter((line) => line.side === "debit")
-      .reduce((sum, line) => sum + Number(line.amount || 0), 0);
-    const credit = lines
-      .filter((line) => line.side === "credit")
-      .reduce((sum, line) => sum + Number(line.amount || 0), 0);
-    return { debit, credit, difference: debit - credit };
-  }, [lines]);
+  const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
+
+  const totalCredit = useMemo(
+    () =>
+      creditLines.reduce((sum, line) => sum + Number(line.amount || 0), 0),
+    [creditLines],
+  );
+
+  const validCreditLines = useMemo(
+    () =>
+      creditLines.filter(
+        (line) => line.account_id && Number(line.amount || 0) > 0,
+      ),
+    [creditLines],
+  );
 
   const canPost =
     !readOnly &&
-    lines.length > 0 &&
-    totals.difference === 0 &&
+    Boolean(receiptAccountId) &&
+    validCreditLines.length > 0 &&
+    totalCredit > 0 &&
+    exchangeRate > 0 &&
     (!isInvoiceMode || (allocations.length > 0 && Boolean(customerId)));
-
-  const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
 
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof ApiError) return error.message;
@@ -115,7 +122,8 @@ export function ReceiptVoucherForm({
     customer_id: isInvoiceMode ? customerId || null : null,
     vendor_id: null,
     currency_id: currencyId || null,
-    cost_center_id: costCenterId || null,
+    cost_center_id: null,
+    exchange_rate: exchangeRate > 0 ? exchangeRate : null,
   });
 
   const resolveVoucherNo = async (): Promise<string | null> => {
@@ -131,19 +139,24 @@ export function ReceiptVoucherForm({
   };
 
   const syncVoucherLines = async (id: string) => {
+    const linesToSave = buildReceiptVoucherLinesForSave(
+      receiptAccountId,
+      creditLines,
+    );
+
     const details = await voucherApi.getVoucherById(id);
     for (const existingLine of details.lines) {
       await voucherApi.deleteVoucherLine(id, existingLine.id);
     }
 
-    for (const line of lines) {
+    for (const line of linesToSave) {
       if (!line.account_id || Number(line.amount || 0) <= 0) continue;
       await voucherApi.addVoucherLine(id, {
         account_id: line.account_id,
         side: line.side,
         amount: Number(line.amount),
         line_description: line.line_description?.trim() || null,
-        cost_center_id: line.cost_center_id || costCenterId || null,
+        cost_center_id: line.cost_center_id || null,
       });
     }
   };
@@ -168,6 +181,18 @@ export function ReceiptVoucherForm({
   };
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
+    if (!receiptAccountId) {
+      setFeedback("حساب القبض مطلوب.");
+      return null;
+    }
+    if (validCreditLines.length === 0) {
+      setFeedback("أضف سطراً دائنًا واحداً على الأقل.");
+      return null;
+    }
+    if (exchangeRate <= 0) {
+      setFeedback("سعر الصرف يجب أن يكون أكبر من صفر.");
+      return null;
+    }
     if (isInvoiceMode && !customerId) {
       setFeedback("العميل مطلوب في وضع إغلاق الحركات.");
       return null;
@@ -202,46 +227,35 @@ export function ReceiptVoucherForm({
     }
   };
 
-  const applyQuickLines = () => {
-    if (!debitAccountId || !creditAccountId || quickAmount <= 0) {
-      setFeedback("أدخل المبلغ وحسابي المدين والدائن.");
-      return;
-    }
-
-    const debitAccount = accounts.find((account) => account.id === debitAccountId);
-    const creditAccount = accounts.find((account) => account.id === creditAccountId);
-
-    setLines([
-      {
-        id: crypto.randomUUID(),
-        voucher_id: voucherId || "draft",
-        account_id: debitAccountId,
-        account_code: debitAccount?.code,
-        account_name: debitAccount?.name_ar,
-        side: "debit",
-        amount: quickAmount,
-        line_description: "قبض — مدين",
-        cost_center_id: costCenterId || null,
-      },
-      {
-        id: crypto.randomUUID(),
-        voucher_id: voucherId || "draft",
-        account_id: creditAccountId,
-        account_code: creditAccount?.code,
-        account_name: creditAccount?.name_ar,
-        side: "credit",
-        amount: quickAmount,
-        line_description: "قبض — دائن",
-        cost_center_id: costCenterId || null,
-      },
-    ]);
-    setFeedback("تم بناء سطري السند من الإدخال السريع.");
-  };
-
   const onCustomerChange = (id: string, customer: Customer | null) => {
     setCustomerId(id);
-    if (customer?.receivable_account_id) {
-      setCreditAccountId(customer.receivable_account_id);
+    if (!customer?.receivable_account_id) return;
+
+    const emptyLine = creditLines.find((line) => !line.account_id);
+    if (emptyLine) {
+      const account = accounts.find(
+        (item) => item.id === customer.receivable_account_id,
+      );
+      setCreditLines(
+        creditLines.map((line) =>
+          line.id === emptyLine.id
+            ? {
+                ...line,
+                account_id: customer.receivable_account_id,
+                account_code: account?.code ?? "",
+                account_name: account?.name_ar ?? "",
+              }
+            : line,
+        ),
+      );
+    }
+  };
+
+  const onCurrencyChange = (nextCurrencyId: string) => {
+    setCurrencyId(nextCurrencyId);
+    const currency = currencies.find((item) => item.id === nextCurrencyId);
+    if (currency) {
+      setExchangeRate(currency.exchange_rate);
     }
   };
 
@@ -284,14 +298,19 @@ export function ReceiptVoucherForm({
         setOpenMovements(openMovementsData);
         setAutoNumberEnabled(settings.auto_number_enabled);
 
+        const defaultReceiptAccount = typeDefaults.default_account_id ?? "";
+        setReceiptAccountId(defaultReceiptAccount);
+
         const baseCurrency =
           currenciesData.find((currency) => currency.is_base) ??
           currenciesData[0];
-        setCurrencyId(
-          typeDefaults.default_currency_id ?? baseCurrency?.id ?? "",
+        const defaultCurrencyId =
+          typeDefaults.default_currency_id ?? baseCurrency?.id ?? "";
+        setCurrencyId(defaultCurrencyId);
+        const defaultCurrency = currenciesData.find(
+          (currency) => currency.id === defaultCurrencyId,
         );
-        setCostCenterId(typeDefaults.default_cost_center_id ?? "");
-        setDebitAccountId(typeDefaults.default_account_id ?? "");
+        setExchangeRate(defaultCurrency?.exchange_rate ?? 1);
 
         if (initialMode !== "edit" || !initialVoucherId) {
           if (settings.auto_number_enabled) {
@@ -305,18 +324,32 @@ export function ReceiptVoucherForm({
         const details = await voucherApi.getVoucherById(initialVoucherId);
         if (cancelled) return;
 
+        const { receiptAccountId: loadedReceiptAccount, creditLines: loadedCredits } =
+          splitReceiptVoucherLines(details.lines, defaultReceiptAccount);
+
         setVoucherId(details.header.id);
         setVoucherNo(details.header.voucher_no);
         setNextNumberPreview(details.header.voucher_no);
         setSettlementMode(details.header.settlement_mode);
         setVoucherDate(details.header.voucher_date);
-        setCurrencyId(details.header.currency_id ?? typeDefaults.default_currency_id ?? "");
-        setCostCenterId(details.header.cost_center_id ?? "");
+        setCurrencyId(
+          details.header.currency_id ?? defaultCurrencyId,
+        );
+        const loadedCurrency = currenciesData.find(
+          (currency) =>
+            currency.id === (details.header.currency_id ?? defaultCurrencyId),
+        );
+        setExchangeRate(
+          details.header.exchange_rate ??
+            loadedCurrency?.exchange_rate ??
+            1,
+        );
+        setReceiptAccountId(loadedReceiptAccount);
         setJournalEntryId(details.header.journal_entry_id ?? "");
         setStatus(details.header.status);
         setDescription(details.header.description ?? "");
         setCustomerId(details.header.customer_id ?? "");
-        setLines(details.lines);
+        setCreditLines(loadedCredits);
         setAllocations(details.allocations);
       } catch (error) {
         if (!cancelled) setFeedback(getErrorMessage(error));
@@ -343,7 +376,9 @@ export function ReceiptVoucherForm({
     <div className="space-y-4">
       <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
         <p className="font-semibold">سند قبض</p>
-        <p className="mt-0.5 opacity-90">استلام مبلغ — مدين صندوق/بنك، دائن حساب مقابل</p>
+        <p className="mt-0.5 opacity-90">
+          استلام مبلغ — مدين حساب القبض تلقائياً، دائن حسابات مقابلة
+        </p>
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
@@ -398,26 +433,73 @@ export function ReceiptVoucherForm({
             <span className="font-medium text-slate-700">عملة السند</span>
             <select
               value={currencyId}
-              onChange={(event) => setCurrencyId(event.target.value)}
-              disabled={readOnly || isSaving}
+              onChange={(event) => onCurrencyChange(event.target.value)}
+              disabled={readOnly || isSaving || currencies.length === 0}
               className="w-full rounded-md border border-slate-300 px-3 py-2"
             >
               <option value="">اختر العملة</option>
               {currencies.map((currency) => (
                 <option key={currency.id} value={currency.id}>
                   {currency.code} — {currency.name_ar}
+                  {currency.is_base ? " (أساسية)" : ""}
                 </option>
               ))}
             </select>
+            {currencies.length === 0 ? (
+              <p className="text-xs text-amber-700">
+                لا توجد عملات نشطة.{" "}
+                <Link href="/currencies" className="underline">
+                  إدارة العملات
+                </Link>
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                من{" "}
+                <Link href="/currencies" className="text-blue-800 underline">
+                  قسم العملات
+                </Link>
+                {selectedCurrency && (
+                  <>
+                    {" "}
+                    — {selectedCurrency.symbol} ·{" "}
+                    {selectedCurrency.decimal_places} خانات عشرية
+                  </>
+                )}
+              </p>
+            )}
+          </label>
+
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">سعر الصرف</span>
+            <input
+              type="number"
+              min={0}
+              step="0.000001"
+              value={exchangeRate || ""}
+              onChange={(event) => setExchangeRate(Number(event.target.value))}
+              disabled={readOnly || isSaving}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+            />
+            <p className="text-xs text-slate-500">
+              يُحمَّل من العملة المختارة ويمكن تعديله لهذا السند.
+            </p>
           </label>
 
           <div className="md:col-span-2">
-            <CostCenterSearchField
-              costCenters={costCenters}
-              value={costCenterId}
-              onChange={(id) => setCostCenterId(id)}
+            <AccountSearchField
+              label="حساب القبض (مدين — تلقائي)"
+              accounts={accounts}
+              value={receiptAccountId}
+              onChange={(id) => setReceiptAccountId(id)}
               disabled={readOnly || isSaving}
             />
+            <p className="mt-1 text-xs text-slate-500">
+              الافتراضي من{" "}
+              <Link href="/vouchers/settings" className="text-blue-800 underline">
+                إعدادات السندات
+              </Link>
+              . يُولَّد سطر مدين بمجموع أسطر الدائن.
+            </p>
           </div>
 
           {isInvoiceMode && (
@@ -445,59 +527,11 @@ export function ReceiptVoucherForm({
         </label>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">إدخال سريع</h2>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium text-slate-700">المبلغ</span>
-            <input
-              type="number"
-              min={0}
-              step={selectedCurrency?.decimal_places ? 0.01 : 1}
-              value={quickAmount || ""}
-              onChange={(event) => setQuickAmount(Number(event.target.value))}
-              disabled={readOnly || isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2 font-mono"
-            />
-          </label>
-          <AccountSearchField
-            label="حساب القبض (مدين)"
-            accounts={accounts}
-            value={debitAccountId}
-            onChange={(id) => setDebitAccountId(id)}
-            disabled={readOnly || isSaving}
-          />
-          <AccountSearchField
-            label="حساب الدائن"
-            accounts={accounts}
-            value={creditAccountId}
-            onChange={(id) => setCreditAccountId(id)}
-            disabled={readOnly || isSaving}
-          />
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={applyQuickLines}
-              disabled={readOnly || isSaving}
-              className="w-full rounded-md bg-emerald-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              بناء الأسطر
-            </button>
-          </div>
-        </div>
-        {selectedCurrency && (
-          <p className="mt-2 text-xs text-slate-500">
-            العملة: {selectedCurrency.code} ({selectedCurrency.symbol})
-          </p>
-        )}
-      </section>
-
-      <VoucherLinesTable
-        lines={lines}
+      <ReceiptVoucherLinesTable
+        lines={creditLines}
         accounts={accounts}
         costCenters={costCenters}
-        defaultCostCenterId={costCenterId}
-        onChange={setLines}
+        onChange={setCreditLines}
         readOnly={readOnly || isSaving}
       />
 
@@ -510,10 +544,14 @@ export function ReceiptVoucherForm({
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <div className="mb-3 grid gap-2 text-sm sm:grid-cols-3">
-          <p className="font-mono">مدين: {totals.debit.toFixed(2)}</p>
-          <p className="font-mono">دائن: {totals.credit.toFixed(2)}</p>
-          <p className="font-mono text-blue-900">فرق: {totals.difference.toFixed(2)}</p>
+        <div className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
+          <p className="font-mono text-emerald-900">
+            إجمالي الدائن: {totalCredit.toFixed(2)}
+            {selectedCurrency ? ` ${selectedCurrency.code}` : ""}
+          </p>
+          <p className="font-mono text-emerald-900">
+            مدين حساب القبض: {totalCredit.toFixed(2)}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -544,7 +582,9 @@ export function ReceiptVoucherForm({
               setIsSaving(true);
               void (async () => {
                 if (!canPost) {
-                  setFeedback("تعذر الترحيل. تحقق من التوازن والعميل والتخصيصات.");
+                  setFeedback(
+                    "تعذر الترحيل. تحقق من حساب القبض والأسطر والعميل والتخصيصات.",
+                  );
                   return;
                 }
                 const activeId = await saveVoucher("approved");

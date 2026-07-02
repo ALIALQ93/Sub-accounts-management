@@ -16,6 +16,7 @@ export interface VoucherHeader {
   journal_entry_id: string | null;
   currency_id?: string | null;
   cost_center_id?: string | null;
+  exchange_rate?: number | null;
 }
 
 export interface VoucherLine {

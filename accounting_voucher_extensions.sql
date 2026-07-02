@@ -49,7 +49,8 @@ on conflict (voucher_type) do nothing;
 
 alter table public.vouchers
   add column if not exists currency_id uuid null references public.currencies(id) on delete restrict,
-  add column if not exists cost_center_id uuid null references public.cost_centers(id) on delete restrict;
+  add column if not exists cost_center_id uuid null references public.cost_centers(id) on delete restrict,
+  add column if not exists exchange_rate numeric(18, 6) null check (exchange_rate is null or exchange_rate > 0);
 
 alter table public.voucher_lines
   add column if not exists cost_center_id uuid null references public.cost_centers(id) on delete restrict;
