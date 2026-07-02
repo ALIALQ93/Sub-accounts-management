@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
+import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
 import { VoucherLinesTable } from "@/modules/vouchers/components/voucher-lines-table";
 import {
   validateLineCategory,
@@ -552,6 +553,12 @@ export function VoucherForm({
         onChange={setAllocations}
         readOnly={readOnly || isSaving}
         visible={isAllocationVisible}
+      />
+
+      <VoucherAttachmentsPanel
+        voucherId={voucherId}
+        canManage={canSave && !readOnly}
+        readOnly={readOnly || isSaving}
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">

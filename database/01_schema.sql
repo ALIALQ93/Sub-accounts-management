@@ -313,6 +313,20 @@ create table public.voucher_allocations (
 create index idx_voucher_allocations_voucher_id on public.voucher_allocations(voucher_id);
 create index idx_voucher_allocations_target_line_id on public.voucher_allocations(target_journal_line_id);
 
+create table public.voucher_attachments (
+  id uuid primary key default gen_random_uuid(),
+  voucher_id uuid not null references public.vouchers(id) on delete cascade,
+  file_name text not null,
+  mime_type text not null,
+  file_size bigint not null check (file_size > 0),
+  storage_path text not null,
+  uploaded_by uuid null references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index idx_voucher_attachments_voucher_id on public.voucher_attachments(voucher_id);
+create unique index idx_voucher_attachments_storage_path on public.voucher_attachments(storage_path);
+
 -- ---------------------------------------------------------------------------
 -- عرض الأرصدة المباشرة
 -- ---------------------------------------------------------------------------
@@ -1187,6 +1201,30 @@ begin
 end;
 $$;
 
+create or replace function public.voucher_attachments_validate()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_voucher_status varchar(20);
+begin
+  select status
+  into v_voucher_status
+  from public.vouchers
+  where id = coalesce(new.voucher_id, old.voucher_id);
+
+  if v_voucher_status in ('posted', 'cancelled') then
+    raise exception 'Voucher attachments cannot be changed for posted or cancelled vouchers.';
+  end if;
+
+  if TG_OP = 'DELETE' then
+    return old;
+  end if;
+
+  return new;
+end;
+$$;
+
 create or replace function public.vouchers_before_update_handle_posting()
 returns trigger
 language plpgsql
@@ -1449,6 +1487,14 @@ for each row execute function public.voucher_allocations_validate();
 create trigger trg_voucher_allocations_validate_delete
 before delete on public.voucher_allocations
 for each row execute function public.voucher_allocations_validate();
+
+create trigger trg_voucher_attachments_validate_insert_update
+before insert or update on public.voucher_attachments
+for each row execute function public.voucher_attachments_validate();
+
+create trigger trg_voucher_attachments_validate_delete
+before delete on public.voucher_attachments
+for each row execute function public.voucher_attachments_validate();
 
 create trigger trg_profiles_updated_at
 before update on public.profiles

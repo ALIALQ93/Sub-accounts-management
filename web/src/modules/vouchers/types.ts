@@ -70,10 +70,22 @@ export interface VoucherAllocation {
   note: string | null;
 }
 
+export interface VoucherAttachment {
+  id: string;
+  voucher_id: string;
+  file_name: string;
+  mime_type: string;
+  file_size: number;
+  storage_path: string;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
 export interface VoucherDetails {
   header: VoucherHeader;
   lines: VoucherLine[];
   allocations: VoucherAllocation[];
+  attachments?: VoucherAttachment[];
 }
 
 export interface PostVoucherResponse {
@@ -114,6 +126,7 @@ export interface VoucherListItem {
   voucher_date: string;
   status: VoucherStatus;
   description: string | null;
+  attachment_count: number;
 }
 
 export interface OpenMovement {

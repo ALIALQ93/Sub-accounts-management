@@ -17,6 +17,7 @@ import {
 import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
+import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
 import {
   ApiError,
   voucherApi,
@@ -667,6 +668,12 @@ export function ReceiptVoucherForm({
         onChange={setAllocations}
         readOnly={readOnly || isSaving}
         visible={isInvoiceMode}
+      />
+
+      <VoucherAttachmentsPanel
+        voucherId={voucherId}
+        canManage={canSave && !readOnly}
+        readOnly={readOnly || isSaving}
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">

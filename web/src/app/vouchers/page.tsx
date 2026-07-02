@@ -120,6 +120,7 @@ export default function VouchersListPage() {
                   <th className="border border-slate-200 p-2">وضع التسوية</th>
                   <th className="border border-slate-200 p-2">التاريخ</th>
                   <th className="border border-slate-200 p-2">الحالة</th>
+                  <th className="border border-slate-200 p-2 text-center">مرفقات</th>
                   <th className="border border-slate-200 p-2">إجراء</th>
                 </tr>
               </thead>
@@ -139,6 +140,9 @@ export default function VouchersListPage() {
                     <td className="border border-slate-100 p-2">
                       <StatusChip status={item.status} />
                     </td>
+                    <td className="border border-slate-100 p-2 text-center">
+                      <VoucherAttachmentBadge count={item.attachment_count} />
+                    </td>
                     <td className="border border-slate-100 p-2">
                       <DocumentActionLinks href={`/vouchers/${item.id}`} />
                     </td>
@@ -148,7 +152,7 @@ export default function VouchersListPage() {
                 {filteredItems.length === 0 && (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="border border-slate-100 p-4 text-center text-slate-500"
                     >
                       لا توجد سندات في هذا التصنيف.
@@ -161,6 +165,31 @@ export default function VouchersListPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function VoucherAttachmentBadge({ count }: { count: number }) {
+  if (count <= 0) {
+    return <span className="text-slate-300">—</span>;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center justify-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+      title={`${count} مرفق`}
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="h-3.5 w-3.5 shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+      </svg>
+      {count}
+    </span>
   );
 }
 

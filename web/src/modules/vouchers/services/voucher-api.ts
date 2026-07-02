@@ -254,10 +254,30 @@ export const voucherApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("vouchers")
-      .select("*")
+      .select(
+        "id, voucher_no, voucher_type, settlement_mode, voucher_date, status, description, voucher_attachments(count)",
+      )
       .order("voucher_date", { ascending: false });
     throwIfSupabaseError(error);
-    return (data ?? []) as VoucherListItem[];
+
+    return (data ?? []).map((row) => {
+      const attachments = (
+        row as {
+          voucher_attachments?: { count: number }[];
+        }
+      ).voucher_attachments;
+
+      return {
+        id: row.id as string,
+        voucher_no: row.voucher_no as string,
+        voucher_type: row.voucher_type as VoucherListItem["voucher_type"],
+        settlement_mode: row.settlement_mode as VoucherListItem["settlement_mode"],
+        voucher_date: row.voucher_date as string,
+        status: row.status as VoucherListItem["status"],
+        description: (row.description as string | null) ?? null,
+        attachment_count: attachments?.[0]?.count ?? 0,
+      };
+    });
   },
 
   async listAccounts(): Promise<Account[]> {

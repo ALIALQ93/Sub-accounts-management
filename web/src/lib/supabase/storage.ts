@@ -121,3 +121,87 @@ export async function deleteCompanyLogoFromStorage(
     .remove([path]);
   throwIfError(error);
 }
+
+const VOUCHER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const VOUCHER_ATTACHMENT_ALLOWED_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+function sanitizeFileName(name: string): string {
+  const base = name.trim().replace(/[/\\?%*:|"<>]/g, "_");
+  return base.slice(0, 180) || "attachment";
+}
+
+export function validateVoucherAttachmentFile(file: File): void {
+  if (!VOUCHER_ATTACHMENT_ALLOWED_TYPES.has(file.type)) {
+    throw new Error(
+      "نوع الملف غير مدعوم. استخدم PDF أو صور أو Word أو Excel.",
+    );
+  }
+  if (file.size > VOUCHER_ATTACHMENT_MAX_BYTES) {
+    throw new Error("حجم الملف يجب ألا يتجاوز 10 ميغابايت.");
+  }
+}
+
+export function buildVoucherAttachmentPath(
+  voucherId: string,
+  fileName: string,
+): string {
+  const safeName = sanitizeFileName(fileName);
+  const unique = crypto.randomUUID();
+  return `vouchers/${voucherId}/${unique}-${safeName}`;
+}
+
+export async function uploadVoucherAttachmentFile(
+  voucherId: string,
+  file: File,
+): Promise<{ storagePath: string }> {
+  validateVoucherAttachmentFile(file);
+
+  const supabase = getSupabaseClient();
+  const storagePath = buildVoucherAttachmentPath(voucherId, file.name);
+
+  const { error } = await supabase.storage
+    .from(STORAGE_BUCKETS.voucherAttachments)
+    .upload(storagePath, file, {
+      upsert: false,
+      contentType: file.type || undefined,
+      cacheControl: "3600",
+    });
+  throwIfError(error);
+
+  return { storagePath };
+}
+
+export async function deleteVoucherAttachmentFile(
+  storagePath: string,
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.storage
+    .from(STORAGE_BUCKETS.voucherAttachments)
+    .remove([storagePath]);
+  throwIfError(error);
+}
+
+export async function createVoucherAttachmentSignedUrl(
+  storagePath: string,
+  expiresInSeconds = 3600,
+): Promise<string> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKETS.voucherAttachments)
+    .createSignedUrl(storagePath, expiresInSeconds);
+  throwIfError(error);
+  if (!data?.signedUrl) {
+    throw new Error("تعذّر إنشاء رابط التحميل.");
+  }
+  return data.signedUrl;
+}

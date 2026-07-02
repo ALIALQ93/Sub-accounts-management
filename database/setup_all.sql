@@ -18,6 +18,7 @@
 
 drop view if exists public.account_direct_balances cascade;
 
+drop table if exists public.voucher_attachments cascade;
 drop table if exists public.voucher_allocations cascade;
 drop table if exists public.voucher_lines cascade;
 drop table if exists public.voucher_line_categories cascade;
@@ -55,6 +56,7 @@ drop function if exists public.customers_vendors_validate_accounts() cascade;
 drop function if exists public.vouchers_validate_parties() cascade;
 drop function if exists public.voucher_lines_validate_account_is_postable() cascade;
 drop function if exists public.voucher_lines_prevent_delete_when_posted() cascade;
+drop function if exists public.voucher_attachments_validate() cascade;
 drop function if exists public.voucher_allocations_validate() cascade;
 drop function if exists public.vouchers_before_update_handle_posting() cascade;
 drop function if exists public.vouchers_prevent_delete_when_posted() cascade;
@@ -382,6 +384,20 @@ create table public.voucher_allocations (
 
 create index idx_voucher_allocations_voucher_id on public.voucher_allocations(voucher_id);
 create index idx_voucher_allocations_target_line_id on public.voucher_allocations(target_journal_line_id);
+
+create table public.voucher_attachments (
+  id uuid primary key default gen_random_uuid(),
+  voucher_id uuid not null references public.vouchers(id) on delete cascade,
+  file_name text not null,
+  mime_type text not null,
+  file_size bigint not null check (file_size > 0),
+  storage_path text not null,
+  uploaded_by uuid null references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index idx_voucher_attachments_voucher_id on public.voucher_attachments(voucher_id);
+create unique index idx_voucher_attachments_storage_path on public.voucher_attachments(storage_path);
 
 -- ---------------------------------------------------------------------------
 -- عرض الأرصدة المباشرة
@@ -1257,6 +1273,30 @@ begin
 end;
 $$;
 
+create or replace function public.voucher_attachments_validate()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_voucher_status varchar(20);
+begin
+  select status
+  into v_voucher_status
+  from public.vouchers
+  where id = coalesce(new.voucher_id, old.voucher_id);
+
+  if v_voucher_status in ('posted', 'cancelled') then
+    raise exception 'Voucher attachments cannot be changed for posted or cancelled vouchers.';
+  end if;
+
+  if TG_OP = 'DELETE' then
+    return old;
+  end if;
+
+  return new;
+end;
+$$;
+
 create or replace function public.vouchers_before_update_handle_posting()
 returns trigger
 language plpgsql
@@ -1520,6 +1560,14 @@ create trigger trg_voucher_allocations_validate_delete
 before delete on public.voucher_allocations
 for each row execute function public.voucher_allocations_validate();
 
+create trigger trg_voucher_attachments_validate_insert_update
+before insert or update on public.voucher_attachments
+for each row execute function public.voucher_attachments_validate();
+
+create trigger trg_voucher_attachments_validate_delete
+before delete on public.voucher_attachments
+for each row execute function public.voucher_attachments_validate();
+
 create trigger trg_profiles_updated_at
 before update on public.profiles
 for each row execute function public.set_updated_at();
@@ -1634,6 +1682,7 @@ alter table public.voucher_line_categories enable row level security;
 alter table public.vouchers enable row level security;
 alter table public.voucher_lines enable row level security;
 alter table public.voucher_allocations enable row level security;
+alter table public.voucher_attachments enable row level security;
 
 -- currencies
 drop policy if exists "currencies_select_all" on public.currencies;
@@ -1887,6 +1936,17 @@ drop policy if exists "voucher_allocations_update_all" on public.voucher_allocat
 create policy "voucher_allocations_update_all" on public.voucher_allocations
   for update to anon, authenticated using (true) with check (true);
 
+-- voucher_attachments
+drop policy if exists "voucher_attachments_select_all" on public.voucher_attachments;
+create policy "voucher_attachments_select_all" on public.voucher_attachments
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_attachments_insert_all" on public.voucher_attachments;
+create policy "voucher_attachments_insert_all" on public.voucher_attachments
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_attachments_delete_all" on public.voucher_attachments;
+create policy "voucher_attachments_delete_all" on public.voucher_attachments
+  for delete to anon, authenticated using (true);
+
 -- ---------------------------------------------------------------------------
 -- مزامنة مستخدمي Supabase Auth الموجودين (إن وُجدوا قبل التثبيت)
 -- ---------------------------------------------------------------------------
@@ -1931,16 +1991,28 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-insert into storage.buckets (id, name, public, file_size_limit)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'voucher-attachments',
   'voucher-attachments',
   false,
-  10485760
+  10485760,
+  array[
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ]
 )
 on conflict (id) do update set
   public = excluded.public,
-  file_size_limit = excluded.file_size_limit;
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "company_assets_public_read" on storage.objects;
 create policy "company_assets_public_read" on storage.objects

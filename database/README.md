@@ -75,6 +75,7 @@ database/setup_all.sql
 | `patch_voucher_line_categories.sql` | إضافة جدول تصنيفات الأسطر |
 | `patch_journal_cost_centers.sql` | مراكز كلفة على القيود |
 | `patch_company_logo.sql` | إضافة حقل `logo_url` في `company_settings` |
+| `patch_voucher_attachments.sql` | جدول `voucher_attachments` + محفزات |
 | `06_storage.sql` | إنشاء buckets Storage + سياسات RLS للملفات |
 
 ## إعادة توليد setup_all.sql

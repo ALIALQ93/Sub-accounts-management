@@ -25,6 +25,7 @@ alter table public.voucher_line_categories enable row level security;
 alter table public.vouchers enable row level security;
 alter table public.voucher_lines enable row level security;
 alter table public.voucher_allocations enable row level security;
+alter table public.voucher_attachments enable row level security;
 
 -- currencies
 drop policy if exists "currencies_select_all" on public.currencies;
@@ -277,6 +278,17 @@ create policy "voucher_allocations_insert_all" on public.voucher_allocations
 drop policy if exists "voucher_allocations_update_all" on public.voucher_allocations;
 create policy "voucher_allocations_update_all" on public.voucher_allocations
   for update to anon, authenticated using (true) with check (true);
+
+-- voucher_attachments
+drop policy if exists "voucher_attachments_select_all" on public.voucher_attachments;
+create policy "voucher_attachments_select_all" on public.voucher_attachments
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_attachments_insert_all" on public.voucher_attachments;
+create policy "voucher_attachments_insert_all" on public.voucher_attachments
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_attachments_delete_all" on public.voucher_attachments;
+create policy "voucher_attachments_delete_all" on public.voucher_attachments
+  for delete to anon, authenticated using (true);
 
 -- ---------------------------------------------------------------------------
 -- مزامنة مستخدمي Supabase Auth الموجودين (إن وُجدوا قبل التثبيت)

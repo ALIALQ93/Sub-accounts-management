@@ -7,6 +7,7 @@
 
 drop view if exists public.account_direct_balances cascade;
 
+drop table if exists public.voucher_attachments cascade;
 drop table if exists public.voucher_allocations cascade;
 drop table if exists public.voucher_lines cascade;
 drop table if exists public.voucher_line_categories cascade;
@@ -44,6 +45,7 @@ drop function if exists public.customers_vendors_validate_accounts() cascade;
 drop function if exists public.vouchers_validate_parties() cascade;
 drop function if exists public.voucher_lines_validate_account_is_postable() cascade;
 drop function if exists public.voucher_lines_prevent_delete_when_posted() cascade;
+drop function if exists public.voucher_attachments_validate() cascade;
 drop function if exists public.voucher_allocations_validate() cascade;
 drop function if exists public.vouchers_before_update_handle_posting() cascade;
 drop function if exists public.vouchers_prevent_delete_when_posted() cascade;
