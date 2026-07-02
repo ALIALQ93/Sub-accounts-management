@@ -67,8 +67,7 @@ export default function VoucherLineCategoriesPage() {
 
       <p className="text-xs text-slate-500">
         إذا لم تظهر الأنواع، شغّل{" "}
-        <span className="font-mono">database/patch_voucher_line_categories.sql</span>{" "}
-        في Supabase.
+        <span className="font-mono">database/setup_all.sql</span> في Supabase.
       </p>
     </main>
   );
