@@ -80,7 +80,12 @@ export function AccountTreeTable({
                 className="group align-top odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/30"
               >
                 <td className={`${TD} font-mono text-xs text-slate-800`}>
-                  {node.code}
+                  <div>{node.code}</div>
+                  {node.sub_code && (
+                    <div className="mt-0.5 text-[10px] font-normal text-slate-500">
+                      {node.sub_code}
+                    </div>
+                  )}
                 </td>
                 <td className={TD}>
                   <div

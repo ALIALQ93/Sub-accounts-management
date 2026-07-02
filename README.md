@@ -2,8 +2,9 @@
 
 Core accounting bootstrap files:
 
-- `accounting_schema.sql`: PostgreSQL/Supabase schema with chart rules, account-based vouchers, invoice allocations, and auto-posting triggers.
-- `accounting_test_cases.sql`: end-to-end SQL test scenarios for receipt/payment/settlement behaviors.
+- `database/`: SQL setup for Supabase — see `database/README.md`
+  - **`database/setup_all.sql`**: one-shot reset + schema + RLS (recommended)
+  - `database/03_test_cases.sql`: optional end-to-end test scenarios
 - `ACCOUNTING_RULES.md`: human-readable accounting and chart-of-accounts rules.
 - `API_CONTRACT.md`: REST API endpoints and payloads for implementation.
 - `VOUCHER_WORKFLOW.md`: step-by-step voucher lifecycle and posting behavior.

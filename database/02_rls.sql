@@ -1,20 +1,33 @@
--- Run this in Supabase SQL Editor if the app shows 0 rows
--- but Table Editor shows data (common on hosted deployments).
---
--- Step 1: Check RLS status
--- select relname, relrowsecurity from pg_class
--- where relname in ('accounts','vouchers','journal_entries','customers','vendors');
+-- =============================================================================
+-- 02_rls.sql — سياسات Row Level Security (MVP بدون مصادقة)
+-- =============================================================================
+-- شغّل بعد 01_schema.sql
+-- =============================================================================
 
--- Step 2: Allow anon/authenticated access for MVP (no auth yet)
-
+alter table public.currencies enable row level security;
 alter table public.accounts enable row level security;
+alter table public.cost_centers enable row level security;
 alter table public.journal_entries enable row level security;
 alter table public.journal_entry_lines enable row level security;
 alter table public.customers enable row level security;
 alter table public.vendors enable row level security;
+alter table public.voucher_settings enable row level security;
+alter table public.voucher_number_sequences enable row level security;
+alter table public.voucher_type_defaults enable row level security;
 alter table public.vouchers enable row level security;
 alter table public.voucher_lines enable row level security;
 alter table public.voucher_allocations enable row level security;
+
+-- currencies
+drop policy if exists "currencies_select_all" on public.currencies;
+create policy "currencies_select_all" on public.currencies
+  for select to anon, authenticated using (true);
+drop policy if exists "currencies_insert_all" on public.currencies;
+create policy "currencies_insert_all" on public.currencies
+  for insert to anon, authenticated with check (true);
+drop policy if exists "currencies_update_all" on public.currencies;
+create policy "currencies_update_all" on public.currencies
+  for update to anon, authenticated using (true) with check (true);
 
 -- accounts
 drop policy if exists "accounts_select_all" on public.accounts;
@@ -25,6 +38,17 @@ create policy "accounts_insert_all" on public.accounts
   for insert to anon, authenticated with check (true);
 drop policy if exists "accounts_update_all" on public.accounts;
 create policy "accounts_update_all" on public.accounts
+  for update to anon, authenticated using (true) with check (true);
+
+-- cost_centers
+drop policy if exists "cost_centers_select_all" on public.cost_centers;
+create policy "cost_centers_select_all" on public.cost_centers
+  for select to anon, authenticated using (true);
+drop policy if exists "cost_centers_insert_all" on public.cost_centers;
+create policy "cost_centers_insert_all" on public.cost_centers
+  for insert to anon, authenticated with check (true);
+drop policy if exists "cost_centers_update_all" on public.cost_centers;
+create policy "cost_centers_update_all" on public.cost_centers
   for update to anon, authenticated using (true) with check (true);
 
 -- journal_entries
@@ -71,6 +95,39 @@ drop policy if exists "vendors_update_all" on public.vendors;
 create policy "vendors_update_all" on public.vendors
   for update to anon, authenticated using (true) with check (true);
 
+-- voucher_settings
+drop policy if exists "voucher_settings_select_all" on public.voucher_settings;
+create policy "voucher_settings_select_all" on public.voucher_settings
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_settings_insert_all" on public.voucher_settings;
+create policy "voucher_settings_insert_all" on public.voucher_settings
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_settings_update_all" on public.voucher_settings;
+create policy "voucher_settings_update_all" on public.voucher_settings
+  for update to anon, authenticated using (true) with check (true);
+
+-- voucher_number_sequences
+drop policy if exists "voucher_number_sequences_select_all" on public.voucher_number_sequences;
+create policy "voucher_number_sequences_select_all" on public.voucher_number_sequences
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_number_sequences_insert_all" on public.voucher_number_sequences;
+create policy "voucher_number_sequences_insert_all" on public.voucher_number_sequences
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_number_sequences_update_all" on public.voucher_number_sequences;
+create policy "voucher_number_sequences_update_all" on public.voucher_number_sequences
+  for update to anon, authenticated using (true) with check (true);
+
+-- voucher_type_defaults
+drop policy if exists "voucher_type_defaults_select_all" on public.voucher_type_defaults;
+create policy "voucher_type_defaults_select_all" on public.voucher_type_defaults
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_type_defaults_insert_all" on public.voucher_type_defaults;
+create policy "voucher_type_defaults_insert_all" on public.voucher_type_defaults
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_type_defaults_update_all" on public.voucher_type_defaults;
+create policy "voucher_type_defaults_update_all" on public.voucher_type_defaults
+  for update to anon, authenticated using (true) with check (true);
+
 -- vouchers
 drop policy if exists "vouchers_select_all" on public.vouchers;
 create policy "vouchers_select_all" on public.vouchers
@@ -102,63 +159,4 @@ create policy "voucher_allocations_insert_all" on public.voucher_allocations
   for insert to anon, authenticated with check (true);
 drop policy if exists "voucher_allocations_update_all" on public.voucher_allocations;
 create policy "voucher_allocations_update_all" on public.voucher_allocations
-  for update to anon, authenticated using (true) with check (true);
-
--- currencies
-alter table public.currencies enable row level security;
-
--- voucher settings / numbering
-alter table public.voucher_settings enable row level security;
-alter table public.voucher_number_sequences enable row level security;
-
-drop policy if exists "voucher_settings_select_all" on public.voucher_settings;
-create policy "voucher_settings_select_all" on public.voucher_settings
-  for select to anon, authenticated using (true);
-drop policy if exists "voucher_settings_insert_all" on public.voucher_settings;
-create policy "voucher_settings_insert_all" on public.voucher_settings
-  for insert to anon, authenticated with check (true);
-drop policy if exists "voucher_settings_update_all" on public.voucher_settings;
-create policy "voucher_settings_update_all" on public.voucher_settings
-  for update to anon, authenticated using (true) with check (true);
-
-drop policy if exists "voucher_number_sequences_select_all" on public.voucher_number_sequences;
-create policy "voucher_number_sequences_select_all" on public.voucher_number_sequences
-  for select to anon, authenticated using (true);
-drop policy if exists "voucher_number_sequences_insert_all" on public.voucher_number_sequences;
-create policy "voucher_number_sequences_insert_all" on public.voucher_number_sequences
-  for insert to anon, authenticated with check (true);
-drop policy if exists "voucher_number_sequences_update_all" on public.voucher_number_sequences;
-create policy "voucher_number_sequences_update_all" on public.voucher_number_sequences
-  for update to anon, authenticated using (true) with check (true);
-
-drop policy if exists "currencies_select_all" on public.currencies;
-create policy "currencies_select_all" on public.currencies
-  for select to anon, authenticated using (true);
-drop policy if exists "currencies_insert_all" on public.currencies;
-create policy "currencies_insert_all" on public.currencies
-  for insert to anon, authenticated with check (true);
-drop policy if exists "currencies_update_all" on public.currencies;
-create policy "currencies_update_all" on public.currencies
-  for update to anon, authenticated using (true) with check (true);
-
--- cost_centers
-drop policy if exists "cost_centers_select_all" on public.cost_centers;
-create policy "cost_centers_select_all" on public.cost_centers
-  for select to anon, authenticated using (true);
-drop policy if exists "cost_centers_insert_all" on public.cost_centers;
-create policy "cost_centers_insert_all" on public.cost_centers
-  for insert to anon, authenticated with check (true);
-drop policy if exists "cost_centers_update_all" on public.cost_centers;
-create policy "cost_centers_update_all" on public.cost_centers
-  for update to anon, authenticated using (true) with check (true);
-
--- voucher_type_defaults
-drop policy if exists "voucher_type_defaults_select_all" on public.voucher_type_defaults;
-create policy "voucher_type_defaults_select_all" on public.voucher_type_defaults
-  for select to anon, authenticated using (true);
-drop policy if exists "voucher_type_defaults_insert_all" on public.voucher_type_defaults;
-create policy "voucher_type_defaults_insert_all" on public.voucher_type_defaults
-  for insert to anon, authenticated with check (true);
-drop policy if exists "voucher_type_defaults_update_all" on public.voucher_type_defaults;
-create policy "voucher_type_defaults_update_all" on public.voucher_type_defaults
   for update to anon, authenticated using (true) with check (true);

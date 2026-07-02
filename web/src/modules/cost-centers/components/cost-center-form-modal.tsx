@@ -1,13 +1,16 @@
 "use client";
 
+import { useMemo } from "react";
 import { Modal } from "@/components/modal";
 import type { CostCenterFormValues } from "@/modules/cost-centers/services/cost-center-api";
+import { previewCostCenterCode } from "@/modules/cost-centers/utils/generate-cost-center-code";
 import type { CostCenter } from "@/modules/vouchers/types";
 
 interface CostCenterFormModalProps {
   open: boolean;
   mode: "create" | "edit";
   center: CostCenter | null;
+  allCenters: CostCenter[];
   isSaving: boolean;
   error: string;
   onClose: () => void;
@@ -18,6 +21,7 @@ export function CostCenterFormModal({
   open,
   mode,
   center,
+  allCenters,
   isSaving,
   error,
   onClose,
@@ -26,7 +30,7 @@ export function CostCenterFormModal({
   const title = mode === "create" ? "إضافة مركز كلفة" : "تعديل مركز كلفة";
   const description =
     mode === "create"
-      ? "أدخل كوداً فريداً واسم مركز الكلفة."
+      ? "يُولَّد كود النظام تلقائياً — الكود الفرعي اختياري للمستخدم."
       : center
         ? `${center.code} — ${center.name_ar}`
         : undefined;
@@ -37,6 +41,7 @@ export function CostCenterFormModal({
         key={center?.id ?? "new"}
         mode={mode}
         initial={center}
+        allCenters={allCenters}
         isSaving={isSaving}
         error={error}
         onSubmit={onSubmit}
@@ -49,6 +54,7 @@ export function CostCenterFormModal({
 function CostCenterForm({
   mode,
   initial,
+  allCenters,
   isSaving,
   error,
   onSubmit,
@@ -56,16 +62,22 @@ function CostCenterForm({
 }: {
   mode: "create" | "edit";
   initial: CostCenter | null;
+  allCenters: CostCenter[];
   isSaving: boolean;
   error: string;
   onSubmit: (values: CostCenterFormValues) => Promise<void>;
   onCancel: () => void;
 }) {
+  const systemCode = useMemo(() => {
+    if (mode === "edit") return initial?.code ?? "—";
+    return previewCostCenterCode(allCenters);
+  }, [mode, allCenters, initial?.code]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await onSubmit({
-      code: String(form.get("code") ?? ""),
+      sub_code: String(form.get("sub_code") ?? ""),
       name_ar: String(form.get("name_ar") ?? ""),
       name_en: String(form.get("name_en") ?? ""),
       is_active: form.get("is_active") === "on",
@@ -74,17 +86,30 @@ function CostCenterForm({
 
   return (
     <form onSubmit={(event) => void handleSubmit(event)} className="grid gap-4">
+      <div className="grid gap-1 text-sm">
+        <span className="font-medium text-slate-700">كود النظام (تلقائي — للربط)</span>
+        <p
+          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-700"
+          dir="ltr"
+        >
+          {systemCode}
+        </p>
+      </div>
+
       <label className="grid gap-1 text-sm">
-        <span className="font-medium text-slate-700">الكود *</span>
+        <span className="font-medium text-slate-700">كود فرعي (اختياري — للمستخدم)</span>
         <input
-          name="code"
-          defaultValue={initial?.code ?? ""}
-          required
+          name="sub_code"
+          defaultValue={initial?.sub_code ?? ""}
           disabled={isSaving}
-          placeholder="CC-100"
-          className="rounded-md border border-slate-300 px-3 py-2 font-mono uppercase"
+          maxLength={30}
+          placeholder="مرجع داخلي — لا يُستخدم في الربط"
+          className="rounded-md border border-slate-300 px-3 py-2 font-mono text-sm"
           dir="ltr"
         />
+        <span className="text-xs text-slate-500">
+          حقل مرجعي للمستخدم فقط، منفصل عن كود مركز الكلفة في النظام.
+        </span>
       </label>
 
       <label className="grid gap-1 text-sm">

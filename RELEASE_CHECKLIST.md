@@ -4,8 +4,8 @@
 
 ## 1) قاعدة البيانات (Supabase)
 
-- [ ] تشغيل `accounting_schema.sql` في SQL Editor
-- [ ] تشغيل `accounting_test_cases.sql` والتحقق من توازن القيود (`total_debit = total_credit`)
+- [ ] تشغيل `database/setup_all.sql` في SQL Editor (يحذف البيانات السابقة ويعيد الإعداد)
+- [ ] *(اختياري)* تشغيل `database/03_test_cases.sql` والتحقق من توازن القيود (`total_debit = total_credit`)
 - [ ] التأكد من وجود 7 حسابات رئيسية (الموجودات، الالتزامات، حقوق الملكية، المبيعات، المشتريات، المصاريف، الايرادات)
 - [ ] إضافة الحسابات الفرعية المطلوبة للتشغيل الفعلي
 

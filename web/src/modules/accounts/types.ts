@@ -20,6 +20,7 @@ export interface AccountFormValues {
   parent_id: string;
   currency_id: string;
   is_postable: boolean;
+  sub_code?: string;
 }
 
 export interface AccountStats {

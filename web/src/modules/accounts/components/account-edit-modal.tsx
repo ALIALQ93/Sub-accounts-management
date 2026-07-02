@@ -16,6 +16,7 @@ export interface AccountEditValues {
   name_en: string;
   currency_id: string;
   is_postable: boolean;
+  sub_code: string;
 }
 
 interface AccountEditModalProps {
@@ -53,6 +54,7 @@ function AccountEditForm({
     name_en: account.name_en ?? "",
     currency_id: account.currency_id ?? "",
     is_postable: account.is_postable,
+    sub_code: account.sub_code ?? "",
   }));
 
   const activeCurrencies = currencies.filter((currency) => currency.is_active);
@@ -69,11 +71,27 @@ function AccountEditForm({
     <div className="grid gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1 text-sm">
-          <span className="text-slate-700">كود الحساب</span>
+          <span className="text-slate-700">كود الحساب (النظام)</span>
           <input
             value={account.code}
             readOnly
             className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-600"
+          />
+        </label>
+
+        <label className="grid gap-1 text-sm">
+          <span className="text-slate-700">كود فرعي (للمستخدم)</span>
+          <input
+            value={values.sub_code}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                sub_code: event.target.value.slice(0, 30),
+              }))
+            }
+            placeholder="مرجع داخلي"
+            className="rounded-md border border-slate-300 px-3 py-2 font-mono text-sm"
+            dir="ltr"
           />
         </label>
 

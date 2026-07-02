@@ -828,7 +828,7 @@ export const voucherApi = {
       throw new ApiError({
         code: "VOUCHER_NUMBER_RESERVE_FAILED",
         message:
-          "تعذّر حجز رقم السند. شغّل ملف accounting_voucher_settings.sql في Supabase.",
+          "تعذّر حجز رقم السند. شغّل ملف database/setup_all.sql في Supabase.",
       });
     }
 

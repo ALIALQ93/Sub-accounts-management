@@ -34,6 +34,7 @@ export interface VoucherLine {
 export interface CostCenter {
   id: string;
   code: string;
+  sub_code?: string | null;
   name_ar: string;
   name_en: string | null;
   is_active: boolean;
@@ -81,6 +82,7 @@ export interface SelectOption {
 export interface Account {
   id: string;
   code: string;
+  sub_code?: string | null;
   name_ar: string;
   name_en?: string | null;
   currency_id?: string | null;

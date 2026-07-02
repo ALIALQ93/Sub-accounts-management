@@ -1,6 +1,7 @@
 "use client";
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { generateCostCenterCode } from "@/modules/cost-centers/utils/generate-cost-center-code";
 import type { CostCenter } from "@/modules/vouchers/types";
 import type { PostgrestError } from "@supabase/supabase-js";
 
@@ -10,8 +11,13 @@ function throwIfSupabaseError(error: PostgrestError | null): void {
   }
 }
 
+function normalizeSubCode(value?: string): string | null {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed.slice(0, 30) : null;
+}
+
 export interface CostCenterFormValues {
-  code: string;
+  sub_code?: string;
   name_ar: string;
   name_en: string;
   is_active: boolean;
@@ -28,12 +34,21 @@ export const costCenterApi = {
     return (data ?? []) as CostCenter[];
   },
 
+  async peekNextCostCenterCode(): Promise<string> {
+    const centers = await this.listCostCenters();
+    return generateCostCenterCode(centers);
+  },
+
   async createCostCenter(payload: CostCenterFormValues): Promise<CostCenter> {
     const supabase = getSupabaseClient();
+    const existing = await this.listCostCenters();
+    const code = generateCostCenterCode(existing);
+
     const { data, error } = await supabase
       .from("cost_centers")
       .insert({
-        code: payload.code.trim().toUpperCase(),
+        code,
+        sub_code: normalizeSubCode(payload.sub_code),
         name_ar: payload.name_ar.trim(),
         name_en: payload.name_en.trim() || null,
         is_active: payload.is_active,
@@ -51,8 +66,8 @@ export const costCenterApi = {
     const supabase = getSupabaseClient();
     const updatePayload: Record<string, unknown> = {};
 
-    if (payload.code !== undefined) {
-      updatePayload.code = payload.code.trim().toUpperCase();
+    if (payload.sub_code !== undefined) {
+      updatePayload.sub_code = normalizeSubCode(payload.sub_code);
     }
     if (payload.name_ar !== undefined) {
       updatePayload.name_ar = payload.name_ar.trim();

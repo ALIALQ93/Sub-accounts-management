@@ -157,6 +157,7 @@ export default function AccountsPage() {
     try {
       await voucherApi.createAccount({
         code,
+        sub_code: values.sub_code?.trim() || null,
         name_ar: values.name_ar.trim(),
         name_en: values.name_en.trim() || null,
         parent_id: values.parent_id,
@@ -212,6 +213,7 @@ export default function AccountsPage() {
         name_ar: values.name_ar.trim(),
         name_en: values.name_en.trim() || null,
         currency_id: values.currency_id,
+        sub_code: values.sub_code?.trim() || null,
       };
       if (
         editingAccount.childCount === 0 &&
@@ -366,7 +368,7 @@ export default function AccountsPage() {
                 <li>اضغط Redeploy بعد حفظ المتغيرات</li>
                 <li>
                   في Supabase SQL Editor شغّل ملف{" "}
-                  <span className="font-mono">accounting_rls_policies.sql</span>
+                  <span className="font-mono">database/setup_all.sql</span>
                 </li>
               </ol>
             </div>

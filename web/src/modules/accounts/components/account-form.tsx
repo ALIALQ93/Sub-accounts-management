@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Account } from "@/modules/vouchers/types";
 import type { AccountFormValues } from "@/modules/accounts/types";
 import { getDefaultCurrencyId } from "@/modules/accounts/utils/compute-account-balances";
 import { isRootAccount } from "@/modules/accounts/utils/account-tree";
 import { previewAccountCode } from "@/modules/accounts/utils/generate-account-code";
 import type { Currency } from "@/modules/currencies/types";
+import type { Account } from "@/modules/vouchers/types";
 
 interface AccountFormProps {
   parentAccounts: Account[];
@@ -25,6 +25,7 @@ const EMPTY_FORM: AccountFormValues = {
   parent_id: "",
   currency_id: "",
   is_postable: true,
+  sub_code: "",
 };
 
 export function AccountForm({
@@ -71,11 +72,31 @@ export function AccountForm({
     <div className="grid gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="grid gap-1 text-sm sm:col-span-2">
-          <span className="text-slate-700">كود الحساب (تلقائي)</span>
+          <span className="text-slate-700">كود الحساب (تلقائي — للربط في النظام)</span>
           <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-700">
             {suggestedCode}
           </p>
         </div>
+
+        <label className="grid gap-1 text-sm sm:col-span-2">
+          <span className="text-slate-700">كود فرعي (اختياري — للمستخدم)</span>
+          <input
+            value={values.sub_code ?? ""}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                sub_code: event.target.value.slice(0, 30),
+              }))
+            }
+            disabled={isSaving}
+            placeholder="مرجع داخلي — لا يُستخدم في الربط"
+            className="rounded-md border border-slate-300 px-3 py-2 font-mono text-sm"
+            dir="ltr"
+          />
+          <span className="text-xs text-slate-500">
+            حقل مرجعي للمستخدم فقط، منفصل عن كود الحساب في النظام.
+          </span>
+        </label>
 
         <label className="grid gap-1 text-sm">
           <span className="text-slate-700">اسم الحساب بالعربية *</span>

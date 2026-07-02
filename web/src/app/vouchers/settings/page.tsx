@@ -338,9 +338,8 @@ export default function VoucherSettingsPage() {
           </div>
 
           <p className="text-xs text-slate-500">
-            شغّل في Supabase بالترتيب:{" "}
-            <span className="font-mono">accounting_voucher_settings.sql</span> ثم{" "}
-            <span className="font-mono">accounting_voucher_extensions.sql</span>
+            شغّل في Supabase:{" "}
+            <span className="font-mono">database/setup_all.sql</span>
           </p>
         </>
       )}

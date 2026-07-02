@@ -72,8 +72,8 @@ export default function CostCentersPage() {
   };
 
   const onSubmit = async (values: CostCenterFormValues) => {
-    if (!values.code.trim() || !values.name_ar.trim()) {
-      setFormError("الكود والاسم العربي مطلوبان.");
+    if (!values.name_ar.trim()) {
+      setFormError("الاسم العربي مطلوب.");
       return;
     }
 
@@ -161,6 +161,7 @@ export default function CostCentersPage() {
               <thead className="bg-slate-50">
                 <tr className="text-right text-slate-700">
                   <th className="border border-slate-200 p-2">الكود</th>
+                  <th className="border border-slate-200 p-2">كود فرعي</th>
                   <th className="border border-slate-200 p-2">الاسم</th>
                   <th className="border border-slate-200 p-2">الاسم (EN)</th>
                   <th className="border border-slate-200 p-2">الحالة</th>
@@ -172,6 +173,9 @@ export default function CostCentersPage() {
                   <tr key={center.id} className="odd:bg-white even:bg-slate-50/60">
                     <td className="border border-slate-100 p-2 font-mono">
                       {center.code}
+                    </td>
+                    <td className="border border-slate-100 p-2 font-mono text-slate-600">
+                      {center.sub_code ?? "—"}
                     </td>
                     <td className="border border-slate-100 p-2 font-medium">
                       {center.name_ar}
@@ -216,7 +220,7 @@ export default function CostCentersPage() {
                 {centers.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="border border-slate-100 p-6 text-center text-slate-500"
                     >
                       لا توجد مراكز كلفة. اضغط «إضافة مركز كلفة» للبدء.
@@ -233,6 +237,7 @@ export default function CostCentersPage() {
         open={isModalOpen}
         mode={modalMode}
         center={editingCenter}
+        allCenters={centers}
         isSaving={isSaving}
         error={formError}
         onClose={closeModal}
