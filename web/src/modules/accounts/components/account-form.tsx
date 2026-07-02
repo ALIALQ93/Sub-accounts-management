@@ -11,7 +11,7 @@ interface AccountFormProps {
   isSaving: boolean;
   error: string;
   onSubmit: (values: AccountFormValues) => Promise<void>;
-  onCancel?: () => void;
+  onCancel: () => void;
 }
 
 const EMPTY_FORM: AccountFormValues = {
@@ -42,34 +42,11 @@ export function AccountForm({
 
   const handleSubmit = async () => {
     await onSubmit(values);
-    if (!presetParentId) {
-      setValues(EMPTY_FORM);
-    }
   };
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">
-            {presetParentId ? "إضافة حساب فرعي" : "إضافة حساب فرعي جديد"}
-          </h2>
-          <p className="text-sm text-slate-600">
-            الحسابات الرئيسية السبعة ثابتة. أضف الفروع تحت الحساب الأب المناسب.
-          </p>
-        </div>
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
-          >
-            إلغاء
-          </button>
-        )}
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4">
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="grid gap-1 text-sm">
           <span className="text-slate-700">كود الحساب *</span>
           <input
@@ -97,7 +74,7 @@ export function AccountForm({
           />
         </label>
 
-        <label className="grid gap-1 text-sm">
+        <label className="grid gap-1 text-sm sm:col-span-2">
           <span className="text-slate-700">الحساب الأب *</span>
           <select
             value={values.parent_id}
@@ -121,7 +98,7 @@ export function AccountForm({
           </select>
         </label>
 
-        <label className="flex items-end gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm">
+        <label className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm sm:col-span-2">
           <input
             id="accountIsPostable"
             type="checkbox"
@@ -137,16 +114,16 @@ export function AccountForm({
           <span>
             قابل للترحيل
             {!parentSelected && (
-              <span className="block text-xs text-slate-500">
-                يتطلب اختيار حساب أب
+              <span className="mr-2 text-xs text-slate-500">
+                (يتطلب اختيار حساب أب)
               </span>
             )}
           </span>
         </label>
       </div>
 
-      {selectedParent && (
-        <p className="mt-3 text-sm text-slate-600">
+      {selectedParent && !presetParentId && (
+        <p className="text-sm text-slate-600">
           سيُضاف تحت:{" "}
           <span className="font-medium">
             {selectedParent.code} — {selectedParent.name_ar}
@@ -159,16 +136,26 @@ export function AccountForm({
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={isSaving}
-        className="mt-4 rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
-        {isSaving ? "جاري الحفظ..." : "إضافة الحساب"}
-      </button>
+      {error && <p className="text-sm text-rose-700">{error}</p>}
 
-      {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
-    </section>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSaving}
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+        >
+          إلغاء
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isSaving}
+          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+        >
+          {isSaving ? "جاري الحفظ..." : "إضافة الحساب"}
+        </button>
+      </div>
+    </div>
   );
 }

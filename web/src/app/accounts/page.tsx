@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { AccountForm } from "@/modules/accounts/components/account-form";
+import { AccountFormModal } from "@/modules/accounts/components/account-form-modal";
 import { AccountTreeTable } from "@/modules/accounts/components/account-tree-table";
 import type { AccountFormValues, AccountTreeNode, StatementFilter } from "@/modules/accounts/types";
 import {
@@ -26,7 +26,8 @@ export default function AccountsPage() {
   const [query, setQuery] = useState("");
   const [statementFilter, setStatementFilter] = useState<StatementFilter>("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [showForm, setShowForm] = useState(true);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const [presetParentId, setPresetParentId] = useState<string | undefined>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNameAr, setEditNameAr] = useState("");
@@ -118,7 +119,7 @@ export default function AccountsPage() {
         }
         return next;
       });
-      setPresetParentId(undefined);
+      closeAddModal();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "فشل إنشاء الحساب.");
     } finally {
@@ -199,10 +200,21 @@ export default function AccountsPage() {
     setExpandedIds(new Set());
   };
 
-  const openAddChild = (account: AccountTreeNode) => {
-    setPresetParentId(account.id);
-    setShowForm(true);
+  const openAddModal = (parentId?: string) => {
+    setPresetParentId(parentId);
     setFormError("");
+    setFormKey((current) => current + 1);
+    setIsAddModalOpen(true);
+  };
+
+  const closeAddModal = () => {
+    setIsAddModalOpen(false);
+    setPresetParentId(undefined);
+    setFormError("");
+  };
+
+  const openAddChild = (account: AccountTreeNode) => {
+    openAddModal(account.id);
     setExpandedIds((current) => new Set(current).add(account.id));
   };
 
@@ -224,13 +236,10 @@ export default function AccountsPage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => {
-              setPresetParentId(undefined);
-              setShowForm((current) => !current);
-            }}
+            onClick={() => openAddModal()}
             className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
           >
-            {showForm ? "إخفاء نموذج الإضافة" : "إضافة حساب فرعي"}
+            + إضافة حساب
           </button>
           <Link
             href="/vouchers/new"
@@ -305,24 +314,16 @@ export default function AccountsPage() {
         </article>
       </section>
 
-      {showForm && (
-        <AccountForm
-          key={presetParentId ?? "new-account"}
-          parentAccounts={parentOptions}
-          presetParentId={presetParentId}
-          isSaving={isSaving}
-          error={formError}
-          onSubmit={onCreate}
-          onCancel={
-            presetParentId
-              ? () => {
-                  setPresetParentId(undefined);
-                  setFormError("");
-                }
-              : undefined
-          }
-        />
-      )}
+      <AccountFormModal
+        open={isAddModalOpen}
+        formKey={formKey}
+        parentAccounts={parentOptions}
+        presetParentId={presetParentId}
+        isSaving={isSaving}
+        error={formError}
+        onClose={closeAddModal}
+        onSubmit={onCreate}
+      />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-end gap-3">
