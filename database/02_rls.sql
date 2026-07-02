@@ -1,7 +1,9 @@
 -- =============================================================================
--- 02_rls.sql — سياسات Row Level Security (MVP بدون مصادقة)
+-- 02_rls.sql — سياسات Row Level Security
 -- =============================================================================
 -- شغّل بعد 01_schema.sql
+-- جداول المحاسبة: سياسات مفتوحة للمستخدمين المصادق عليهم (MVP).
+-- profiles / user_permissions / company_settings: سياسات مقيدة.
 -- =============================================================================
 
 alter table public.currencies enable row level security;
@@ -123,8 +125,14 @@ create policy "profiles_select" on public.profiles
 drop policy if exists "profiles_update_admin" on public.profiles;
 create policy "profiles_update_admin" on public.profiles
   for update to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (
+    public.is_admin()
+    or public.has_permission('settings.users.manage')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.users.manage')
+  );
 
 drop policy if exists "profiles_update_self" on public.profiles;
 create policy "profiles_update_self" on public.profiles
@@ -168,8 +176,14 @@ create policy "company_settings_select" on public.company_settings
 drop policy if exists "company_settings_update_admin" on public.company_settings;
 create policy "company_settings_update_admin" on public.company_settings
   for update to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
 
 drop policy if exists "company_settings_insert_admin" on public.company_settings;
 create policy "company_settings_insert_admin" on public.company_settings
@@ -263,3 +277,30 @@ create policy "voucher_allocations_insert_all" on public.voucher_allocations
 drop policy if exists "voucher_allocations_update_all" on public.voucher_allocations;
 create policy "voucher_allocations_update_all" on public.voucher_allocations
   for update to anon, authenticated using (true) with check (true);
+
+-- ---------------------------------------------------------------------------
+-- مزامنة مستخدمي Supabase Auth الموجودين (إن وُجدوا قبل التثبيت)
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_has_profiles boolean;
+begin
+  select exists (select 1 from public.profiles limit 1) into v_has_profiles;
+
+  insert into public.profiles (id, email, full_name_ar, role)
+  select
+    u.id,
+    coalesce(u.email, ''),
+    coalesce(
+      u.raw_user_meta_data->>'full_name_ar',
+      split_part(coalesce(u.email, 'user'), '@', 1)
+    ),
+    case
+      when not v_has_profiles
+        and u.id = (select id from auth.users order by created_at asc limit 1)
+      then 'admin'::public.app_role
+      else 'accountant'::public.app_role
+    end
+  from auth.users u
+  where not exists (select 1 from public.profiles p where p.id = u.id);
+end $$;

@@ -1501,12 +1501,6 @@ values
   ('6', 'المصاريف', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
   ('7', 'الايرادات', null, (select id from public.currencies where code = 'IQD'), 1, false, true);
 
-insert into public.cost_centers (code, name_ar, name_en)
-values
-  ('CC-000', 'عام', 'General'),
-  ('CC-100', 'المبيعات', 'Sales'),
-  ('CC-200', 'الإدارة', 'Administration');
-
 insert into public.party_settings (id)
 values (1);
 
@@ -1522,23 +1516,20 @@ values
   ('payment', 'PAY', 4, true),
   ('settlement', 'SET', 4, true);
 
-insert into public.voucher_type_defaults (voucher_type, default_currency_id, default_cost_center_id)
-select 'receipt', c.id, cc.id
+insert into public.voucher_type_defaults (voucher_type, default_currency_id)
+select 'receipt', c.id
 from public.currencies c
-cross join public.cost_centers cc
-where c.is_base = true and cc.code = 'CC-000';
+where c.is_base = true;
 
-insert into public.voucher_type_defaults (voucher_type, default_currency_id, default_cost_center_id)
-select 'payment', c.id, cc.id
+insert into public.voucher_type_defaults (voucher_type, default_currency_id)
+select 'payment', c.id
 from public.currencies c
-cross join public.cost_centers cc
-where c.is_base = true and cc.code = 'CC-000';
+where c.is_base = true;
 
-insert into public.voucher_type_defaults (voucher_type, default_currency_id, default_cost_center_id)
-select 'settlement', c.id, cc.id
+insert into public.voucher_type_defaults (voucher_type, default_currency_id)
+select 'settlement', c.id
 from public.currencies c
-cross join public.cost_centers cc
-where c.is_base = true and cc.code = 'CC-000';
+where c.is_base = true;
 
 insert into public.voucher_line_categories (voucher_type, code, name_ar, requires_quantity, quantity_label, sort_order)
 values

@@ -1,8 +1,9 @@
 -- =============================================================================
--- 04_auth.sql — المصادقة، الملفات الشخصية، إعدادات الشركة
+-- 04_auth.sql — ترقية قاعدة موجودة: مصادقة + ملفات شخصية + إعدادات
 -- =============================================================================
--- شغّل بعد 01_schema.sql و 02_rls.sql (أو استخدم setup_all.sql المحدّث)
--- يتطلب تفعيل Supabase Auth (Email/Password)
+-- شغّل على قاعدة أنشئت بـ 01_schema.sql القديم (بدون profiles).
+-- إذا أعدت التثبيت من الصفر استخدم setup_all.sql — لا حاجة لهذا الملف.
+-- يتطلب تفعيل Supabase Auth (Email/Password).
 -- =============================================================================
 
 create type if not exists public.app_role as enum ('admin', 'accountant', 'viewer');
@@ -37,6 +38,17 @@ create table if not exists public.company_settings (
 
 insert into public.company_settings (id, legal_name_ar)
 values (1, 'شركتي')
+on conflict (id) do nothing;
+
+create table if not exists public.party_settings (
+  id int primary key default 1 check (id = 1),
+  customer_parent_account_id uuid null references public.accounts(id) on delete set null,
+  vendor_parent_account_id uuid null references public.accounts(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.party_settings (id)
+values (1)
 on conflict (id) do nothing;
 
 create or replace function public.is_admin()
@@ -93,16 +105,19 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+drop trigger if exists trg_profiles_updated_at on public.profiles;
 create trigger trg_profiles_updated_at
 before update on public.profiles
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_company_settings_updated_at on public.company_settings;
 create trigger trg_company_settings_updated_at
 before update on public.company_settings
 for each row execute function public.set_updated_at();
 
 alter table public.profiles enable row level security;
 alter table public.company_settings enable row level security;
+alter table public.party_settings enable row level security;
 
 drop policy if exists "profiles_select" on public.profiles;
 create policy "profiles_select" on public.profiles
@@ -140,3 +155,38 @@ drop policy if exists "company_settings_insert_admin" on public.company_settings
 create policy "company_settings_insert_admin" on public.company_settings
   for insert to authenticated
   with check (public.is_admin());
+
+drop policy if exists "party_settings_select_all" on public.party_settings;
+create policy "party_settings_select_all" on public.party_settings
+  for select to anon, authenticated using (true);
+drop policy if exists "party_settings_insert_all" on public.party_settings;
+create policy "party_settings_insert_all" on public.party_settings
+  for insert to anon, authenticated with check (true);
+drop policy if exists "party_settings_update_all" on public.party_settings;
+create policy "party_settings_update_all" on public.party_settings
+  for update to anon, authenticated using (true) with check (true);
+
+-- مزامنة مستخدمي auth الحاليين
+do $$
+declare
+  v_has_profiles boolean;
+begin
+  select exists (select 1 from public.profiles limit 1) into v_has_profiles;
+
+  insert into public.profiles (id, email, full_name_ar, role)
+  select
+    u.id,
+    coalesce(u.email, ''),
+    coalesce(
+      u.raw_user_meta_data->>'full_name_ar',
+      split_part(coalesce(u.email, 'user'), '@', 1)
+    ),
+    case
+      when not v_has_profiles
+        and u.id = (select id from auth.users order by created_at asc limit 1)
+      then 'admin'::public.app_role
+      else 'accountant'::public.app_role
+    end
+  from auth.users u
+  where not exists (select 1 from public.profiles p where p.id = u.id);
+end $$;

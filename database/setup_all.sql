@@ -1,10 +1,14 @@
 -- =============================================================================
--- setup_all.sql — إعداد كامل: حذف + مخطط + RLS
+-- setup_all.sql — إعداد كامل للتشغيل (ملف واحد)
 -- =============================================================================
--- شغّل هذا الملف مرة واحدة في Supabase SQL Editor.
--- يحذف جميع البيانات السابقة ويعيد بناء المخطط بالوضع الحالي.
+-- شغّل هذا الملف مرة واحدة في Supabase → SQL Editor.
+-- يدمج بالترتيب: 00_reset.sql + 01_schema.sql + 02_rls.sql
+--
+-- يشمل: المحاسبة، العملات، السندات، المصادقة (profiles)، الصلاحيات
+--       (user_permissions / has_permission)، إعدادات الشركة والعملاء/الموردين.
+--
+-- ⚠️ تحذير: يحذف جميع البيانات السابقة ويعيد بناء المخطط من الصفر.
 -- =============================================================================
-
 -- =============================================================================
 -- 00_reset.sql — إعادة ضبط كاملة للمخطط المحاسبي
 -- =============================================================================
@@ -44,8 +48,8 @@ drop function if exists public.accounts_on_child_insert_make_parent_non_postable
 drop function if exists public.prevent_account_delete_when_used() cascade;
 drop function if exists public.journal_lines_validate_account_is_postable() cascade;
 drop function if exists public.journal_entry_validate_balance_before_post() cascade;
-drop function if exists public.has_permission(text) cascade;
 drop function if exists public.handle_new_user() cascade;
+drop function if exists public.has_permission(text) cascade;
 drop function if exists public.is_admin() cascade;
 drop function if exists public.customers_vendors_validate_accounts() cascade;
 drop function if exists public.vouchers_validate_parties() cascade;
@@ -64,8 +68,6 @@ drop function if exists public.update_currency_exchange_rate(uuid, numeric, date
 drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
 drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
 drop function if exists public.currencies_prevent_direct_rate_change() cascade;
-
-
 -- =============================================================================
 -- 01_schema.sql — المخطط المحاسبي الكامل (الوضع الحالي)
 -- =============================================================================
@@ -175,9 +177,10 @@ create table public.journal_entry_lines (
   )
 );
 
+create index idx_journal_lines_cost_center_id on public.journal_entry_lines(cost_center_id);
+
 create index idx_journal_lines_entry_id on public.journal_entry_lines(journal_entry_id);
 create index idx_journal_lines_account_id on public.journal_entry_lines(account_id);
-create index idx_journal_lines_cost_center_id on public.journal_entry_lines(cost_center_id);
 
 create table public.customers (
   id uuid primary key default gen_random_uuid(),
@@ -1568,12 +1571,6 @@ values
   ('6', 'المصاريف', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
   ('7', 'الايرادات', null, (select id from public.currencies where code = 'IQD'), 1, false, true);
 
-insert into public.cost_centers (code, name_ar, name_en)
-values
-  ('CC-000', 'عام', 'General'),
-  ('CC-100', 'المبيعات', 'Sales'),
-  ('CC-200', 'الإدارة', 'Administration');
-
 insert into public.party_settings (id)
 values (1);
 
@@ -1589,35 +1586,32 @@ values
   ('payment', 'PAY', 4, true),
   ('settlement', 'SET', 4, true);
 
-insert into public.voucher_type_defaults (voucher_type, default_currency_id, default_cost_center_id)
-select 'receipt', c.id, cc.id
+insert into public.voucher_type_defaults (voucher_type, default_currency_id)
+select 'receipt', c.id
 from public.currencies c
-cross join public.cost_centers cc
-where c.is_base = true and cc.code = 'CC-000';
+where c.is_base = true;
 
-insert into public.voucher_type_defaults (voucher_type, default_currency_id, default_cost_center_id)
-select 'payment', c.id, cc.id
+insert into public.voucher_type_defaults (voucher_type, default_currency_id)
+select 'payment', c.id
 from public.currencies c
-cross join public.cost_centers cc
-where c.is_base = true and cc.code = 'CC-000';
+where c.is_base = true;
 
-insert into public.voucher_type_defaults (voucher_type, default_currency_id, default_cost_center_id)
-select 'settlement', c.id, cc.id
+insert into public.voucher_type_defaults (voucher_type, default_currency_id)
+select 'settlement', c.id
 from public.currencies c
-cross join public.cost_centers cc
-where c.is_base = true and cc.code = 'CC-000';
+where c.is_base = true;
 
 insert into public.voucher_line_categories (voucher_type, code, name_ar, requires_quantity, quantity_label, sort_order)
 values
   ('payment', 'PAY-FOOD', 'اطعام', false, null, 10),
   ('payment', 'PAY-NUTR', 'تغذية', false, null, 20),
   ('payment', 'PAY-CONST', 'انشائية', true, 'العدد', 30);
-
-
 -- =============================================================================
--- 02_rls.sql — سياسات Row Level Security (MVP بدون مصادقة)
+-- 02_rls.sql — سياسات Row Level Security
 -- =============================================================================
 -- شغّل بعد 01_schema.sql
+-- جداول المحاسبة: سياسات مفتوحة للمستخدمين المصادق عليهم (MVP).
+-- profiles / user_permissions / company_settings: سياسات مقيدة.
 -- =============================================================================
 
 alter table public.currencies enable row level security;
@@ -1651,7 +1645,7 @@ drop policy if exists "currencies_update_all" on public.currencies;
 create policy "currencies_update_all" on public.currencies
   for update to anon, authenticated using (true) with check (true);
 
--- currency_rate_history
+-- currency_rate_history (قراءة فقط من الواجهة — الإدراج عبر دوال SQL)
 drop policy if exists "currency_rate_history_select_all" on public.currency_rate_history;
 create policy "currency_rate_history_select_all" on public.currency_rate_history
   for select to anon, authenticated using (true);
@@ -1739,8 +1733,14 @@ create policy "profiles_select" on public.profiles
 drop policy if exists "profiles_update_admin" on public.profiles;
 create policy "profiles_update_admin" on public.profiles
   for update to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (
+    public.is_admin()
+    or public.has_permission('settings.users.manage')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.users.manage')
+  );
 
 drop policy if exists "profiles_update_self" on public.profiles;
 create policy "profiles_update_self" on public.profiles
@@ -1784,8 +1784,14 @@ create policy "company_settings_select" on public.company_settings
 drop policy if exists "company_settings_update_admin" on public.company_settings;
 create policy "company_settings_update_admin" on public.company_settings
   for update to authenticated
-  using (public.is_admin())
-  with check (public.is_admin());
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
 
 drop policy if exists "company_settings_insert_admin" on public.company_settings;
 create policy "company_settings_insert_admin" on public.company_settings
@@ -1879,3 +1885,44 @@ create policy "voucher_allocations_insert_all" on public.voucher_allocations
 drop policy if exists "voucher_allocations_update_all" on public.voucher_allocations;
 create policy "voucher_allocations_update_all" on public.voucher_allocations
   for update to anon, authenticated using (true) with check (true);
+
+-- ---------------------------------------------------------------------------
+-- مزامنة مستخدمي Supabase Auth الموجودين (إن وُجدوا قبل التثبيت)
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v_has_profiles boolean;
+begin
+  select exists (select 1 from public.profiles limit 1) into v_has_profiles;
+
+  insert into public.profiles (id, email, full_name_ar, role)
+  select
+    u.id,
+    coalesce(u.email, ''),
+    coalesce(
+      u.raw_user_meta_data->>'full_name_ar',
+      split_part(coalesce(u.email, 'user'), '@', 1)
+    ),
+    case
+      when not v_has_profiles
+        and u.id = (select id from auth.users order by created_at asc limit 1)
+      then 'admin'::public.app_role
+      else 'accountant'::public.app_role
+    end
+  from auth.users u
+  where not exists (select 1 from public.profiles p where p.id = u.id);
+end $$;
+
+-- =============================================================================
+-- اكتمل التثبيت
+-- =============================================================================
+-- 1. Supabase → Authentication → Providers → فعّل Email/Password
+-- 2. متغيرات البيئة للتطبيق:
+--      NEXT_PUBLIC_SUPABASE_URL
+--      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+--    (اختياري للإنشاء من الواجهة) SUPABASE_SERVICE_ROLE_KEY
+-- 3. افتح التطبيق → /login → سجّل أول مستخدم (يصبح admin تلقائياً)
+-- 4. من /settings/users أدر المستخدمين، ومن /settings/permissions الصلاحيات
+-- 5. من /vouchers/settings حدّد الحسابات الافتراضية
+-- 6. (اختياري) شغّل 03_test_cases.sql للتحقق من سيناريوهات القبض والصرف
+-- =============================================================================

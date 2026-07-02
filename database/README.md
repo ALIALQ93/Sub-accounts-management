@@ -4,7 +4,7 @@
 
 ## ⚠️ تحذير
 
-تشغيل **`setup_all.sql`** أو **`00_reset.sql`** يحذف **جميع** البيانات المحاسبية (حسابات، سندات، قيود، عملاء، …).  
+تشغيل **`setup_all.sql`** أو **`00_reset.sql`** يحذف **جميع** البيانات المحاسبية (حسابات، سندات، قيود، عملاء، مستخدمين، …).  
 استخدمه في بيئة التطوير أو عند إعادة ضبط المشروع — وليس على بيانات إنتاج حقيقية.
 
 ## الطريقة السريعة (موصى بها)
@@ -15,7 +15,10 @@
 database/setup_all.sql
 ```
 
-ملف واحد يشغّل بالترتيب: حذف → مخطط → RLS.
+ملف واحد يشغّل بالترتيب: **حذف → مخطط → RLS → مزامنة مستخدمي Auth**.
+
+> `setup_all.sql` يُولَّد من الملفات `00_reset.sql` + `01_schema.sql` + `02_rls.sql`.  
+> بعد تعديل أي منها، أعد توليده بنفس الأمر في PowerShell (انظر أسفل الملف).
 
 ## الطريقة المرحلية
 
@@ -23,33 +26,60 @@ database/setup_all.sql
 |--------|-------|---------|
 | 1 | `00_reset.sql` | حذف الجداول والدوال والمحفزات |
 | 2 | `01_schema.sql` | إنشاء المخطط الكامل + البيانات الأولية |
-| 3 | `02_rls.sql` | سياسات Row Level Security |
-| 4 | `04_auth.sql` | *(اختياري)* مصادقة، ملفات شخصية، إعدادات الشركة |
-| 5 | `05_permissions.sql` | *(اختياري)* صلاحيات تفصيلية للمستخدمين |
-| 6 | `03_test_cases.sql` | *(اختياري)* سيناريوهات اختبار |
+| 3 | `02_rls.sql` | سياسات Row Level Security + مزامنة Auth |
+| 4 | `03_test_cases.sql` | *(اختياري)* سيناريوهات اختبار |
+
+### ترقية قاعدة موجودة (بدون حذف البيانات)
+
+| الملف | متى |
+|-------|-----|
+| `04_auth.sql` | قاعدة قديمة بدون `profiles` / مصادقة |
+| `05_permissions.sql` | بعد `04_auth.sql` — إضافة `user_permissions` و `has_permission` |
 
 ## ما يشمله المخطط الحالي
 
-- **العملات** — IQD أساسية + USD/EUR/SYP/AED
-- **دليل الحسابات** — 7 حسابات جذر + قواعد التسلسل الهرمي
-- **مراكز الكلفة** — CC-000، CC-100، CC-200
-- **السندات** — قبض / صرف / تسوية + عملة + سعر صرف + مركز كلفة
-- **أسطر السند** — مركز كلفة لكل سطر
-- **ترقيم السندات** — RCP / PAY / SET مع دوال `peek_voucher_no` و `reserve_voucher_no`
+- **العملات** — IQD أساسية + USD/EUR/SYP/AED + سجل أسعار تاريخي
+- **دليل الحسابات** — 7 حسابات جذر + قواعد التسلسل الهرمي + `sub_code`
+- **مراكز الكلفة** — جدول فارغ؛ يُضاف من صفحة «مراكز الكلفة» عند الحاجة
+- **السندات** — قبض / صرف / تصفية + عملة + سعر صرف + مركز كلفة
+- **تصنيفات أسطر السند** — PAY-FOOD، PAY-NUTR، PAY-CONST
+- **ترقيم السندات** — RCP / PAY / SET مع `peek_voucher_no` و `reserve_voucher_no`
 - **إعدادات افتراضية** — حساب / عملة / مركز كلفة لكل نوع سند
+- **إعدادات العملاء/الموردين** — `party_settings` (حساب أب افتراضي للذمم)
 - **الترحيل التلقائي** — من السند إلى قيد يومية عند `status = posted`
-- **عرض** `account_direct_balances` — أرصدة مباشرة من القيود المرحّلة (`security_invoker = true` لاحترام RLS)
-- **كود فرعي** `sub_code` — حقل مرجعي للمستخدم على الحسابات ومراكز الكلفة (منفصل عن كود النظام)
-- **المصادقة** — `profiles` + `company_settings` + trigger على `auth.users` (أول مستخدم = admin)
+- **عرض** `account_direct_balances` — `security_invoker = true`
+- **المصادقة** — `profiles` + `company_settings` + trigger على `auth.users`
+- **الصلاحيات** — `user_permissions` + `has_permission()` + `is_admin()`
 
-## تحذير Supabase: Security Definer View
+## بعد التثبيت
 
-إذا ظهر تحذير *"Data is publicly accessible via API as this is a Security definer view"* على `account_direct_balances`:
+1. **Supabase → Authentication → Providers** — فعّل Email/Password.
+2. **Environment Variables** (Vercel أو `.env.local`):
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   - *(اختياري)* `SUPABASE_SERVICE_ROLE_KEY` — لإنشاء مستخدمين من `/settings/users`
+3. افتح التطبيق → **`/login`** → سجّل **أول مستخدم** (يصبح **admin** تلقائياً).
+4. من **`/settings/users`** أدر المستخدمين.
+5. من **`/settings/permissions`** اضبط الصلاحيات التفصيلية.
+6. من **`/vouchers/settings`** حدّد حسابات القبض/الصرف/التصفية الافتراضية.
+7. من **`/customers`** و **`/vendors`** حدّد حساب أب الذمم الافتراضي.
+8. *(اختياري)* شغّل `03_test_cases.sql` للتحقق من سيناريوهات القبض والصرف.
 
-- الإعداد الحالي يستخدم `with (security_invoker = true)` حتى يُطبَّق RLS على الجداول الأساسية.
-- إذا شغّلت إعداداً قديماً، نفّذ `patch_view_security_invoker.sql` دون إعادة التثبيت الكامل.
-- لإضافة **الكود الفرعي للمستخدم**: `patch_sub_code.sql`
-- لإضافة **أنواع أسطر السند**: `patch_voucher_line_categories.sql`
+## ترقيعات جزئية (بدون إعادة تثبيت)
+
+| الملف | الغرض |
+|-------|--------|
+| `patch_view_security_invoker.sql` | إصلاح تحذير Security Definer على العرض |
+| `patch_sub_code.sql` | إضافة حقل `sub_code` |
+| `patch_voucher_line_categories.sql` | إضافة جدول تصنيفات الأسطر |
+| `patch_journal_cost_centers.sql` | مراكز كلفة على القيود |
+
+## إعادة توليد setup_all.sql
+
+```powershell
+cd database
+# (نفس أمر التوليد في المستودع — أو عدّل الملفات المصدرية يدوياً)
+```
 
 ## البيانات الأولية
 
@@ -57,18 +87,13 @@ database/setup_all.sql
 |--------|---------|
 | عملات | IQD (أساسية)، USD، EUR، SYP، AED |
 | حسابات | 1–7 (موجودات، التزامات، …) |
-| مراكز كلفة | عام، مبيعات، إدارة |
+| مراكز كلفة | *(لا بيانات افتراضية)* |
 | ترقيم | RCP-YYYY-0001، PAY-YYYY-0001، SET-YYYY-0001 |
-
-## بعد التثبيت
-
-1. افتح التطبيق وتأكد من ظهور الحسابات والعملات.
-2. من **إعدادات السندات** (`/vouchers/settings`) حدّد حساب القبض/الصرف الافتراضي.
-3. *(اختياري)* شغّل `03_test_cases.sql` للتحقق من سيناريوهات القبض والصرف.
+| تصنيفات صرف | اطعام، تغذية، انشائية |
 
 ## الملفات القديمة (محذوفة)
 
-الملفات التالية في جذر المشروع **استُبدلت** بمجلد `database/`:
+استُبدلت بمجلد `database/`:
 
 - `accounting_schema.sql`
 - `accounting_currencies.sql`

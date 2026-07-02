@@ -1,7 +1,7 @@
 -- =============================================================================
--- 05_permissions.sql — صلاحيات تفصيلية للمستخدمين
+-- 05_permissions.sql — ترقية قاعدة موجودة: صلاحيات تفصيلية
 -- =============================================================================
--- شغّل بعد 04_auth.sql على قاعدة موجودة
+-- شغّل بعد 04_auth.sql (أو بعد setup_all.sql — غير مطلوب للتثبيت الكامل).
 -- =============================================================================
 
 create table if not exists public.user_permissions (
@@ -53,3 +53,38 @@ drop policy if exists "user_permissions_delete" on public.user_permissions;
 create policy "user_permissions_delete" on public.user_permissions
   for delete to authenticated
   using (public.has_permission('settings.permissions.manage'));
+
+-- تحديث سياسات profiles / company_settings لاستخدام has_permission
+drop policy if exists "profiles_select" on public.profiles;
+create policy "profiles_select" on public.profiles
+  for select to authenticated
+  using (
+    auth.uid() = id
+    or public.is_admin()
+    or public.has_permission('settings.users.view')
+    or public.has_permission('settings.permissions.manage')
+  );
+
+drop policy if exists "profiles_update_admin" on public.profiles;
+create policy "profiles_update_admin" on public.profiles
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.users.manage')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.users.manage')
+  );
+
+drop policy if exists "company_settings_update_admin" on public.company_settings;
+create policy "company_settings_update_admin" on public.company_settings
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
