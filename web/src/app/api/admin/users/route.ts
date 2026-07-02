@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { ROLE_PERMISSION_DEFAULTS } from "@/modules/settings/permissions/permission-catalog";
 import type { AppRole } from "@/modules/settings/types";
 
 function getServiceRoleClient() {
@@ -107,6 +108,22 @@ export async function POST(request: Request) {
 
   if (profileError) {
     return NextResponse.json({ error: profileError.message }, { status: 400 });
+  }
+
+  const defaultPermissions = ROLE_PERMISSION_DEFAULTS[role];
+  if (defaultPermissions.length > 0) {
+    await serviceClient.from("user_permissions").delete().eq("user_id", data.user.id);
+    const { error: permissionsError } = await serviceClient
+      .from("user_permissions")
+      .insert(
+        defaultPermissions.map((permission_key) => ({
+          user_id: data.user.id,
+          permission_key,
+        })),
+      );
+    if (permissionsError) {
+      return NextResponse.json({ error: permissionsError.message }, { status: 400 });
+    }
   }
 
   return NextResponse.json({

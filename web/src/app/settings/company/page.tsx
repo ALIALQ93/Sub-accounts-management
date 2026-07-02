@@ -10,7 +10,8 @@ import { currencyApi } from "@/modules/currencies/services/currency-api";
 import type { Currency } from "@/modules/currencies/types";
 
 export default function CompanySettingsPage() {
-  const { isAdmin } = useAuth();
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission("settings.company.edit");
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,8 +69,8 @@ export default function CompanySettingsPage() {
 
   const onSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!isAdmin) {
-      setError("يتطلب صلاحية مدير النظام.");
+    if (!canEdit) {
+      setError("يتطلب صلاحية تعديل بيانات الشركة.");
       return;
     }
     if (!form.legal_name_ar.trim()) {
@@ -102,9 +103,9 @@ export default function CompanySettingsPage() {
 
       <SettingsNav />
 
-      {!isAdmin && (
+      {!canEdit && (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          العرض فقط — التعديل متاح لمدير النظام.
+          العرض فقط — التعديل يتطلب صلاحية «تعديل بيانات الشركة».
         </p>
       )}
 
@@ -122,7 +123,7 @@ export default function CompanySettingsPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, legal_name_ar: event.target.value }))
               }
-              disabled={!isAdmin || isSaving}
+              disabled={!canEdit || isSaving}
               required
               className="rounded-md border border-slate-300 px-3 py-2"
             />
@@ -135,7 +136,7 @@ export default function CompanySettingsPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, legal_name_en: event.target.value }))
               }
-              disabled={!isAdmin || isSaving}
+              disabled={!canEdit || isSaving}
               className="rounded-md border border-slate-300 px-3 py-2"
               dir="ltr"
             />
@@ -149,7 +150,7 @@ export default function CompanySettingsPage() {
                 onChange={(event) =>
                   setForm((current) => ({ ...current, tax_number: event.target.value }))
                 }
-                disabled={!isAdmin || isSaving}
+                disabled={!canEdit || isSaving}
                 className="rounded-md border border-slate-300 px-3 py-2"
               />
             </label>
@@ -160,7 +161,7 @@ export default function CompanySettingsPage() {
                 onChange={(event) =>
                   setForm((current) => ({ ...current, phone: event.target.value }))
                 }
-                disabled={!isAdmin || isSaving}
+                disabled={!canEdit || isSaving}
                 className="rounded-md border border-slate-300 px-3 py-2"
               />
             </label>
@@ -173,7 +174,7 @@ export default function CompanySettingsPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, address: event.target.value }))
               }
-              disabled={!isAdmin || isSaving}
+              disabled={!canEdit || isSaving}
               rows={2}
               className="rounded-md border border-slate-300 px-3 py-2"
             />
@@ -187,7 +188,7 @@ export default function CompanySettingsPage() {
               onChange={(event) =>
                 setForm((current) => ({ ...current, email: event.target.value }))
               }
-              disabled={!isAdmin || isSaving}
+              disabled={!canEdit || isSaving}
               className="rounded-md border border-slate-300 px-3 py-2"
               dir="ltr"
             />
@@ -204,7 +205,7 @@ export default function CompanySettingsPage() {
                     fiscal_year_start_month: Number(event.target.value),
                   }))
                 }
-                disabled={!isAdmin || isSaving}
+                disabled={!canEdit || isSaving}
                 className="rounded-md border border-slate-300 px-3 py-2"
               >
                 {FISCAL_MONTHS.map((month) => (
@@ -225,7 +226,7 @@ export default function CompanySettingsPage() {
                     base_currency_id: event.target.value,
                   }))
                 }
-                disabled={!isAdmin || isSaving}
+                disabled={!canEdit || isSaving}
                 className="rounded-md border border-slate-300 px-3 py-2"
               >
                 <option value="">افتراضي من جدول العملات</option>
@@ -255,7 +256,7 @@ export default function CompanySettingsPage() {
             </p>
           )}
 
-          {isAdmin && (
+          {canEdit && (
             <button
               type="submit"
               disabled={isSaving}

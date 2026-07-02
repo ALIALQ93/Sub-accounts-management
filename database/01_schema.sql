@@ -160,6 +160,15 @@ create table public.profiles (
 create index idx_profiles_role on public.profiles(role);
 create index idx_profiles_is_active on public.profiles(is_active);
 
+create table public.user_permissions (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  permission_key varchar(80) not null,
+  granted_at timestamptz not null default now(),
+  primary key (user_id, permission_key)
+);
+
+create index idx_user_permissions_key on public.user_permissions(permission_key);
+
 create table public.company_settings (
   id int primary key default 1 check (id = 1),
   legal_name_ar text not null default 'شركتي',
@@ -998,6 +1007,22 @@ as $$
       and role = 'admin'
       and is_active = true
   );
+$$;
+
+create or replace function public.has_permission(p_key text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.is_admin()
+    or exists (
+      select 1
+      from public.user_permissions
+      where user_id = auth.uid()
+        and permission_key = p_key
+    );
 $$;
 
 create or replace function public.handle_new_user()

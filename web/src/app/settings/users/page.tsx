@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/components/modal";
 import { useAuth } from "@/modules/auth/auth-context";
 import { SettingsNav } from "@/modules/settings/components/settings-nav";
+import { permissionsApi } from "@/modules/settings/services/permissions-api";
 import { settingsApi } from "@/modules/settings/services/settings-api";
 import type { AppRole, CreateUserFormValues, UserProfile } from "@/modules/settings/types";
 import { ROLE_LABELS } from "@/modules/settings/types";
@@ -17,7 +19,17 @@ const EMPTY_CREATE_FORM: CreateUserFormValues = {
 };
 
 export default function UsersSettingsPage() {
-  const { isAdmin, profile: currentProfile } = useAuth();
+  const {
+    isAdmin,
+    hasPermission,
+    profile: currentProfile,
+  } = useAuth();
+  const canManageUsers =
+    isAdmin || hasPermission("settings.users.manage");
+  const canManagePermissions =
+    isAdmin || hasPermission("settings.permissions.manage");
+  const canViewUsers =
+    isAdmin || hasPermission("settings.users.view") || canManageUsers;
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -59,7 +71,7 @@ export default function UsersSettingsPage() {
     profile: UserProfile,
     payload: Partial<Pick<UserProfile, "role" | "is_active" | "full_name_ar" | "full_name_en">>,
   ) => {
-    if (!isAdmin) return;
+    if (!canManageUsers) return;
     setIsSaving(true);
     setSuccess("");
     setLoadError("");
@@ -85,7 +97,8 @@ export default function UsersSettingsPage() {
     setFormError("");
     setSuccess("");
     try {
-      await settingsApi.createUserViaApi(createForm);
+      const created = await settingsApi.createUserViaApi(createForm);
+      await permissionsApi.applyRoleTemplate(created.id, createForm.role);
       await reload();
       setCreateForm(EMPTY_CREATE_FORM);
       setIsModalOpen(false);
@@ -97,13 +110,13 @@ export default function UsersSettingsPage() {
     }
   };
 
-  if (!isAdmin) {
+  if (!canViewUsers) {
     return (
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
         <h1 className="text-2xl font-bold text-slate-900">المستخدمون</h1>
         <SettingsNav />
         <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          هذه الصفحة متاحة لمدير النظام فقط.
+          لا تملك صلاحية عرض المستخدمين.
         </p>
       </main>
     );
@@ -115,19 +128,25 @@ export default function UsersSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">المستخدمون</h1>
           <p className="mt-1 text-sm text-slate-600">
-            إدارة حسابات الدخول والصلاحيات.
+            إدارة حسابات الدخول — الصلاحيات التفصيلية من قسم{" "}
+            <Link href="/settings/permissions" className="text-blue-900 underline">
+              الصلاحيات
+            </Link>
+            .
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setFormError("");
-            setIsModalOpen(true);
-          }}
-          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          + إضافة مستخدم
-        </button>
+        {canManageUsers && (
+          <button
+            type="button"
+            onClick={() => {
+              setFormError("");
+              setIsModalOpen(true);
+            }}
+            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            + إضافة مستخدم
+          </button>
+        )}
       </section>
 
       <SettingsNav />
@@ -170,7 +189,7 @@ export default function UsersSettingsPage() {
                     <td className="border border-slate-100 p-2">
                       <select
                         value={profile.role}
-                        disabled={isSaving || profile.id === currentProfile?.id}
+                        disabled={isSaving || !canManageUsers || profile.id === currentProfile?.id}
                         onChange={(event) =>
                           void updateProfileField(profile, {
                             role: event.target.value as AppRole,
@@ -197,23 +216,33 @@ export default function UsersSettingsPage() {
                       )}
                     </td>
                     <td className="border border-slate-100 p-2">
-                      {profile.id !== currentProfile?.id && (
-                        <button
-                          type="button"
-                          disabled={isSaving}
-                          onClick={() =>
-                            void updateProfileField(profile, {
-                              is_active: !profile.is_active,
-                            })
-                          }
-                          className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
-                        >
-                          {profile.is_active ? "تعطيل" : "تفعيل"}
-                        </button>
-                      )}
-                      {profile.id === currentProfile?.id && (
-                        <span className="text-xs text-slate-500">أنت</span>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {canManagePermissions && (
+                          <Link
+                            href={`/settings/users/${profile.id}/permissions`}
+                            className="rounded-md border border-violet-300 px-2 py-1 text-xs font-medium text-violet-800 hover:bg-violet-50"
+                          >
+                            الصلاحيات
+                          </Link>
+                        )}
+                        {canManageUsers && profile.id !== currentProfile?.id && (
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() =>
+                              void updateProfileField(profile, {
+                                is_active: !profile.is_active,
+                              })
+                            }
+                            className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                          >
+                            {profile.is_active ? "تعطيل" : "تفعيل"}
+                          </button>
+                        )}
+                        {profile.id === currentProfile?.id && (
+                          <span className="text-xs text-slate-500">أنت</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

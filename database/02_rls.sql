@@ -13,6 +13,7 @@ alter table public.journal_entry_lines enable row level security;
 alter table public.customers enable row level security;
 alter table public.vendors enable row level security;
 alter table public.profiles enable row level security;
+alter table public.user_permissions enable row level security;
 alter table public.company_settings enable row level security;
 alter table public.party_settings enable row level security;
 alter table public.voucher_settings enable row level security;
@@ -112,7 +113,12 @@ create policy "vendors_update_all" on public.vendors
 drop policy if exists "profiles_select" on public.profiles;
 create policy "profiles_select" on public.profiles
   for select to authenticated
-  using (auth.uid() = id or public.is_admin());
+  using (
+    auth.uid() = id
+    or public.is_admin()
+    or public.has_permission('settings.users.view')
+    or public.has_permission('settings.permissions.manage')
+  );
 
 drop policy if exists "profiles_update_admin" on public.profiles;
 create policy "profiles_update_admin" on public.profiles
@@ -129,6 +135,29 @@ create policy "profiles_update_self" on public.profiles
     and role = (select p.role from public.profiles p where p.id = auth.uid())
     and is_active = (select p.is_active from public.profiles p where p.id = auth.uid())
   );
+
+-- user_permissions
+drop policy if exists "user_permissions_select" on public.user_permissions;
+create policy "user_permissions_select" on public.user_permissions
+  for select to authenticated
+  using (user_id = auth.uid() or public.has_permission('settings.permissions.manage'));
+
+drop policy if exists "user_permissions_admin_all" on public.user_permissions;
+drop policy if exists "user_permissions_insert" on public.user_permissions;
+create policy "user_permissions_insert" on public.user_permissions
+  for insert to authenticated
+  with check (public.has_permission('settings.permissions.manage'));
+
+drop policy if exists "user_permissions_update" on public.user_permissions;
+create policy "user_permissions_update" on public.user_permissions
+  for update to authenticated
+  using (public.has_permission('settings.permissions.manage'))
+  with check (public.has_permission('settings.permissions.manage'));
+
+drop policy if exists "user_permissions_delete" on public.user_permissions;
+create policy "user_permissions_delete" on public.user_permissions
+  for delete to authenticated
+  using (public.has_permission('settings.permissions.manage'));
 
 -- company_settings
 drop policy if exists "company_settings_select" on public.company_settings;

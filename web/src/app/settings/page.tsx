@@ -1,38 +1,58 @@
 "use client";
 
 import Link from "next/link";
+import type { PermissionKey } from "@/modules/settings/permissions/permission-catalog";
+import { useAuth } from "@/modules/auth/auth-context";
 import { SettingsNav } from "@/modules/settings/components/settings-nav";
 
-const LINKS = [
+const LINKS: Array<{
+  href: string;
+  title: string;
+  description: string;
+  permission: PermissionKey;
+}> = [
   {
     href: "/settings/company",
     title: "بيانات الشركة",
     description: "الاسم القانوني، الرقم الضريبي، العنوان، السنة المالية.",
+    permission: "settings.company.view",
   },
   {
     href: "/settings/users",
     title: "المستخدمون",
-    description: "إدارة حسابات الدخول والصلاحيات (مدير / محاسب / عرض).",
-    adminOnly: true,
+    description: "إدارة حسابات الدخول والتفعيل.",
+    permission: "settings.users.view",
+  },
+  {
+    href: "/settings/permissions",
+    title: "الصلاحيات التفصيلية",
+    description: "منح صلاحيات دقيقة لكل مستخدم — عرض، إنشاء، تعديل، ترحيل.",
+    permission: "settings.permissions.manage",
   },
   {
     href: "/vouchers/settings",
     title: "إعدادات السندات",
     description: "الترقيم التلقائي، الحسابات الافتراضية، مراكز الكلفة.",
+    permission: "vouchers.settings",
   },
   {
     href: "/customers",
     title: "إعدادات العملاء",
     description: "حساب أب الذمم المدينة الافتراضي — من صفحة العملاء.",
+    permission: "customers.view",
   },
   {
     href: "/vendors",
     title: "إعدادات الموردين",
     description: "حساب أب الذمم الدائنة الافتراضي — من صفحة الموردين.",
+    permission: "vendors.view",
   },
 ];
 
 export default function SettingsPage() {
+  const { hasPermission } = useAuth();
+  const visibleLinks = LINKS.filter((link) => hasPermission(link.permission));
+
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-4 md:p-6">
       <div>
@@ -45,7 +65,7 @@ export default function SettingsPage() {
       <SettingsNav />
 
       <section className="grid gap-3">
-        {LINKS.map((link) => (
+        {visibleLinks.map((link) => (
           <Link
             key={link.href}
             href={link.href}

@@ -2,29 +2,34 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
+import type { PermissionKey } from "@/modules/settings/permissions/permission-catalog";
 import { settingsApi } from "@/modules/settings/services/settings-api";
 import { ROLE_LABELS } from "@/modules/settings/types";
 
 interface NavItem {
   href: string;
   label: string;
-  adminOnly?: boolean;
+  permission: PermissionKey;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "الرئيسية" },
-  { href: "/vouchers", label: "السندات" },
-  { href: "/accounts", label: "دليل الحسابات" },
-  { href: "/currencies", label: "العملات" },
-  { href: "/cost-centers", label: "مراكز الكلفة" },
-  { href: "/customers", label: "العملاء" },
-  { href: "/vendors", label: "الموردين" },
-  { href: "/open-movements", label: "الحركات المفتوحة" },
-  { href: "/journals", label: "قيود اليومية" },
-  { href: "/reports", label: "التقارير" },
-  { href: "/settings", label: "الإعدادات", adminOnly: false },
+  { href: "/", label: "الرئيسية", permission: "dashboard.view" },
+  { href: "/vouchers", label: "السندات", permission: "vouchers.view" },
+  { href: "/accounts", label: "دليل الحسابات", permission: "accounts.view" },
+  { href: "/currencies", label: "العملات", permission: "currencies.view" },
+  { href: "/cost-centers", label: "مراكز الكلفة", permission: "cost_centers.view" },
+  { href: "/customers", label: "العملاء", permission: "customers.view" },
+  { href: "/vendors", label: "الموردين", permission: "vendors.view" },
+  {
+    href: "/open-movements",
+    label: "الحركات المفتوحة",
+    permission: "open_movements.view",
+  },
+  { href: "/journals", label: "قيود اليومية", permission: "journals.view" },
+  { href: "/reports", label: "التقارير", permission: "reports.view" },
+  { href: "/settings", label: "الإعدادات", permission: "settings.company.view" },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -35,7 +40,14 @@ function isActive(pathname: string, href: string): boolean {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, isAdmin, authDisabled, signOut, isLoading } = useAuth();
+  const {
+    profile,
+    authDisabled,
+    signOut,
+    isLoading,
+    hasPermission,
+    canAccessRoute,
+  } = useAuth();
   const [companyName, setCompanyName] = useState("Sub Accounts");
 
   useEffect(() => {
@@ -48,19 +60,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           setCompanyName(settings.legal_name_ar);
         }
       })
-      .catch(() => {
-        /* optional — keep default title */
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, [pathname]);
 
+  useEffect(() => {
+    if (pathname === "/login" || isLoading || authDisabled) return;
+    if (!canAccessRoute(pathname)) {
+      router.replace("/");
+    }
+  }, [pathname, isLoading, authDisabled, canAccessRoute, router]);
+
+  const visibleNavItems = useMemo(
+    () =>
+      NAV_ITEMS.filter(
+        (item) => authDisabled || hasPermission(item.permission),
+      ),
+    [authDisabled, hasPermission],
+  );
+
   if (pathname === "/login") {
     return <>{children}</>;
   }
-
-  const visibleNavItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
 
   const onSignOut = async () => {
     await signOut();
@@ -102,8 +125,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div>
               <p className="text-xs text-slate-500">لوحة تشغيل النظام</p>
               <p className="text-sm font-semibold">
-                {visibleNavItems.find((item) => isActive(pathname, item.href))?.label ??
-                  "شاشة"}
+                {visibleNavItems.find((item) => isActive(pathname, item.href))
+                  ?.label ?? "شاشة"}
               </p>
             </div>
 

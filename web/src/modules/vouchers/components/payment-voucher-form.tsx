@@ -42,6 +42,7 @@ import {
   getCurrencyById,
   validatePaymentVoucherAccounts,
 } from "@/modules/vouchers/utils/voucher-currency-utils";
+import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
 
 interface PaymentVoucherFormProps {
   initialMode?: "create" | "edit";
@@ -90,8 +91,10 @@ export function PaymentVoucherForm({
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
 
-  const readOnly = status === "posted" || status === "cancelled";
   const isCreate = initialMode === "create" && !voucherId;
+  const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly } =
+    useVoucherFormPermissions(isCreate ? "create" : "edit", status);
+  const readOnly = formReadOnly;
   const voucherNoReadOnly =
     readOnly || (autoNumberEnabled && (Boolean(voucherId) || isCreate));
   const isInvoiceMode = settlementMode === "invoice";
@@ -655,6 +658,7 @@ export function PaymentVoucherForm({
         amountStep={amountStep}
         onChange={setDebitLines}
         readOnly={readOnly || isSaving}
+        allowLineDelete={canDeleteLine}
       />
 
       <VoucherAllocations
@@ -675,52 +679,58 @@ export function PaymentVoucherForm({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setIsSaving(true);
-              void saveVoucher("draft").finally(() => setIsSaving(false));
-            }}
-            disabled={readOnly || isSaving}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
-          >
-            حفظ مسودة
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsSaving(true);
-              void saveVoucher("approved").finally(() => setIsSaving(false));
-            }}
-            disabled={readOnly || isSaving}
-            className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-800 disabled:opacity-50"
-          >
-            اعتماد
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setIsSaving(true);
-              void (async () => {
-                if (!canPost) {
-                  setFeedback(
-                    "تعذر الترحيل. تحقق من حساب الدفع والأسطر والمورد والتخصيصات.",
-                  );
-                  return;
-                }
-                const activeId = await saveVoucher("approved");
-                if (!activeId) return;
-                const response = await voucherApi.postVoucher(activeId);
-                setStatus("posted");
-                setJournalEntryId(response.journal_entry_id);
-                setFeedback(`تم الترحيل. القيد: ${response.journal_entry_no}`);
-              })().finally(() => setIsSaving(false));
-            }}
-            disabled={!canPost || isSaving}
-            className="rounded-md bg-rose-700 px-4 py-2 text-sm text-white disabled:opacity-50"
-          >
-            ترحيل
-          </button>
+          {canSave && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSaving(true);
+                  void saveVoucher("draft").finally(() => setIsSaving(false));
+                }}
+                disabled={isSaving}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+              >
+                حفظ مسودة
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSaving(true);
+                  void saveVoucher("approved").finally(() => setIsSaving(false));
+                }}
+                disabled={isSaving}
+                className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-800 disabled:opacity-50"
+              >
+                اعتماد
+              </button>
+            </>
+          )}
+          {canPostPermission && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsSaving(true);
+                void (async () => {
+                  if (!canPost) {
+                    setFeedback(
+                      "تعذر الترحيل. تحقق من حساب الدفع والأسطر والمورد والتخصيصات.",
+                    );
+                    return;
+                  }
+                  const activeId = await saveVoucher("approved");
+                  if (!activeId) return;
+                  const response = await voucherApi.postVoucher(activeId);
+                  setStatus("posted");
+                  setJournalEntryId(response.journal_entry_id);
+                  setFeedback(`تم الترحيل. القيد: ${response.journal_entry_no}`);
+                })().finally(() => setIsSaving(false));
+              }}
+              disabled={!canPost || isSaving}
+              className="rounded-md bg-rose-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+            >
+              ترحيل
+            </button>
+          )}
           <Link href="/vouchers" className="rounded-md border border-slate-300 px-4 py-2 text-sm">
             قائمة السندات
           </Link>

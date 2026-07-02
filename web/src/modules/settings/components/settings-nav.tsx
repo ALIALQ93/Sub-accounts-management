@@ -13,7 +13,14 @@ const ITEMS = [
   {
     href: "/settings/users",
     label: "المستخدمون",
-    match: (path: string) => path.startsWith("/settings/users"),
+    match: (path: string) =>
+      path.startsWith("/settings/users") &&
+      !path.includes("/permissions"),
+  },
+  {
+    href: "/settings/permissions",
+    label: "الصلاحيات",
+    match: (path: string) => path.startsWith("/settings/permissions"),
   },
 ];
 
