@@ -216,7 +216,15 @@ export default function VoucherSettingsPage() {
                 </h3>
                 <div className="grid gap-3 md:grid-cols-3">
                   <AccountSearchField
-                    label="الحساب الافتراضي"
+                    label={
+                      row.voucher_type === "settlement"
+                        ? "الحساب الوسيط (تصفية)"
+                        : row.voucher_type === "receipt"
+                          ? "حساب القبض الافتراضي"
+                          : row.voucher_type === "payment"
+                            ? "حساب الدفع الافتراضي"
+                            : "الحساب الافتراضي"
+                    }
                     accounts={accounts}
                     value={row.default_account_id ?? ""}
                     onChange={(id) =>

@@ -1030,6 +1030,7 @@ declare
   v_je_id uuid;
   v_entry_no varchar(40);
   v_allocation_count int;
+  v_unbalanced_cc int;
 begin
   if old.status = 'posted' then
     raise exception 'Posted voucher cannot be modified. Use reversal instead.';
@@ -1059,6 +1060,37 @@ begin
 
       if v_allocation_count = 0 then
         raise exception 'Invoice settlement voucher requires allocation rows.';
+      end if;
+    end if;
+
+    if new.voucher_type = 'settlement' then
+      if exists (
+        select 1
+        from public.voucher_lines vl
+        where vl.voucher_id = new.id
+          and vl.cost_center_id is null
+          and vl.amount > 0
+          and coalesce(vl.line_description, '') not like 'تصفية —%'
+      ) then
+        raise exception 'Settlement voucher lines require a cost center.';
+      end if;
+
+      select count(*)
+      into v_unbalanced_cc
+      from (
+        select
+          vl.cost_center_id,
+          coalesce(sum(case when vl.side = 'debit' then vl.amount else 0 end), 0) as debit_total,
+          coalesce(sum(case when vl.side = 'credit' then vl.amount else 0 end), 0) as credit_total
+        from public.voucher_lines vl
+        where vl.voucher_id = new.id
+          and vl.cost_center_id is not null
+        group by vl.cost_center_id
+      ) cc
+      where cc.debit_total <> cc.credit_total;
+
+      if v_unbalanced_cc > 0 then
+        raise exception 'Cannot post settlement voucher: cost centers must balance (debit = credit per cost center).';
       end if;
     end if;
 

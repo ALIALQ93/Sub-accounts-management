@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PaymentVoucherForm } from "@/modules/vouchers/components/payment-voucher-form";
 import { ReceiptVoucherForm } from "@/modules/vouchers/components/receipt-voucher-form";
+import { SettlementVoucherForm } from "@/modules/vouchers/components/settlement-voucher-form";
 import { VoucherForm } from "@/modules/vouchers/components/voucher-form";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { VoucherType } from "@/modules/vouchers/types";
@@ -60,6 +61,10 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
 
   if (voucherType === "payment") {
     return <PaymentVoucherForm initialMode="edit" initialVoucherId={voucherId} />;
+  }
+
+  if (voucherType === "settlement") {
+    return <SettlementVoucherForm initialMode="edit" initialVoucherId={voucherId} />;
   }
 
   return (

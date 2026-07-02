@@ -160,3 +160,64 @@ export function validatePaymentVoucherAccounts(params: {
 
   return null;
 }
+
+export function validateSettlementVoucherAccounts(params: {
+  currencyId: string;
+  clearingAccountId: string;
+  userLines: Array<{ account_id?: string; side?: string }>;
+  accounts: Account[];
+  currencies: Currency[];
+}): string | null {
+  const { currencyId, clearingAccountId, userLines, accounts, currencies } =
+    params;
+
+  if (!currencyId) {
+    return "اختر عملة السند.";
+  }
+
+  const voucherCurrency = getCurrencyById(currencies, currencyId);
+  if (!voucherCurrency) {
+    return "عملة السند غير صالحة.";
+  }
+
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+
+  if (!clearingAccountId) {
+    return "الحساب الوسيط غير معرّف. عيّنه من إعدادات السندات.";
+  }
+
+  const clearingAccount = accountById.get(clearingAccountId);
+  if (!clearingAccount) {
+    return "الحساب الوسيط غير موجود أو غير نشط.";
+  }
+
+  if (!accountMatchesVoucherCurrency(clearingAccount, currencyId)) {
+    const accountCurrency = clearingAccount.currency_id
+      ? getCurrencyById(currencies, clearingAccount.currency_id)
+      : undefined;
+    return `الحساب الوسيط (${clearingAccount.code}) بعملة ${
+      accountCurrency?.code ?? "—"
+    } لا يطابق عملة السند (${voucherCurrency.code}). عدّل الإعدادات أو غيّر عملة السند.`;
+  }
+
+  for (const line of userLines) {
+    if (!line.account_id) continue;
+    const lineAccount = accountById.get(line.account_id);
+    if (!lineAccount) {
+      return "أحد حسابات الأسطر غير موجود أو غير نشط.";
+    }
+    if (!accountMatchesVoucherCurrency(lineAccount, currencyId)) {
+      const lineCurrency = lineAccount.currency_id
+        ? getCurrencyById(currencies, lineAccount.currency_id)
+        : undefined;
+      return `حساب ${lineAccount.code} بعملة ${
+        lineCurrency?.code ?? "—"
+      } لا يطابق عملة السند (${voucherCurrency.code}).`;
+    }
+    if (line.account_id === clearingAccountId) {
+      return "لا يمكن أن يكون الحساب الوسيط هو نفس حساب أحد أسطر السند.";
+    }
+  }
+
+  return null;
+}
