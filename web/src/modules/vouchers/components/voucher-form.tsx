@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
+import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
 import { VoucherLinesTable } from "@/modules/vouchers/components/voucher-lines-table";
@@ -33,6 +34,10 @@ import {
   VOUCHER_TYPE_CONFIG,
 } from "@/modules/vouchers/utils/voucher-type-config";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
+import {
+  getVoucherSaveFeedback,
+  resolveVoucherSaveStatus,
+} from "@/modules/vouchers/utils/voucher-save-utils";
 
 const DEFAULT_LINES: VoucherLine[] = [];
 const DEFAULT_ALLOCATIONS: VoucherAllocation[] = [];
@@ -82,7 +87,7 @@ export function VoucherForm({
   const [isSaving, setIsSaving] = useState(false);
 
   const isCreate = initialMode === "create" && !voucherId;
-  const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly } =
+  const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly, canEditPosted } =
     useVoucherFormPermissions(isCreate ? "create" : "edit", status);
   const readOnly = formReadOnly;
   const voucherNoReadOnly =
@@ -222,7 +227,8 @@ export function VoucherForm({
         resolvedNo = reserved;
       }
 
-      const payload = buildHeaderPayload(targetStatus, resolvedNo);
+      const effectiveStatus = resolveVoucherSaveStatus(status, targetStatus);
+      const payload = buildHeaderPayload(effectiveStatus, resolvedNo);
 
       const savedHeader = voucherId
         ? await voucherApi.updateVoucher(voucherId, payload)
@@ -236,16 +242,27 @@ export function VoucherForm({
         await syncVoucherAllocations(activeId);
       }
 
+      if (effectiveStatus === "posted") {
+        await voucherApi.syncPostedVoucherJournal(activeId);
+      }
+
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      setFeedback(
-        targetStatus === "approved" ? "تم حفظ واعتماد السند." : "تم حفظ السند بنجاح.",
-      );
+      setFeedback(getVoucherSaveFeedback(status, targetStatus));
 
       return activeId;
     } catch (error) {
       setFeedback(getErrorMessage(error));
       return null;
+    }
+  };
+
+  const onAdminSavePosted = async () => {
+    setIsSaving(true);
+    try {
+      await saveVoucher("posted");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -427,6 +444,8 @@ export function VoucherForm({
         </div>
       )}
 
+      <VoucherAdminPostedNotice visible={canEditPosted} />
+
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-900">{pageTitle}</h1>
@@ -568,7 +587,17 @@ export function VoucherForm({
           <p className="font-mono">فرق: {totals.difference.toFixed(2)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canSave && (
+          {canEditPosted && (
+            <button
+              type="button"
+              onClick={() => void onAdminSavePosted()}
+              disabled={isSaving}
+              className="rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              حفظ التعديلات (مدير)
+            </button>
+          )}
+          {canSave && !canEditPosted && (
             <>
               <button
                 type="button"
@@ -588,7 +617,7 @@ export function VoucherForm({
               </button>
             </>
           )}
-          {canPostPermission && (
+          {canPostPermission && !canEditPosted && (
             <button
               type="button"
               onClick={onPost}

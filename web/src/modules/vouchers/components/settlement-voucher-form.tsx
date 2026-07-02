@@ -15,6 +15,7 @@ import {
 } from "@/modules/vouchers/components/settlement-voucher-lines-table";
 import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
+import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
 import {
   ApiError,
@@ -37,6 +38,10 @@ import {
   validateSettlementVoucherAccounts,
 } from "@/modules/vouchers/utils/voucher-currency-utils";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
+import {
+  getVoucherSaveFeedback,
+  resolveVoucherSaveStatus,
+} from "@/modules/vouchers/utils/voucher-save-utils";
 import { validateCostCenterBalance } from "@/modules/vouchers/utils/voucher-cost-center-utils";
 
 interface SettlementVoucherFormProps {
@@ -78,7 +83,7 @@ export function SettlementVoucherForm({
   const [isSaving, setIsSaving] = useState(false);
 
   const isCreate = initialMode === "create" && !voucherId;
-  const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly } =
+  const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly, canEditPosted } =
     useVoucherFormPermissions(isCreate ? "create" : "edit", status);
   const readOnly = formReadOnly;
   const voucherNoReadOnly =
@@ -253,7 +258,8 @@ export function SettlementVoucherForm({
       const resolvedNo = await resolveVoucherNo();
       if (!resolvedNo) return null;
 
-      const payload = buildHeaderPayload(targetStatus, resolvedNo);
+      const effectiveStatus = resolveVoucherSaveStatus(status, targetStatus);
+      const payload = buildHeaderPayload(effectiveStatus, resolvedNo);
       const savedHeader = voucherId
         ? await voucherApi.updateVoucher(voucherId, payload)
         : await voucherApi.createVoucher(payload);
@@ -263,11 +269,13 @@ export function SettlementVoucherForm({
 
       await syncVoucherLines(activeId);
 
+      if (effectiveStatus === "posted") {
+        await voucherApi.syncPostedVoucherJournal(activeId);
+      }
+
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      setFeedback(
-        targetStatus === "approved" ? "تم حفظ واعتماد السند." : "تم حفظ السند بنجاح.",
-      );
+      setFeedback(getVoucherSaveFeedback(status, targetStatus));
       return activeId;
     } catch (error) {
       setFeedback(getErrorMessage(error));
@@ -427,6 +435,8 @@ export function SettlementVoucherForm({
           توازن المدين والدائن لكل مركز كلفة
         </p>
       </div>
+
+      <VoucherAdminPostedNotice visible={canEditPosted} />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -595,7 +605,20 @@ export function SettlementVoucherForm({
           </p>
         )}
         <div className="flex flex-wrap gap-2">
-          {canSave && (
+          {canEditPosted && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsSaving(true);
+                void saveVoucher("posted").finally(() => setIsSaving(false));
+              }}
+              disabled={isSaving}
+              className="rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              حفظ التعديلات (مدير)
+            </button>
+          )}
+          {canSave && !canEditPosted && (
             <>
               <button
                 type="button"
@@ -621,7 +644,7 @@ export function SettlementVoucherForm({
               </button>
             </>
           )}
-          {canPostPermission && (
+          {canPostPermission && !canEditPosted && (
             <button
               type="button"
               onClick={() => {

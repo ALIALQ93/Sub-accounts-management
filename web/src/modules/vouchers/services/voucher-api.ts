@@ -1093,6 +1093,14 @@ export const voucherApi = {
     };
   },
 
+  async syncPostedVoucherJournal(id: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc("sync_posted_voucher_journal", {
+      p_voucher_id: id,
+    });
+    throwIfSupabaseError(error);
+  },
+
   async reverseVoucher(id: string): Promise<{ reversed_voucher_id: string }> {
     const original = await this.getVoucherById(id);
 
