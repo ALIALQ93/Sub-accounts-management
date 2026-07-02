@@ -14,6 +14,7 @@ alter table public.vendors enable row level security;
 alter table public.voucher_settings enable row level security;
 alter table public.voucher_number_sequences enable row level security;
 alter table public.voucher_type_defaults enable row level security;
+alter table public.voucher_line_categories enable row level security;
 alter table public.vouchers enable row level security;
 alter table public.voucher_lines enable row level security;
 alter table public.voucher_allocations enable row level security;
@@ -126,6 +127,17 @@ create policy "voucher_type_defaults_insert_all" on public.voucher_type_defaults
   for insert to anon, authenticated with check (true);
 drop policy if exists "voucher_type_defaults_update_all" on public.voucher_type_defaults;
 create policy "voucher_type_defaults_update_all" on public.voucher_type_defaults
+  for update to anon, authenticated using (true) with check (true);
+
+-- voucher_line_categories
+drop policy if exists "voucher_line_categories_select_all" on public.voucher_line_categories;
+create policy "voucher_line_categories_select_all" on public.voucher_line_categories
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_line_categories_insert_all" on public.voucher_line_categories;
+create policy "voucher_line_categories_insert_all" on public.voucher_line_categories
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_line_categories_update_all" on public.voucher_line_categories;
+create policy "voucher_line_categories_update_all" on public.voucher_line_categories
   for update to anon, authenticated using (true) with check (true);
 
 -- vouchers

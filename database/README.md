@@ -46,6 +46,7 @@ database/setup_all.sql
 - الإعداد الحالي يستخدم `with (security_invoker = true)` حتى يُطبَّق RLS على الجداول الأساسية.
 - إذا شغّلت إعداداً قديماً، نفّذ `patch_view_security_invoker.sql` دون إعادة التثبيت الكامل.
 - لإضافة **الكود الفرعي للمستخدم**: `patch_sub_code.sql`
+- لإضافة **أنواع أسطر السند**: `patch_voucher_line_categories.sql`
 
 ## البيانات الأولية
 

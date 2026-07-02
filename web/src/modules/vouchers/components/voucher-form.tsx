@@ -6,6 +6,11 @@ import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
 import { VoucherLinesTable } from "@/modules/vouchers/components/voucher-lines-table";
 import {
+  validateLineCategory,
+  lineCategoryPayload,
+} from "@/modules/vouchers/components/voucher-line-category-fields";
+import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
+import {
   ApiError,
   voucherApi,
 } from "@/modules/vouchers/services/voucher-api";
@@ -16,6 +21,7 @@ import type {
   VoucherAllocation,
   VoucherHeader,
   VoucherLine,
+  VoucherLineCategory,
   VoucherStatus,
   VoucherType,
 } from "@/modules/vouchers/types";
@@ -68,6 +74,7 @@ export function VoucherForm({
     useState<VoucherAllocation[]>(DEFAULT_ALLOCATIONS);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [openMovements, setOpenMovements] = useState<OpenMovement[]>([]);
+  const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const [feedback, setFeedback] = useState("");
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
@@ -133,6 +140,8 @@ export function VoucherForm({
     side: line.side,
     amount: Number(line.amount || 0),
     line_description: line.line_description?.trim() || null,
+    cost_center_id: line.cost_center_id || null,
+    ...lineCategoryPayload(line),
   });
 
   const normalizeAllocation = (
@@ -192,6 +201,15 @@ export function VoucherForm({
   };
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
+    for (const line of lines) {
+      if (!line.account_id || Number(line.amount || 0) <= 0) continue;
+      const categoryError = validateLineCategory(line, lineCategories);
+      if (categoryError) {
+        setFeedback(categoryError);
+        return null;
+      }
+    }
+
     try {
       let resolvedNo = voucherNo.trim();
       if (!resolvedNo) {
@@ -297,6 +315,16 @@ export function VoucherForm({
       setSettlementMode(VOUCHER_TYPE_CONFIG[voucherType].defaultSettlementMode);
     }
   }, [voucherType, settlementMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void voucherLineCategoryApi.listCategories(voucherType, true).then((data) => {
+      if (!cancelled) setLineCategories(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [voucherType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -509,6 +537,7 @@ export function VoucherForm({
       <VoucherLinesTable
         lines={lines}
         accounts={accounts}
+        lineCategories={lineCategories}
         onChange={setLines}
         readOnly={readOnly || isSaving}
       />

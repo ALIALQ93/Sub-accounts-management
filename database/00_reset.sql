@@ -9,6 +9,7 @@ drop view if exists public.account_direct_balances cascade;
 
 drop table if exists public.voucher_allocations cascade;
 drop table if exists public.voucher_lines cascade;
+drop table if exists public.voucher_line_categories cascade;
 drop table if exists public.vouchers cascade;
 drop table if exists public.voucher_type_defaults cascade;
 drop table if exists public.voucher_number_sequences cascade;

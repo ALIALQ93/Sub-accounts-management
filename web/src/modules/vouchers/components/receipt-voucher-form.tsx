@@ -5,10 +5,15 @@ import { useEffect, useMemo, useState } from "react";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { CustomerSearchField } from "@/modules/vouchers/components/customer-search-field";
 import {
+  validateLineCategory,
+  lineCategoryPayload,
+} from "@/modules/vouchers/components/voucher-line-category-fields";
+import {
   buildReceiptVoucherLinesForSave,
   ReceiptVoucherLinesTable,
   splitReceiptVoucherLines,
 } from "@/modules/vouchers/components/receipt-voucher-lines-table";
+import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
 import {
@@ -23,6 +28,7 @@ import type {
   VoucherAllocation,
   VoucherHeader,
   VoucherLine,
+  VoucherLineCategory,
   VoucherStatus,
 } from "@/modules/vouchers/types";
 import { getSettlementModeLabel } from "@/modules/vouchers/utils/voucher-type-config";
@@ -62,6 +68,7 @@ export function ReceiptVoucherForm({
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [openMovements, setOpenMovements] = useState<
     Awaited<ReturnType<typeof voucherApi.listOpenMovements>>
@@ -157,6 +164,7 @@ export function ReceiptVoucherForm({
         amount: Number(line.amount),
         line_description: line.line_description?.trim() || null,
         cost_center_id: line.cost_center_id || null,
+        ...lineCategoryPayload(line),
       });
     }
   };
@@ -188,6 +196,13 @@ export function ReceiptVoucherForm({
     if (validCreditLines.length === 0) {
       setFeedback("أضف سطراً دائنًا واحداً على الأقل.");
       return null;
+    }
+    for (const line of validCreditLines) {
+      const categoryError = validateLineCategory(line, lineCategories);
+      if (categoryError) {
+        setFeedback(categoryError);
+        return null;
+      }
     }
     if (exchangeRate <= 0) {
       setFeedback("سعر الصرف يجب أن يكون أكبر من صفر.");
@@ -279,6 +294,7 @@ export function ReceiptVoucherForm({
           openMovementsData,
           settings,
           typeDefaults,
+          categoriesData,
         ] = await Promise.all([
           voucherApi.listAccounts(),
           voucherApi.listCustomers(),
@@ -287,6 +303,7 @@ export function ReceiptVoucherForm({
           voucherApi.listOpenMovements(),
           voucherApi.getVoucherSettings(),
           voucherApi.getVoucherTypeDefaults("receipt"),
+          voucherLineCategoryApi.listCategories("receipt", true),
         ]);
 
         if (cancelled) return;
@@ -294,6 +311,7 @@ export function ReceiptVoucherForm({
         setAccounts(accountsData);
         setCustomers(customersData);
         setCostCenters(costCentersData);
+        setLineCategories(categoriesData);
         setCurrencies(currenciesData);
         setOpenMovements(openMovementsData);
         setAutoNumberEnabled(settings.auto_number_enabled);
@@ -531,6 +549,7 @@ export function ReceiptVoucherForm({
         lines={creditLines}
         accounts={accounts}
         costCenters={costCenters}
+        lineCategories={lineCategories}
         onChange={setCreditLines}
         readOnly={readOnly || isSaving}
       />

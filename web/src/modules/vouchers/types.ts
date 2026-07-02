@@ -29,6 +29,20 @@ export interface VoucherLine {
   amount: number;
   line_description: string | null;
   cost_center_id?: string | null;
+  line_category_id?: string | null;
+  category_quantity?: number | null;
+}
+
+export interface VoucherLineCategory {
+  id: string;
+  voucher_type: VoucherType;
+  code: string;
+  name_ar: string;
+  name_en: string | null;
+  requires_quantity: boolean;
+  quantity_label: string | null;
+  sort_order: number;
+  is_active: boolean;
 }
 
 export interface CostCenter {

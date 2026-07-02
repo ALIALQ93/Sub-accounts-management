@@ -4,15 +4,18 @@ import type {
   Account,
   CostCenter,
   VoucherLine,
+  VoucherLineCategory,
   VoucherLineSide,
 } from "@/modules/vouchers/types";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
+import { VoucherLineCategoryFields } from "@/modules/vouchers/components/voucher-line-category-fields";
 
 interface VoucherLinesTableProps {
   lines: VoucherLine[];
   accounts: Account[];
   costCenters?: CostCenter[];
+  lineCategories?: VoucherLineCategory[];
   defaultCostCenterId?: string;
   readOnly: boolean;
   onChange: (lines: VoucherLine[]) => void;
@@ -27,12 +30,15 @@ const DEFAULT_LINE: VoucherLine = {
   side: "debit",
   amount: 0,
   line_description: "",
+  line_category_id: null,
+  category_quantity: null,
 };
 
 export function VoucherLinesTable({
   lines,
   accounts,
   costCenters = [],
+  lineCategories = [],
   defaultCostCenterId = "",
   readOnly,
   onChange,
@@ -87,6 +93,7 @@ export function VoucherLinesTable({
               {costCenters.length > 0 && (
                 <th className="border-b border-slate-200 p-2">مركز الكلفة</th>
               )}
+              <th className="border-b border-slate-200 p-2">نوع السطر</th>
               <th className="border-b border-slate-200 p-2">الوصف</th>
               <th className="border-b border-slate-200 p-2">إجراء</th>
             </tr>
@@ -148,6 +155,23 @@ export function VoucherLinesTable({
                     />
                   </td>
                 )}
+                <td className="min-w-[160px] border-b border-slate-100 p-2">
+                  <VoucherLineCategoryFields
+                    categories={lineCategories}
+                    categoryId={line.line_category_id ?? ""}
+                    quantity={line.category_quantity}
+                    disabled={readOnly}
+                    onCategoryChange={(categoryId) =>
+                      updateLine(line.id, {
+                        line_category_id: categoryId || null,
+                        category_quantity: categoryId ? line.category_quantity : null,
+                      })
+                    }
+                    onQuantityChange={(quantity) =>
+                      updateLine(line.id, { category_quantity: quantity })
+                    }
+                  />
+                </td>
                 <td className="border-b border-slate-100 p-2">
                   <input
                     value={line.line_description ?? ""}
@@ -174,7 +198,7 @@ export function VoucherLinesTable({
             {lines.length === 0 && (
               <tr>
                 <td
-                  colSpan={costCenters.length > 0 ? 6 : 5}
+                  colSpan={(costCenters.length > 0 ? 6 : 5) + 1}
                   className="border-b border-slate-100 p-4 text-center text-slate-500"
                 >
                   لا توجد أسطر — استخدم الإدخال السريع أو «إضافة سطر».

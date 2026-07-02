@@ -5,7 +5,9 @@ import { AccountSearchField } from "@/modules/vouchers/components/account-search
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
-import type { Account, VoucherTypeDefaults } from "@/modules/vouchers/types";
+import { VoucherLineCategoriesSettings } from "@/modules/vouchers/components/voucher-line-categories-settings";
+import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
+import type { Account, VoucherLineCategory, VoucherTypeDefaults } from "@/modules/vouchers/types";
 import type { VoucherNumberSequence, VoucherSettings } from "@/modules/vouchers/types/voucher-settings";
 import type { VoucherType } from "@/modules/vouchers/types";
 import {
@@ -27,6 +29,7 @@ export default function VoucherSettingsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
+  const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const [previews, setPreviews] = useState<Record<VoucherType, string>>({
     receipt: "",
     payment: "",
@@ -41,7 +44,7 @@ export default function VoucherSettingsPage() {
 
     const load = async () => {
       try {
-        const [settingsData, sequencesData, defaultsData, accountsData, currenciesData, centersData] =
+        const [settingsData, sequencesData, defaultsData, accountsData, currenciesData, centersData, categoriesData] =
           await Promise.all([
           voucherApi.getVoucherSettings(),
           voucherApi.listVoucherNumberSequences(),
@@ -49,6 +52,7 @@ export default function VoucherSettingsPage() {
           voucherApi.listAccounts(),
           currencyApi.listActiveCurrencies(),
           voucherApi.listCostCenters(),
+          voucherLineCategoryApi.listCategories(),
         ]);
         if (cancelled) return;
         setSettings(settingsData);
@@ -57,6 +61,7 @@ export default function VoucherSettingsPage() {
         setAccounts(accountsData);
         setCurrencies(currenciesData);
         setCostCenters(centersData);
+        setLineCategories(categoriesData);
 
         const nextPreviews = {} as Record<VoucherType, string>;
         for (const type of VOUCHER_TYPES) {
@@ -257,6 +262,11 @@ export default function VoucherSettingsPage() {
               </article>
             ))}
           </section>
+
+          <VoucherLineCategoriesSettings
+            categories={lineCategories}
+            onChange={setLineCategories}
+          />
 
           <section className="grid gap-4">
             {sequences.map((row) => (
