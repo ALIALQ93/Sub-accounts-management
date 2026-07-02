@@ -3,13 +3,21 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
+import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
-import type { VoucherListItem } from "@/modules/vouchers/types";
+import type { VoucherListItem, VoucherType } from "@/modules/vouchers/types";
+import {
+  getSettlementModeLabel,
+  getVoucherTypeLabel,
+  VOUCHER_TYPE_CONFIG,
+  VOUCHER_TYPES,
+} from "@/modules/vouchers/utils/voucher-type-config";
 
 export default function VouchersListPage() {
   const [items, setItems] = useState<VoucherListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [typeFilter, setTypeFilter] = useState<VoucherType | "all">("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -33,50 +41,102 @@ export default function VouchersListPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const type = params.get("type");
+    if (type === "receipt" || type === "payment" || type === "settlement") {
+      setTypeFilter(type);
+    }
+  }, []);
+
+  const filteredItems =
+    typeFilter === "all"
+      ? items
+      : items.filter((item) => item.voucher_type === typeFilter);
+
   return (
-    <main className="mx-auto w-full max-w-6xl p-6">
-      <section className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">السندات</h1>
-        <Link
-          href="/vouchers/new"
-          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          سند جديد
-        </Link>
+    <main className="flex w-full flex-col gap-4">
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">السندات</h1>
+          <p className="text-xs text-slate-600">
+            كل نوع سند له نافذة إنشاء مستقلة وترقيم تلقائي.
+          </p>
+        </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <VouchersNav />
+
+      <section className="grid gap-3 md:grid-cols-3">
+        {VOUCHER_TYPES.map((type) => {
+          const config = VOUCHER_TYPE_CONFIG[type];
+          return (
+            <Link
+              key={type}
+              href={config.newRoute}
+              className={`rounded-xl border p-4 transition hover:shadow-md ${config.colorClass}`}
+            >
+              <p className="font-semibold">{config.labelAr}</p>
+              <p className="mt-1 text-xs opacity-90">{config.descriptionAr}</p>
+              <p className="mt-3 text-sm font-medium">+ إنشاء جديد</p>
+            </Link>
+          );
+        })}
+      </section>
+
+      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
+        <div className="mb-3 flex flex-wrap gap-2">
+          <FilterButton
+            active={typeFilter === "all"}
+            onClick={() => setTypeFilter("all")}
+          >
+            الكل ({items.length})
+          </FilterButton>
+          {VOUCHER_TYPES.map((type) => (
+            <FilterButton
+              key={type}
+              active={typeFilter === type}
+              onClick={() => setTypeFilter(type)}
+            >
+              {getVoucherTypeLabel(type)} (
+              {items.filter((item) => item.voucher_type === type).length})
+            </FilterButton>
+          ))}
+        </div>
+
         {isLoading && <p className="text-sm text-slate-600">جاري تحميل السندات...</p>}
         {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
 
         {!isLoading && !error && (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full min-w-[900px] border-collapse text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">رقم السند</th>
-                  <th className="border-b border-slate-200 p-2">النوع</th>
-                  <th className="border-b border-slate-200 p-2">وضع التسوية</th>
-                  <th className="border-b border-slate-200 p-2">التاريخ</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  <th className="border-b border-slate-200 p-2">إجراء</th>
+                  <th className="border border-slate-200 p-2">رقم السند</th>
+                  <th className="border border-slate-200 p-2">النوع</th>
+                  <th className="border border-slate-200 p-2">وضع التسوية</th>
+                  <th className="border border-slate-200 p-2">التاريخ</th>
+                  <th className="border border-slate-200 p-2">الحالة</th>
+                  <th className="border border-slate-200 p-2">إجراء</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {filteredItems.map((item) => (
                   <tr key={item.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                    <td className="border border-slate-100 p-2 font-mono">
                       {item.voucher_no}
                     </td>
-                    <td className="border-b border-slate-100 p-2">{item.voucher_type}</td>
-                    <td className="border-b border-slate-100 p-2">
-                      {item.settlement_mode}
+                    <td className="border border-slate-100 p-2">
+                      {getVoucherTypeLabel(item.voucher_type)}
                     </td>
-                    <td className="border-b border-slate-100 p-2">{item.voucher_date}</td>
-                    <td className="border-b border-slate-100 p-2">
+                    <td className="border border-slate-100 p-2">
+                      {getSettlementModeLabel(item.settlement_mode)}
+                    </td>
+                    <td className="border border-slate-100 p-2">{item.voucher_date}</td>
+                    <td className="border border-slate-100 p-2">
                       <StatusChip status={item.status} />
                     </td>
-                    <td className="border-b border-slate-100 p-2">
+                    <td className="border border-slate-100 p-2">
                       <Link
                         href={`/vouchers/${item.id}`}
                         className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700"
@@ -87,13 +147,13 @@ export default function VouchersListPage() {
                   </tr>
                 ))}
 
-                {items.length === 0 && (
+                {filteredItems.length === 0 && (
                   <tr>
                     <td
                       colSpan={6}
-                      className="border-b border-slate-100 p-4 text-center text-slate-500"
+                      className="border border-slate-100 p-4 text-center text-slate-500"
                     >
-                      لا توجد سندات حتى الآن.
+                      لا توجد سندات في هذا التصنيف.
                     </td>
                   </tr>
                 )}
@@ -103,5 +163,29 @@ export default function VouchersListPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function FilterButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1.5 text-sm ${
+        active
+          ? "bg-blue-900 text-white"
+          : "border border-slate-300 text-slate-700"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

@@ -2,6 +2,22 @@
 
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type {
+  AccountStatementLine,
+  AccountStatementResult,
+} from "@/modules/accounts/types";
+import {
+  computeNextSequencePreview,
+  formatVoucherNo,
+} from "@/modules/vouchers/utils/format-voucher-no";
+import type {
+  VoucherNumberSequence,
+  VoucherSettings,
+} from "@/modules/vouchers/types/voucher-settings";
+import {
+  DEFAULT_VOUCHER_SETTINGS,
+  DEFAULT_VOUCHER_SEQUENCES,
+} from "@/modules/vouchers/types/voucher-settings";
+import type {
   Account,
   ApiErrorPayload,
   Customer,
@@ -19,6 +35,7 @@ import type {
   VoucherHeader,
   VoucherListItem,
   VoucherLine,
+  VoucherType,
 } from "@/modules/vouchers/types";
 import type { PostgrestError } from "@supabase/supabase-js";
 
@@ -282,6 +299,146 @@ export const voucherApi = {
     return data as Account;
   },
 
+  async listAccountStatement(
+    accountId: string,
+    fromDate?: string,
+    toDate?: string,
+  ): Promise<AccountStatementResult> {
+    const supabase = getSupabaseClient();
+
+    let openingBalance = 0;
+    if (fromDate) {
+      const { data: openingRows, error: openingError } = await supabase
+        .from("journal_entry_lines")
+        .select("debit, credit, journal_entries!inner(entry_date, status)")
+        .eq("account_id", accountId)
+        .eq("journal_entries.status", "posted")
+        .lt("journal_entries.entry_date", fromDate);
+      throwIfSupabaseError(openingError);
+
+      for (const row of openingRows ?? []) {
+        openingBalance +=
+          Number((row as { debit?: number }).debit ?? 0) -
+          Number((row as { credit?: number }).credit ?? 0);
+      }
+    }
+
+    let query = supabase
+      .from("journal_entry_lines")
+      .select(
+        "id, debit, credit, line_description, journal_entries!inner(id, entry_no, entry_date, description, status, source_type, source_id)",
+      )
+      .eq("account_id", accountId)
+      .eq("journal_entries.status", "posted")
+      .limit(1000);
+
+    if (fromDate) {
+      query = query.gte("journal_entries.entry_date", fromDate);
+    }
+    if (toDate) {
+      query = query.lte("journal_entries.entry_date", toDate);
+    }
+
+    const { data, error } = await query;
+    throwIfSupabaseError(error);
+
+    type RawRow = {
+      id: string;
+      debit?: number;
+      credit?: number;
+      line_description: string | null;
+      journal_entries?: {
+        id?: string;
+        entry_no?: string;
+        entry_date?: string;
+        description?: string | null;
+        status?: string;
+        source_type?: string | null;
+        source_id?: string | null;
+      };
+    };
+
+    const rawLines = (data ?? []) as RawRow[];
+    rawLines.sort((a, b) => {
+      const dateA = a.journal_entries?.entry_date ?? "";
+      const dateB = b.journal_entries?.entry_date ?? "";
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      const noA = a.journal_entries?.entry_no ?? "";
+      const noB = b.journal_entries?.entry_no ?? "";
+      return noA.localeCompare(noB);
+    });
+
+    const voucherIds = [
+      ...new Set(
+        rawLines
+          .filter((row) => row.journal_entries?.source_type === "voucher")
+          .map((row) => row.journal_entries?.source_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    const voucherNoById = new Map<string, string>();
+    if (voucherIds.length > 0) {
+      const { data: vouchers, error: voucherError } = await supabase
+        .from("vouchers")
+        .select("id, voucher_no")
+        .in("id", voucherIds);
+      throwIfSupabaseError(voucherError);
+
+      for (const voucher of vouchers ?? []) {
+        voucherNoById.set(
+          (voucher as { id: string }).id,
+          (voucher as { voucher_no: string }).voucher_no,
+        );
+      }
+    }
+
+    let runningBalance = openingBalance;
+    let totalDebit = 0;
+    let totalCredit = 0;
+    const lines: AccountStatementLine[] = [];
+
+    for (const row of rawLines) {
+      const journal = row.journal_entries;
+      if (!journal?.id) continue;
+
+      const debit = Number(row.debit ?? 0);
+      const credit = Number(row.credit ?? 0);
+      totalDebit += debit;
+      totalCredit += credit;
+      runningBalance += debit - credit;
+
+      const sourceType = journal.source_type ?? null;
+      const sourceId = journal.source_id ?? null;
+
+      lines.push({
+        id: row.id,
+        journal_entry_id: journal.id,
+        entry_no: journal.entry_no ?? "—",
+        entry_date: journal.entry_date ?? "",
+        journal_description: journal.description ?? null,
+        line_description: row.line_description,
+        debit,
+        credit,
+        running_balance: runningBalance,
+        source_type: sourceType,
+        source_id: sourceId,
+        voucher_no:
+          sourceType === "voucher" && sourceId
+            ? (voucherNoById.get(sourceId) ?? null)
+            : null,
+      });
+    }
+
+    return {
+      opening_balance: openingBalance,
+      lines,
+      total_debit: totalDebit,
+      total_credit: totalCredit,
+      closing_balance: openingBalance + totalDebit - totalCredit,
+    };
+  },
+
   async listOpenMovements(): Promise<OpenMovement[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
@@ -531,6 +688,147 @@ export const voucherApi = {
       lines: (lines ?? []) as VoucherLine[],
       allocations: (allocations ?? []) as VoucherAllocation[],
     };
+  },
+
+  async getVoucherSettings(): Promise<VoucherSettings> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("voucher_settings")
+      .select("auto_number_enabled, allow_manual_override")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) {
+      return DEFAULT_VOUCHER_SETTINGS;
+    }
+
+    return (data as VoucherSettings | null) ?? DEFAULT_VOUCHER_SETTINGS;
+  },
+
+  async updateVoucherSettings(payload: VoucherSettings): Promise<VoucherSettings> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("voucher_settings")
+      .upsert({
+        id: 1,
+        auto_number_enabled: payload.auto_number_enabled,
+        allow_manual_override: payload.allow_manual_override,
+        updated_at: new Date().toISOString(),
+      })
+      .select("auto_number_enabled, allow_manual_override")
+      .single();
+    throwIfSupabaseError(error);
+    return data as VoucherSettings;
+  },
+
+  async listVoucherNumberSequences(): Promise<VoucherNumberSequence[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("voucher_number_sequences")
+      .select("*")
+      .order("voucher_type", { ascending: true });
+
+    if (error || !data?.length) {
+      return DEFAULT_VOUCHER_SEQUENCES;
+    }
+
+    return data as VoucherNumberSequence[];
+  },
+
+  async updateVoucherNumberSequence(
+    voucherType: VoucherType,
+    payload: Pick<VoucherNumberSequence, "prefix" | "padding" | "include_year">,
+  ): Promise<VoucherNumberSequence> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("voucher_number_sequences")
+      .update({
+        prefix: payload.prefix.trim().toUpperCase(),
+        padding: payload.padding,
+        include_year: payload.include_year,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("voucher_type", voucherType)
+      .select("*")
+      .single();
+    throwIfSupabaseError(error);
+    return data as VoucherNumberSequence;
+  },
+
+  async peekVoucherNo(voucherType: VoucherType): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("peek_voucher_no", {
+      p_voucher_type: voucherType,
+    });
+
+    if (!error && typeof data === "string") {
+      return data;
+    }
+
+    const sequences = await this.listVoucherNumberSequences();
+    const row =
+      sequences.find((item) => item.voucher_type === voucherType) ??
+      DEFAULT_VOUCHER_SEQUENCES.find((item) => item.voucher_type === voucherType)!;
+    const year = new Date().getFullYear();
+    const next = computeNextSequencePreview(
+      row.last_number,
+      row.sequence_year,
+      row.include_year,
+      year,
+    );
+    return formatVoucherNo(row.prefix, row.include_year, year, next, row.padding);
+  },
+
+  async reserveVoucherNo(voucherType: VoucherType): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("reserve_voucher_no", {
+      p_voucher_type: voucherType,
+    });
+
+    if (!error && typeof data === "string") {
+      return data;
+    }
+
+    const sequences = await this.listVoucherNumberSequences();
+    const row =
+      sequences.find((item) => item.voucher_type === voucherType) ??
+      DEFAULT_VOUCHER_SEQUENCES.find((item) => item.voucher_type === voucherType)!;
+    const year = new Date().getFullYear();
+    let lastNumber = row.last_number;
+    let sequenceYear = row.sequence_year;
+
+    if (row.include_year && sequenceYear !== year) {
+      lastNumber = 0;
+      sequenceYear = year;
+    }
+
+    const next = lastNumber + 1;
+    const voucherNo = formatVoucherNo(
+      row.prefix,
+      row.include_year,
+      year,
+      next,
+      row.padding,
+    );
+
+    const { error: updateError } = await supabase
+      .from("voucher_number_sequences")
+      .update({
+        last_number: next,
+        sequence_year: year,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("voucher_type", voucherType);
+
+    if (updateError) {
+      throw new ApiError({
+        code: "VOUCHER_NUMBER_RESERVE_FAILED",
+        message:
+          "تعذّر حجز رقم السند. شغّل ملف accounting_voucher_settings.sql في Supabase.",
+      });
+    }
+
+    return voucherNo;
   },
 
   async createVoucher(payload: Partial<VoucherHeader>): Promise<VoucherHeader> {

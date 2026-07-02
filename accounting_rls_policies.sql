@@ -107,6 +107,30 @@ create policy "voucher_allocations_update_all" on public.voucher_allocations
 -- currencies
 alter table public.currencies enable row level security;
 
+-- voucher settings / numbering
+alter table public.voucher_settings enable row level security;
+alter table public.voucher_number_sequences enable row level security;
+
+drop policy if exists "voucher_settings_select_all" on public.voucher_settings;
+create policy "voucher_settings_select_all" on public.voucher_settings
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_settings_insert_all" on public.voucher_settings;
+create policy "voucher_settings_insert_all" on public.voucher_settings
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_settings_update_all" on public.voucher_settings;
+create policy "voucher_settings_update_all" on public.voucher_settings
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "voucher_number_sequences_select_all" on public.voucher_number_sequences;
+create policy "voucher_number_sequences_select_all" on public.voucher_number_sequences
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_number_sequences_insert_all" on public.voucher_number_sequences;
+create policy "voucher_number_sequences_insert_all" on public.voucher_number_sequences
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_number_sequences_update_all" on public.voucher_number_sequences;
+create policy "voucher_number_sequences_update_all" on public.voucher_number_sequences
+  for update to anon, authenticated using (true) with check (true);
+
 drop policy if exists "currencies_select_all" on public.currencies;
 create policy "currencies_select_all" on public.currencies
   for select to anon, authenticated using (true);

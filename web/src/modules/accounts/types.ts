@@ -28,3 +28,26 @@ export interface AccountStats {
   postable: number;
   parent: number;
 }
+
+export interface AccountStatementLine {
+  id: string;
+  journal_entry_id: string;
+  entry_no: string;
+  entry_date: string;
+  journal_description: string | null;
+  line_description: string | null;
+  debit: number;
+  credit: number;
+  running_balance: number;
+  source_type: string | null;
+  source_id: string | null;
+  voucher_no: string | null;
+}
+
+export interface AccountStatementResult {
+  opening_balance: number;
+  lines: AccountStatementLine[];
+  total_debit: number;
+  total_credit: number;
+  closing_balance: number;
+}

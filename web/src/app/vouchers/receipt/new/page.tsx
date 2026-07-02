@@ -1,17 +1,11 @@
 import { VoucherForm } from "@/modules/vouchers/components/voucher-form";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 
-interface VoucherEditPageProps {
-  params: Promise<{ id: string }>;
-}
-
-export default async function VoucherEditPage({ params }: VoucherEditPageProps) {
-  const { id } = await params;
-
+export default function NewReceiptVoucherPage() {
   return (
     <main className="flex w-full flex-col gap-4">
       <VouchersNav />
-      <VoucherForm initialMode="edit" initialVoucherId={id} />
+      <VoucherForm initialMode="create" lockedVoucherType="receipt" />
     </main>
   );
 }

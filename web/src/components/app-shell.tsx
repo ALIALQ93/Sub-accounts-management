@@ -11,7 +11,6 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "الرئيسية" },
   { href: "/vouchers", label: "السندات" },
-  { href: "/vouchers/new", label: "سند جديد" },
   { href: "/accounts", label: "دليل الحسابات" },
   { href: "/currencies", label: "العملات" },
   { href: "/customers", label: "العملاء" },

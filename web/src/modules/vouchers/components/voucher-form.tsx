@@ -19,6 +19,12 @@ import type {
   VoucherStatus,
   VoucherType,
 } from "@/modules/vouchers/types";
+import {
+  getSettlementModeLabel,
+  getVoucherTypeLabel,
+  isSettlementModeAllowed,
+  VOUCHER_TYPE_CONFIG,
+} from "@/modules/vouchers/utils/voucher-type-config";
 
 const DEFAULT_LINES: VoucherLine[] = [];
 const DEFAULT_ALLOCATIONS: VoucherAllocation[] = [];
@@ -26,19 +32,29 @@ const DEFAULT_ALLOCATIONS: VoucherAllocation[] = [];
 interface VoucherFormProps {
   initialMode?: "create" | "edit";
   initialVoucherId?: string;
+  lockedVoucherType?: VoucherType;
 }
 
 export function VoucherForm({
   initialMode = "create",
   initialVoucherId,
+  lockedVoucherType,
 }: VoucherFormProps) {
+  const typeConfig = lockedVoucherType
+    ? VOUCHER_TYPE_CONFIG[lockedVoucherType]
+    : null;
+
   const [voucherId, setVoucherId] = useState(initialVoucherId ?? "");
-  const [voucherNo, setVoucherNo] = useState(
-    initialVoucherId ? `RCP-${initialVoucherId.slice(0, 8)}` : "",
+  const [voucherNo, setVoucherNo] = useState("");
+  const [nextNumberPreview, setNextNumberPreview] = useState("");
+  const [autoNumberEnabled, setAutoNumberEnabled] = useState(true);
+  const [allowManualOverride, setAllowManualOverride] = useState(false);
+  const [voucherType, setVoucherType] = useState<VoucherType>(
+    lockedVoucherType ?? "receipt",
   );
-  const [voucherType, setVoucherType] = useState<VoucherType>("receipt");
-  const [settlementMode, setSettlementMode] =
-    useState<SettlementMode>("account");
+  const [settlementMode, setSettlementMode] = useState<SettlementMode>(
+    typeConfig?.defaultSettlementMode ?? "account",
+  );
   const [voucherDate, setVoucherDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -57,6 +73,10 @@ export function VoucherForm({
   const [isSaving, setIsSaving] = useState(false);
 
   const readOnly = status === "posted" || status === "cancelled";
+  const isCreate = initialMode === "create" && !voucherId;
+  const voucherNoReadOnly =
+    readOnly ||
+    (autoNumberEnabled && !allowManualOverride && (Boolean(voucherId) || isCreate));
 
   const totals = useMemo(() => {
     const debit = lines
@@ -78,6 +98,16 @@ export function VoucherForm({
     totals.difference === 0 &&
     (settlementMode !== "invoice" || allocations.length > 0);
 
+  const pageTitle = useMemo(() => {
+    if (initialMode === "edit") {
+      return `تعديل ${getVoucherTypeLabel(voucherType)}`;
+    }
+    if (lockedVoucherType) {
+      return VOUCHER_TYPE_CONFIG[lockedVoucherType].labelAr + " جديد";
+    }
+    return "سند جديد";
+  }, [initialMode, lockedVoucherType, voucherType]);
+
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof ApiError) return error.message;
     if (error instanceof Error) return error.message;
@@ -86,8 +116,9 @@ export function VoucherForm({
 
   const buildHeaderPayload = (
     targetStatus: VoucherStatus,
+    resolvedVoucherNo: string,
   ): Partial<VoucherHeader> => ({
-    voucher_no: voucherNo.trim(),
+    voucher_no: resolvedVoucherNo.trim(),
     voucher_type: voucherType,
     settlement_mode: settlementMode,
     voucher_date: voucherDate,
@@ -144,14 +175,32 @@ export function VoucherForm({
     }
   };
 
-  const saveVoucher = async (targetStatus: VoucherStatus) => {
-    if (!voucherNo.trim()) {
-      setFeedback("رقم السند مطلوب.");
-      return null;
+  const resolveVoucherNo = async (): Promise<string | null> => {
+    if (voucherNo.trim()) {
+      return voucherNo.trim();
     }
 
+    if (autoNumberEnabled) {
+      const reserved = await voucherApi.reserveVoucherNo(voucherType);
+      setVoucherNo(reserved);
+      setNextNumberPreview(reserved);
+      return reserved;
+    }
+
+    setFeedback("رقم السند مطلوب.");
+    return null;
+  };
+
+  const saveVoucher = async (targetStatus: VoucherStatus) => {
     try {
-      const payload = buildHeaderPayload(targetStatus);
+      let resolvedNo = voucherNo.trim();
+      if (!resolvedNo) {
+        const reserved = await resolveVoucherNo();
+        if (!reserved) return null;
+        resolvedNo = reserved;
+      }
+
+      const payload = buildHeaderPayload(targetStatus, resolvedNo);
 
       const savedHeader = voucherId
         ? await voucherApi.updateVoucher(voucherId, payload)
@@ -165,6 +214,7 @@ export function VoucherForm({
         await syncVoucherAllocations(activeId);
       }
 
+      setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
       setFeedback(
         targetStatus === "approved" ? "تم حفظ واعتماد السند." : "تم حفظ السند بنجاح.",
@@ -236,20 +286,41 @@ export function VoucherForm({
   };
 
   useEffect(() => {
+    if (lockedVoucherType) {
+      setVoucherType(lockedVoucherType);
+      setSettlementMode(VOUCHER_TYPE_CONFIG[lockedVoucherType].defaultSettlementMode);
+    }
+  }, [lockedVoucherType]);
+
+  useEffect(() => {
+    if (!isSettlementModeAllowed(voucherType, settlementMode)) {
+      setSettlementMode(VOUCHER_TYPE_CONFIG[voucherType].defaultSettlementMode);
+    }
+  }, [voucherType, settlementMode]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadVoucher = async () => {
       try {
-        const [accountsData, openMovementsData] = await Promise.all([
+        const [accountsData, openMovementsData, settings] = await Promise.all([
           voucherApi.listAccounts(),
           voucherApi.listOpenMovements(),
+          voucherApi.getVoucherSettings(),
         ]);
         if (!cancelled) {
           setAccounts(accountsData);
           setOpenMovements(openMovementsData);
+          setAutoNumberEnabled(settings.auto_number_enabled);
+          setAllowManualOverride(settings.allow_manual_override);
         }
 
         if (initialMode !== "edit" || !initialVoucherId) {
+          if (!cancelled && settings.auto_number_enabled) {
+            const type = lockedVoucherType ?? "receipt";
+            const preview = await voucherApi.peekVoucherNo(type);
+            if (!cancelled) setNextNumberPreview(preview);
+          }
           if (!cancelled) setIsLoading(false);
           return;
         }
@@ -259,6 +330,7 @@ export function VoucherForm({
 
         setVoucherId(details.header.id);
         setVoucherNo(details.header.voucher_no);
+        setNextNumberPreview(details.header.voucher_no);
         setVoucherType(details.header.voucher_type);
         setSettlementMode(details.header.settlement_mode);
         setVoucherDate(details.header.voucher_date);
@@ -280,7 +352,26 @@ export function VoucherForm({
     return () => {
       cancelled = true;
     };
-  }, [initialMode, initialVoucherId]);
+  }, [initialMode, initialVoucherId, lockedVoucherType]);
+
+  useEffect(() => {
+    if (initialMode === "edit" || voucherId || !autoNumberEnabled) return;
+
+    let cancelled = false;
+    const loadPreview = async () => {
+      try {
+        const preview = await voucherApi.peekVoucherNo(voucherType);
+        if (!cancelled) setNextNumberPreview(preview);
+      } catch {
+        if (!cancelled) setNextNumberPreview("");
+      }
+    };
+
+    void loadPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [voucherType, initialMode, voucherId, autoNumberEnabled]);
 
   if (isLoading) {
     return (
@@ -290,13 +381,23 @@ export function VoucherForm({
     );
   }
 
+  const allowedSettlementModes =
+    VOUCHER_TYPE_CONFIG[voucherType].allowedSettlementModes;
+
   return (
     <div className="space-y-4">
+      {typeConfig && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${typeConfig.colorClass}`}
+        >
+          <p className="font-semibold">{typeConfig.labelAr}</p>
+          <p className="mt-0.5 opacity-90">{typeConfig.descriptionAr}</p>
+        </div>
+      )}
+
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">
-            {initialMode === "create" ? "سند جديد" : "تعديل سند"}
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-900">{pageTitle}</h1>
           <StatusChip status={status} />
         </div>
 
@@ -304,27 +405,36 @@ export function VoucherForm({
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">رقم السند</span>
             <input
-              value={voucherNo}
+              value={voucherNo || nextNumberPreview}
               onChange={(event) => setVoucherNo(event.target.value)}
-              disabled={readOnly || isSaving}
-              placeholder="RCP-2026-0001"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-blue-900"
+              disabled={voucherNoReadOnly || isSaving}
+              placeholder={nextNumberPreview || "RCP-2026-0001"}
+              className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono outline-none focus:border-blue-900 disabled:bg-slate-50"
             />
+            {isCreate && autoNumberEnabled && !voucherNo && (
+              <span className="text-xs text-slate-500">
+                يُحجز الرقم تلقائياً عند الحفظ
+              </span>
+            )}
           </label>
 
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700">نوع السند</span>
-            <select
-              value={voucherType}
-              onChange={(event) => setVoucherType(event.target.value as VoucherType)}
-              disabled={readOnly || isSaving}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-blue-900"
-            >
-              <option value="receipt">قبض</option>
-              <option value="payment">دفع</option>
-              <option value="settlement">تصفية</option>
-            </select>
-          </label>
+          {!lockedVoucherType && (
+            <label className="space-y-1 text-sm">
+              <span className="font-medium text-slate-700">نوع السند</span>
+              <select
+                value={voucherType}
+                onChange={(event) =>
+                  setVoucherType(event.target.value as VoucherType)
+                }
+                disabled={readOnly || isSaving || Boolean(voucherId)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-blue-900"
+              >
+                <option value="receipt">قبض</option>
+                <option value="payment">دفع</option>
+                <option value="settlement">تصفية</option>
+              </select>
+            </label>
+          )}
 
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">وضع التسوية</span>
@@ -336,8 +446,11 @@ export function VoucherForm({
               disabled={readOnly || isSaving}
               className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-blue-900"
             >
-              <option value="account">على الحساب</option>
-              <option value="invoice">اغلاق حركات</option>
+              {allowedSettlementModes.map((mode) => (
+                <option key={mode} value={mode}>
+                  {getSettlementModeLabel(mode)}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -447,6 +560,12 @@ export function VoucherForm({
           >
             عكس
           </button>
+          <Link
+            href="/vouchers"
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+          >
+            قائمة السندات
+          </Link>
           {journalEntryId && (
             <Link
               href={`/journals/${journalEntryId}`}
