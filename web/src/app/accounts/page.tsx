@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AccountEditModal } from "@/modules/accounts/components/account-edit-modal";
+import type { AccountEditValues } from "@/modules/accounts/components/account-edit-modal";
 import { AccountFormModal } from "@/modules/accounts/components/account-form-modal";
 import { AccountTreeTable } from "@/modules/accounts/components/account-tree-table";
 import type { AccountFormValues, AccountTreeNode, StatementFilter } from "@/modules/accounts/types";
@@ -11,6 +13,7 @@ import {
   flattenAccountTree,
   getParentOptions,
   getVisibleTree,
+  isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { SupabaseConnectionStatus } from "@/modules/vouchers/services/voucher-api";
@@ -29,10 +32,11 @@ export default function AccountsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [presetParentId, setPresetParentId] = useState<string | undefined>();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editNameAr, setEditNameAr] = useState("");
-  const [editIsPostable, setEditIsPostable] = useState(true);
-  const [editingHasChildren, setEditingHasChildren] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<AccountTreeNode | null>(
+    null,
+  );
+  const [editError, setEditError] = useState("");
   const [connection, setConnection] = useState<SupabaseConnectionStatus | null>(
     null,
   );
@@ -127,40 +131,40 @@ export default function AccountsPage() {
     }
   };
 
-  const startEdit = (account: AccountTreeNode) => {
-    setEditingId(account.id);
-    setEditNameAr(account.name_ar);
-    setEditIsPostable(account.is_postable);
-    setEditingHasChildren(account.childCount > 0);
-    setActionError("");
+  const openEditModal = (account: AccountTreeNode) => {
+    setEditingAccount(account);
+    setEditError("");
+    setIsEditModalOpen(true);
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditNameAr("");
-    setEditIsPostable(true);
-    setEditingHasChildren(false);
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingAccount(null);
+    setEditError("");
   };
 
-  const saveEdit = async () => {
-    if (!editingId) return;
-    if (!editNameAr.trim()) {
-      setActionError("اسم الحساب مطلوب.");
+  const onEdit = async (values: AccountEditValues) => {
+    if (!editingAccount) return;
+    if (!values.name_ar.trim()) {
+      setEditError("اسم الحساب مطلوب.");
       return;
     }
 
     setIsSaving(true);
-    setActionError("");
+    setEditError("");
     try {
-      const payload: Partial<Account> = { name_ar: editNameAr.trim() };
-      if (!editingHasChildren) {
-        payload.is_postable = editIsPostable;
+      const payload: Partial<Account> = { name_ar: values.name_ar.trim() };
+      if (
+        editingAccount.childCount === 0 &&
+        !isRootAccount(editingAccount)
+      ) {
+        payload.is_postable = values.is_postable;
       }
-      await voucherApi.updateAccount(editingId, payload);
-      cancelEdit();
+      await voucherApi.updateAccount(editingAccount.id, payload);
+      closeEditModal();
       await loadAccounts();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "فشل تعديل الحساب.");
+      setEditError(err instanceof Error ? err.message : "فشل تعديل الحساب.");
     } finally {
       setIsSaving(false);
     }
@@ -325,6 +329,16 @@ export default function AccountsPage() {
         onSubmit={onCreate}
       />
 
+      <AccountEditModal
+        open={isEditModalOpen}
+        account={editingAccount}
+        accountsById={accountsById}
+        isSaving={isSaving}
+        error={editError}
+        onClose={closeEditModal}
+        onSubmit={onEdit}
+      />
+
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
@@ -387,18 +401,11 @@ export default function AccountsPage() {
             rows={rows}
             accountsById={accountsById}
             expandedIds={expandedIds}
-            editingId={editingId}
-            editNameAr={editNameAr}
-            editIsPostable={editIsPostable}
             isSaving={isSaving}
             onToggleExpand={toggleExpand}
-            onStartEdit={startEdit}
-            onCancelEdit={cancelEdit}
-            onSaveEdit={saveEdit}
+            onEdit={openEditModal}
             onToggleActive={toggleActive}
             onAddChild={openAddChild}
-            onEditNameChange={setEditNameAr}
-            onEditPostableChange={setEditIsPostable}
           />
         )}
       </section>
