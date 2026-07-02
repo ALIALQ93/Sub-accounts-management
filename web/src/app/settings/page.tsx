@@ -30,6 +30,12 @@ const LINKS: Array<{
     permission: "settings.permissions.manage",
   },
   {
+    href: "/settings/about",
+    title: "عن البرنامج",
+    description: "الإصدار، المطوّر، ومعلومات Rosemary Software Solutions.",
+    permission: "settings.company.view",
+  },
+  {
     href: "/vouchers/settings",
     title: "إعدادات السندات",
     description: "الترقيم التلقائي، الحسابات الافتراضية، مراكز الكلفة.",

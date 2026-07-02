@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { APP_BRANDING } from "@/config/app-branding";
 import { AuthProvider } from "@/modules/auth/auth-context";
 import "./globals.css";
 
@@ -16,8 +17,11 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sub Accounts Management",
-  description: "Accounting voucher workflows",
+  title: APP_BRANDING.productNameAr,
+  description: APP_BRANDING.developerTaglineAr,
+  icons: {
+    icon: APP_BRANDING.logos.icon,
+  },
 };
 
 export default function RootLayout({

@@ -22,6 +22,11 @@ const ITEMS = [
     label: "الصلاحيات",
     match: (path: string) => path.startsWith("/settings/permissions"),
   },
+  {
+    href: "/settings/about",
+    label: "عن البرنامج",
+    match: (path: string) => path === "/settings/about",
+  },
 ];
 
 export function SettingsNav() {
