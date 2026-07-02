@@ -32,6 +32,7 @@ import type {
   OpenMovement,
   PostVoucherResponse,
   TrialBalanceRow,
+  TrialBalanceParams,
   Vendor,
   VoucherAllocation,
   VoucherDetails,
@@ -614,61 +615,64 @@ export const voucherApi = {
     };
   },
 
-  async listTrialBalanceRows(fromDate?: string, toDate?: string): Promise<TrialBalanceRow[]> {
+  async listTrialBalanceRows(params: TrialBalanceParams = {}): Promise<TrialBalanceRow[]> {
     const supabase = getSupabaseClient();
-    let query = supabase
-      .from("journal_entry_lines")
-      .select(
-        "debit, credit, journal_entries!inner(status, entry_date), accounts(id, code, name_ar)",
-      )
-      .limit(5000);
+    const {
+      fromDate,
+      toDate,
+      currencyId,
+      accountId,
+      accountSubtree = true,
+      costCenterId,
+    } = params;
 
-    if (fromDate) {
-      query = query.gte("journal_entries.entry_date", fromDate);
-    }
-    if (toDate) {
-      query = query.lte("journal_entries.entry_date", toDate);
-    }
-
-    const { data, error } = await query;
+    const { data, error } = await supabase.rpc("get_trial_balance", {
+      p_from_date: fromDate || null,
+      p_to_date: toDate || null,
+      p_currency_id: currencyId || null,
+      p_account_id: accountId || null,
+      p_account_subtree: accountSubtree,
+      p_cost_center_id: costCenterId || null,
+    });
     throwIfSupabaseError(error);
 
-    const grouped = new Map<string, TrialBalanceRow>();
+    return (data ?? []).map((row: Record<string, unknown>) => {
+      const typed = row as {
+        account_id: string;
+        account_code: string;
+        account_name: string;
+        currency_id: string | null;
+        parent_id: string | null;
+        is_postable: boolean;
+        opening_balance: number | string;
+        period_debit: number | string;
+        period_credit: number | string;
+        closing_balance: number | string;
+      };
 
-    for (const row of data ?? []) {
-      const journalEntry = (row as { journal_entries?: { status?: string } })
-        .journal_entries;
-      if (journalEntry?.status !== "posted") continue;
+      const opening = Number(typed.opening_balance ?? 0);
+      const debit = Number(typed.period_debit ?? 0);
+      const credit = Number(typed.period_credit ?? 0);
+      const closing = Number(typed.closing_balance ?? 0);
 
-      const account = (row as {
-        accounts?: { id?: string; code?: string; name_ar?: string };
-      }).accounts;
-
-      if (!account?.id) continue;
-
-      const debit = Number((row as { debit?: number }).debit ?? 0);
-      const credit = Number((row as { credit?: number }).credit ?? 0);
-
-      if (!grouped.has(account.id)) {
-        grouped.set(account.id, {
-          account_id: account.id,
-          account_code: account.code ?? "",
-          account_name: account.name_ar ?? "",
-          debit: 0,
-          credit: 0,
-          balance: 0,
-        });
-      }
-
-      const entry = grouped.get(account.id)!;
-      entry.debit += debit;
-      entry.credit += credit;
-      entry.balance = entry.debit - entry.credit;
-    }
-
-    return Array.from(grouped.values()).sort((a, b) =>
-      a.account_code.localeCompare(b.account_code),
-    );
+      return {
+        account_id: typed.account_id,
+        account_code: typed.account_code,
+        account_name: typed.account_name,
+        currency_id: typed.currency_id,
+        parent_id: typed.parent_id,
+        is_postable: typed.is_postable,
+        is_aggregated: false,
+        depth: 0,
+        opening_balance: opening,
+        period_debit: debit,
+        period_credit: credit,
+        closing_balance: closing,
+        debit,
+        credit,
+        balance: closing,
+      };
+    });
   },
 
   async getVoucherById(id: string): Promise<VoucherDetails> {

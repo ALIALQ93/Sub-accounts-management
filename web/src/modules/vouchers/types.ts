@@ -178,9 +178,31 @@ export interface TrialBalanceRow {
   account_id: string;
   account_code: string;
   account_name: string;
+  currency_id?: string | null;
+  currency_code?: string;
+  parent_id?: string | null;
+  is_postable: boolean;
+  is_aggregated?: boolean;
+  depth?: number;
+  opening_balance: number;
+  period_debit: number;
+  period_credit: number;
+  closing_balance: number;
+  /** @deprecated use period_debit */
   debit: number;
+  /** @deprecated use period_credit */
   credit: number;
+  /** @deprecated use closing_balance */
   balance: number;
+}
+
+export interface TrialBalanceParams {
+  fromDate?: string;
+  toDate?: string;
+  currencyId?: string;
+  accountId?: string;
+  accountSubtree?: boolean;
+  costCenterId?: string;
 }
 
 export interface DashboardLastMovement {

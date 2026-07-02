@@ -47,4 +47,5 @@ drop function if exists public.set_base_currency(uuid) cascade;
 drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, varchar, date, text) cascade;
 drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
 drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
+drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
 drop function if exists public.currencies_prevent_direct_rate_change() cascade;
