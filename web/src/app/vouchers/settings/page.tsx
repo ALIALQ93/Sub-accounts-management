@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
+import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
+import type { Account, VoucherTypeDefaults } from "@/modules/vouchers/types";
 import type { VoucherNumberSequence, VoucherSettings } from "@/modules/vouchers/types/voucher-settings";
 import type { VoucherType } from "@/modules/vouchers/types";
 import {
@@ -10,6 +13,9 @@ import {
   VOUCHER_TYPES,
 } from "@/modules/vouchers/utils/voucher-type-config";
 import { formatVoucherNo, computeNextSequencePreview } from "@/modules/vouchers/utils/format-voucher-no";
+import type { Currency } from "@/modules/currencies/types";
+import { currencyApi } from "@/modules/currencies/services/currency-api";
+import type { CostCenter } from "@/modules/vouchers/types";
 
 export default function VoucherSettingsPage() {
   const [settings, setSettings] = useState<VoucherSettings>({
@@ -17,6 +23,10 @@ export default function VoucherSettingsPage() {
     allow_manual_override: false,
   });
   const [sequences, setSequences] = useState<VoucherNumberSequence[]>([]);
+  const [typeDefaults, setTypeDefaults] = useState<VoucherTypeDefaults[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [previews, setPreviews] = useState<Record<VoucherType, string>>({
     receipt: "",
     payment: "",
@@ -31,13 +41,22 @@ export default function VoucherSettingsPage() {
 
     const load = async () => {
       try {
-        const [settingsData, sequencesData] = await Promise.all([
+        const [settingsData, sequencesData, defaultsData, accountsData, currenciesData, centersData] =
+          await Promise.all([
           voucherApi.getVoucherSettings(),
           voucherApi.listVoucherNumberSequences(),
+          voucherApi.listVoucherTypeDefaults(),
+          voucherApi.listAccounts(),
+          currencyApi.listActiveCurrencies(),
+          voucherApi.listCostCenters(),
         ]);
         if (cancelled) return;
         setSettings(settingsData);
         setSequences(sequencesData);
+        setTypeDefaults(defaultsData);
+        setAccounts(accountsData);
+        setCurrencies(currenciesData);
+        setCostCenters(centersData);
 
         const nextPreviews = {} as Record<VoucherType, string>;
         for (const type of VOUCHER_TYPES) {
@@ -91,6 +110,18 @@ export default function VoucherSettingsPage() {
     );
   };
 
+  const updateTypeDefault = (
+    type: VoucherType,
+    field: keyof Omit<VoucherTypeDefaults, "voucher_type">,
+    value: string | null,
+  ) => {
+    setTypeDefaults((current) =>
+      current.map((row) =>
+        row.voucher_type === type ? { ...row, [field]: value } : row,
+      ),
+    );
+  };
+
   const onSave = async () => {
     setIsSaving(true);
     setFeedback("");
@@ -101,6 +132,13 @@ export default function VoucherSettingsPage() {
           prefix: row.prefix,
           padding: row.padding,
           include_year: row.include_year,
+        });
+      }
+      for (const row of typeDefaults) {
+        await voucherApi.updateVoucherTypeDefaults(row.voucher_type, {
+          default_account_id: row.default_account_id,
+          default_currency_id: row.default_currency_id,
+          default_cost_center_id: row.default_cost_center_id,
         });
       }
       setFeedback("تم حفظ إعدادات السندات.");
@@ -160,6 +198,64 @@ export default function VoucherSettingsPage() {
                 السماح بتعديل الرقم يدوياً
               </label>
             </div>
+          </section>
+
+          <section className="grid gap-4">
+            <h2 className="text-base font-semibold text-slate-900">
+              الافتراضيات لكل نوع سند
+            </h2>
+            {typeDefaults.map((row) => (
+              <article
+                key={row.voucher_type}
+                className="rounded-xl border border-slate-200 bg-white p-4"
+              >
+                <h3 className="mb-3 font-semibold text-slate-900">
+                  {getVoucherTypeLabel(row.voucher_type)}
+                </h3>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <AccountSearchField
+                    label="الحساب الافتراضي"
+                    accounts={accounts}
+                    value={row.default_account_id ?? ""}
+                    onChange={(id) =>
+                      updateTypeDefault(row.voucher_type, "default_account_id", id || null)
+                    }
+                  />
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium text-slate-700">العملة الافتراضية</span>
+                    <select
+                      value={row.default_currency_id ?? ""}
+                      onChange={(event) =>
+                        updateTypeDefault(
+                          row.voucher_type,
+                          "default_currency_id",
+                          event.target.value || null,
+                        )
+                      }
+                      className="rounded-md border border-slate-300 px-3 py-2"
+                    >
+                      <option value="">—</option>
+                      {currencies.map((currency) => (
+                        <option key={currency.id} value={currency.id}>
+                          {currency.code} — {currency.name_ar}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <CostCenterSearchField
+                    costCenters={costCenters}
+                    value={row.default_cost_center_id ?? ""}
+                    onChange={(id) =>
+                      updateTypeDefault(
+                        row.voucher_type,
+                        "default_cost_center_id",
+                        id || null,
+                      )
+                    }
+                  />
+                </div>
+              </article>
+            ))}
           </section>
 
           <section className="grid gap-4">
@@ -242,9 +338,9 @@ export default function VoucherSettingsPage() {
           </div>
 
           <p className="text-xs text-slate-500">
-            للترقيم الآمن شغّل ملف{" "}
-            <span className="font-mono">accounting_voucher_settings.sql</span>{" "}
-            في Supabase SQL Editor.
+            شغّل في Supabase بالترتيب:{" "}
+            <span className="font-mono">accounting_voucher_settings.sql</span> ثم{" "}
+            <span className="font-mono">accounting_voucher_extensions.sql</span>
           </p>
         </>
       )}

@@ -125,3 +125,6 @@ begin
   return v_no;
 end;
 $$;
+
+grant execute on function public.peek_voucher_no(varchar) to anon, authenticated;
+grant execute on function public.reserve_voucher_no(varchar) to anon, authenticated;

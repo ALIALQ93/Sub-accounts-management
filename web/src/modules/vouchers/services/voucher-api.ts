@@ -16,10 +16,12 @@ import type {
 import {
   DEFAULT_VOUCHER_SETTINGS,
   DEFAULT_VOUCHER_SEQUENCES,
+  DEFAULT_VOUCHER_TYPE_DEFAULTS,
 } from "@/modules/vouchers/types/voucher-settings";
 import type {
   Account,
   ApiErrorPayload,
+  CostCenter,
   Customer,
   DashboardLastMovement,
   DashboardStats,
@@ -36,6 +38,7 @@ import type {
   VoucherListItem,
   VoucherLine,
   VoucherType,
+  VoucherTypeDefaults,
 } from "@/modules/vouchers/types";
 import type { PostgrestError } from "@supabase/supabase-js";
 
@@ -829,6 +832,62 @@ export const voucherApi = {
     }
 
     return voucherNo;
+  },
+
+  async listCostCenters(): Promise<CostCenter[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("cost_centers")
+      .select("*")
+      .order("code", { ascending: true });
+    if (error) return [];
+    return (data ?? []) as CostCenter[];
+  },
+
+  async listVoucherTypeDefaults(): Promise<VoucherTypeDefaults[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("voucher_type_defaults")
+      .select("*")
+      .order("voucher_type", { ascending: true });
+
+    if (error || !data?.length) {
+      return DEFAULT_VOUCHER_TYPE_DEFAULTS;
+    }
+
+    return data as VoucherTypeDefaults[];
+  },
+
+  async getVoucherTypeDefaults(
+    voucherType: VoucherType,
+  ): Promise<VoucherTypeDefaults> {
+    const rows = await this.listVoucherTypeDefaults();
+    return (
+      rows.find((row) => row.voucher_type === voucherType) ??
+      DEFAULT_VOUCHER_TYPE_DEFAULTS.find(
+        (row) => row.voucher_type === voucherType,
+      )!
+    );
+  },
+
+  async updateVoucherTypeDefaults(
+    voucherType: VoucherType,
+    payload: Omit<VoucherTypeDefaults, "voucher_type">,
+  ): Promise<VoucherTypeDefaults> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("voucher_type_defaults")
+      .upsert({
+        voucher_type: voucherType,
+        default_account_id: payload.default_account_id,
+        default_currency_id: payload.default_currency_id,
+        default_cost_center_id: payload.default_cost_center_id,
+        updated_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+    throwIfSupabaseError(error);
+    return data as VoucherTypeDefaults;
   },
 
   async createVoucher(payload: Partial<VoucherHeader>): Promise<VoucherHeader> {

@@ -140,3 +140,25 @@ create policy "currencies_insert_all" on public.currencies
 drop policy if exists "currencies_update_all" on public.currencies;
 create policy "currencies_update_all" on public.currencies
   for update to anon, authenticated using (true) with check (true);
+
+-- cost_centers
+drop policy if exists "cost_centers_select_all" on public.cost_centers;
+create policy "cost_centers_select_all" on public.cost_centers
+  for select to anon, authenticated using (true);
+drop policy if exists "cost_centers_insert_all" on public.cost_centers;
+create policy "cost_centers_insert_all" on public.cost_centers
+  for insert to anon, authenticated with check (true);
+drop policy if exists "cost_centers_update_all" on public.cost_centers;
+create policy "cost_centers_update_all" on public.cost_centers
+  for update to anon, authenticated using (true) with check (true);
+
+-- voucher_type_defaults
+drop policy if exists "voucher_type_defaults_select_all" on public.voucher_type_defaults;
+create policy "voucher_type_defaults_select_all" on public.voucher_type_defaults
+  for select to anon, authenticated using (true);
+drop policy if exists "voucher_type_defaults_insert_all" on public.voucher_type_defaults;
+create policy "voucher_type_defaults_insert_all" on public.voucher_type_defaults
+  for insert to anon, authenticated with check (true);
+drop policy if exists "voucher_type_defaults_update_all" on public.voucher_type_defaults;
+create policy "voucher_type_defaults_update_all" on public.voucher_type_defaults
+  for update to anon, authenticated using (true) with check (true);

@@ -14,6 +14,8 @@ export interface VoucherHeader {
   customer_id: string | null;
   vendor_id: string | null;
   journal_entry_id: string | null;
+  currency_id?: string | null;
+  cost_center_id?: string | null;
 }
 
 export interface VoucherLine {
@@ -25,6 +27,22 @@ export interface VoucherLine {
   side: VoucherLineSide;
   amount: number;
   line_description: string | null;
+  cost_center_id?: string | null;
+}
+
+export interface CostCenter {
+  id: string;
+  code: string;
+  name_ar: string;
+  name_en: string | null;
+  is_active: boolean;
+}
+
+export interface VoucherTypeDefaults {
+  voucher_type: VoucherType;
+  default_account_id: string | null;
+  default_currency_id: string | null;
+  default_cost_center_id: string | null;
 }
 
 export interface VoucherAllocation {

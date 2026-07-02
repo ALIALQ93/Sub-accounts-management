@@ -2,13 +2,18 @@
 
 import type {
   Account,
+  CostCenter,
   VoucherLine,
   VoucherLineSide,
 } from "@/modules/vouchers/types";
+import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
+import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 
 interface VoucherLinesTableProps {
   lines: VoucherLine[];
   accounts: Account[];
+  costCenters?: CostCenter[];
+  defaultCostCenterId?: string;
   readOnly: boolean;
   onChange: (lines: VoucherLine[]) => void;
 }
@@ -27,6 +32,8 @@ const DEFAULT_LINE: VoucherLine = {
 export function VoucherLinesTable({
   lines,
   accounts,
+  costCenters = [],
+  defaultCostCenterId = "",
   readOnly,
   onChange,
 }: VoucherLinesTableProps) {
@@ -40,6 +47,7 @@ export function VoucherLinesTable({
       {
         ...DEFAULT_LINE,
         id: crypto.randomUUID(),
+        cost_center_id: defaultCostCenterId || null,
       },
     ]);
   };
@@ -58,55 +66,48 @@ export function VoucherLinesTable({
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">اسطر السند</h2>
+        <h2 className="text-lg font-semibold text-slate-900">أسطر السند</h2>
         <button
           type="button"
-          className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
           onClick={addLine}
           disabled={readOnly}
         >
-          اضافة سطر
+          إضافة سطر
         </button>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
+        <table className="w-full min-w-[980px] border-collapse text-sm">
           <thead className="bg-slate-50">
             <tr className="text-right text-slate-700">
               <th className="border-b border-slate-200 p-2">الحساب</th>
               <th className="border-b border-slate-200 p-2">الطرف</th>
               <th className="border-b border-slate-200 p-2">المبلغ</th>
+              {costCenters.length > 0 && (
+                <th className="border-b border-slate-200 p-2">مركز الكلفة</th>
+              )}
               <th className="border-b border-slate-200 p-2">الوصف</th>
               <th className="border-b border-slate-200 p-2">إجراء</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line) => (
-              <tr key={line.id} className="odd:bg-white even:bg-slate-50/60">
-                <td className="border-b border-slate-100 p-2">
-                  <select
+              <tr key={line.id} className="odd:bg-white even:bg-slate-50/60 align-top">
+                <td className="border-b border-slate-100 p-2 min-w-[240px]">
+                  <AccountSearchField
+                    accounts={accounts}
                     value={line.account_id ?? ""}
-                    onChange={(event) =>
+                    hideLabel
+                    onChange={(accountId, account) =>
                       updateLine(line.id, {
-                        account_id: event.target.value,
-                        account_code:
-                          accounts.find((account) => account.id === event.target.value)
-                            ?.code ?? "",
-                        account_name:
-                          accounts.find((account) => account.id === event.target.value)
-                            ?.name_ar ?? "",
+                        account_id: accountId,
+                        account_code: account?.code ?? "",
+                        account_name: account?.name_ar ?? "",
                       })
                     }
                     disabled={readOnly}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 outline-none focus:border-blue-900"
-                  >
-                    <option value="">اختر الحساب</option>
-                    {accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.code} - {account.name_ar}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </td>
                 <td className="border-b border-slate-100 p-2">
                   <select
@@ -117,7 +118,7 @@ export function VoucherLinesTable({
                       })
                     }
                     disabled={readOnly}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 outline-none focus:border-blue-900"
+                    className="w-full rounded-md border border-slate-300 px-2 py-1"
                   >
                     <option value="debit">مدين</option>
                     <option value="credit">دائن</option>
@@ -133,9 +134,20 @@ export function VoucherLinesTable({
                     disabled={readOnly}
                     min={0}
                     step="0.01"
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 outline-none focus:border-blue-900"
+                    className="w-full rounded-md border border-slate-300 px-2 py-1"
                   />
                 </td>
+                {costCenters.length > 0 && (
+                  <td className="border-b border-slate-100 p-2 min-w-[200px]">
+                    <CostCenterSearchField
+                      costCenters={costCenters}
+                      value={line.cost_center_id ?? defaultCostCenterId ?? ""}
+                      hideLabel
+                      onChange={(id) => updateLine(line.id, { cost_center_id: id || null })}
+                      disabled={readOnly}
+                    />
+                  </td>
+                )}
                 <td className="border-b border-slate-100 p-2">
                   <input
                     value={line.line_description ?? ""}
@@ -143,7 +155,7 @@ export function VoucherLinesTable({
                       updateLine(line.id, { line_description: event.target.value })
                     }
                     disabled={readOnly}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 outline-none focus:border-blue-900"
+                    className="w-full rounded-md border border-slate-300 px-2 py-1"
                     placeholder="وصف السطر"
                   />
                 </td>
@@ -152,7 +164,7 @@ export function VoucherLinesTable({
                     type="button"
                     onClick={() => removeLine(line.id)}
                     disabled={readOnly}
-                    className="rounded-md border border-rose-300 px-2 py-1 text-xs font-medium text-rose-700 disabled:opacity-50"
+                    className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
                   >
                     حذف
                   </button>
@@ -162,10 +174,10 @@ export function VoucherLinesTable({
             {lines.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={costCenters.length > 0 ? 6 : 5}
                   className="border-b border-slate-100 p-4 text-center text-slate-500"
                 >
-                  لا توجد اسطر بعد.
+                  لا توجد أسطر — استخدم الإدخال السريع أو «إضافة سطر».
                 </td>
               </tr>
             )}

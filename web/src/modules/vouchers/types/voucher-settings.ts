@@ -1,4 +1,4 @@
-import type { VoucherType } from "@/modules/vouchers/types";
+import type { VoucherType, VoucherTypeDefaults } from "@/modules/vouchers/types";
 
 export interface VoucherSettings {
   auto_number_enabled: boolean;
@@ -43,5 +43,26 @@ export const DEFAULT_VOUCHER_SEQUENCES: VoucherNumberSequence[] = [
     include_year: true,
     last_number: 0,
     sequence_year: new Date().getFullYear(),
+  },
+];
+
+export const DEFAULT_VOUCHER_TYPE_DEFAULTS: VoucherTypeDefaults[] = [
+  {
+    voucher_type: "receipt",
+    default_account_id: null,
+    default_currency_id: null,
+    default_cost_center_id: null,
+  },
+  {
+    voucher_type: "payment",
+    default_account_id: null,
+    default_currency_id: null,
+    default_cost_center_id: null,
+  },
+  {
+    voucher_type: "settlement",
+    default_account_id: null,
+    default_currency_id: null,
+    default_cost_center_id: null,
   },
 ];
