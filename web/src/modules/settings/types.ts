@@ -21,6 +21,7 @@ export interface CompanySettings {
   email: string | null;
   fiscal_year_start_month: number;
   base_currency_id: string | null;
+  logo_url: string | null;
   updated_at?: string;
 }
 
@@ -33,6 +34,7 @@ export interface CompanySettingsFormValues {
   email: string;
   fiscal_year_start_month: number;
   base_currency_id: string;
+  logo_url: string;
 }
 
 export interface CreateUserFormValues {

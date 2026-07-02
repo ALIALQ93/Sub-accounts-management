@@ -24,6 +24,7 @@ const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   email: null,
   fiscal_year_start_month: 1,
   base_currency_id: null,
+  logo_url: null,
 };
 
 export const settingsApi = {
@@ -55,6 +56,7 @@ export const settingsApi = {
           email: values.email.trim() || null,
           fiscal_year_start_month: values.fiscal_year_start_month,
           base_currency_id: values.base_currency_id || null,
+          logo_url: values.logo_url.trim() || null,
         },
         { onConflict: "id" },
       )

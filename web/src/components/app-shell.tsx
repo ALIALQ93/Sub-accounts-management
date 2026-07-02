@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { CompanyLogo } from "@/components/company-logo";
 import { AppBrandFooter } from "@/components/app-brand-footer";
-import { AppBrandLogo } from "@/components/app-brand-logo";
 import { APP_BRANDING } from "@/config/app-branding";
 import { useAuth } from "@/modules/auth/auth-context";
 import type { PermissionKey } from "@/modules/settings/permissions/permission-catalog";
@@ -52,6 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     canAccessRoute,
   } = useAuth();
   const [companyName, setCompanyName] = useState<string>(APP_BRANDING.productNameAr);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (pathname === "/login") return;
@@ -61,6 +62,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .then((settings) => {
         if (!cancelled && settings.legal_name_ar) {
           setCompanyName(settings.legal_name_ar);
+        }
+        if (!cancelled) {
+          setCompanyLogoUrl(settings.logo_url);
         }
       })
       .catch(() => undefined);
@@ -104,7 +108,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <aside className="flex max-h-[40vh] flex-col border-b border-[var(--brand-border)] bg-[var(--brand-navy)] lg:max-h-none lg:border-b-0 lg:border-l">
           <div className="border-b border-white/10 p-3">
             <div className="flex items-center gap-2.5">
-              <AppBrandLogo variant="icon" className="rounded-md bg-white/5 p-0.5" />
+              <CompanyLogo
+                companyName={companyName}
+                logoUrl={companyLogoUrl}
+                size="sm"
+                className="border-white/20 bg-white/10"
+              />
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-sm font-bold text-white">{companyName}</h1>
                 <p className="text-[10px] text-white/60">{APP_BRANDING.productTaglineAr}</p>

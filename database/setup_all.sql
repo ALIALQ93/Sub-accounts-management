@@ -250,6 +250,7 @@ create table public.company_settings (
   fiscal_year_start_month int not null default 1
     check (fiscal_year_start_month between 1 and 12),
   base_currency_id uuid null references public.currencies(id) on delete set null,
+  logo_url text null,
   updated_at timestamptz not null default now()
 );
 
@@ -1923,6 +1924,7 @@ end $$;
 --    (اختياري للإنشاء من الواجهة) SUPABASE_SERVICE_ROLE_KEY
 -- 3. افتح التطبيق → /login → سجّل أول مستخدم (يصبح admin تلقائياً)
 -- 4. من /settings/users أدر المستخدمين، ومن /settings/permissions الصلاحيات
--- 5. من /vouchers/settings حدّد الحسابات الافتراضية
--- 6. (اختياري) شغّل 03_test_cases.sql للتحقق من سيناريوهات القبض والصرف
+-- 5. من /settings/company أدخل اسم الشركة ورابط الشعار
+-- 6. من /vouchers/settings حدّد الحسابات الافتراضية
+-- 7. (اختياري) شغّل 03_test_cases.sql للتحقق من سيناريوهات القبض والصرف
 -- =============================================================================
