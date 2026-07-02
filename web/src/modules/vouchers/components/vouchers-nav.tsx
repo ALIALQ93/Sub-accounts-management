@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   {
     href: "/vouchers/settings",
     label: "إعدادات",
-    match: (path: string) => path === "/vouchers/settings",
+    match: (path: string) => path.startsWith("/vouchers/settings"),
   },
 ] as const;
 
