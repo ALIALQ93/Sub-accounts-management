@@ -4,6 +4,7 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import { costCenterApi } from "@/modules/cost-centers/services/cost-center-api";
 import type {
   AccountStatementLine,
+  AccountStatementParams,
   AccountStatementResult,
 } from "@/modules/accounts/types";
 import {
@@ -305,20 +306,36 @@ export const voucherApi = {
   },
 
   async listAccountStatement(
-    accountId: string,
-    fromDate?: string,
-    toDate?: string,
+    params: AccountStatementParams | string,
+    legacyFromDate?: string,
+    legacyToDate?: string,
   ): Promise<AccountStatementResult> {
+    const resolved: AccountStatementParams =
+      typeof params === "string"
+        ? {
+            accountId: params,
+            fromDate: legacyFromDate,
+            toDate: legacyToDate,
+          }
+        : params;
+
+    const { accountId, fromDate, toDate, costCenterId } = resolved;
     const supabase = getSupabaseClient();
 
     let openingBalance = 0;
     if (fromDate) {
-      const { data: openingRows, error: openingError } = await supabase
+      let openingQuery = supabase
         .from("journal_entry_lines")
         .select("debit, credit, journal_entries!inner(entry_date, status)")
         .eq("account_id", accountId)
         .eq("journal_entries.status", "posted")
         .lt("journal_entries.entry_date", fromDate);
+
+      if (costCenterId) {
+        openingQuery = openingQuery.eq("cost_center_id", costCenterId);
+      }
+
+      const { data: openingRows, error: openingError } = await openingQuery;
       throwIfSupabaseError(openingError);
 
       for (const row of openingRows ?? []) {
@@ -331,11 +348,15 @@ export const voucherApi = {
     let query = supabase
       .from("journal_entry_lines")
       .select(
-        "id, debit, credit, line_description, journal_entries!inner(id, entry_no, entry_date, description, status, source_type, source_id)",
+        "id, debit, credit, line_description, cost_center_id, cost_centers(code, name_ar), journal_entries!inner(id, entry_no, entry_date, description, status, source_type, source_id)",
       )
       .eq("account_id", accountId)
       .eq("journal_entries.status", "posted")
       .limit(1000);
+
+    if (costCenterId) {
+      query = query.eq("cost_center_id", costCenterId);
+    }
 
     if (fromDate) {
       query = query.gte("journal_entries.entry_date", fromDate);
@@ -352,6 +373,8 @@ export const voucherApi = {
       debit?: number;
       credit?: number;
       line_description: string | null;
+      cost_center_id?: string | null;
+      cost_centers?: { code?: string; name_ar?: string } | null;
       journal_entries?: {
         id?: string;
         entry_no?: string;
@@ -415,6 +438,7 @@ export const voucherApi = {
 
       const sourceType = journal.source_type ?? null;
       const sourceId = journal.source_id ?? null;
+      const costCenter = row.cost_centers;
 
       lines.push({
         id: row.id,
@@ -432,6 +456,9 @@ export const voucherApi = {
           sourceType === "voucher" && sourceId
             ? (voucherNoById.get(sourceId) ?? null)
             : null,
+        cost_center_id: row.cost_center_id ?? null,
+        cost_center_code: costCenter?.code ?? null,
+        cost_center_name: costCenter?.name_ar ?? null,
       });
     }
 

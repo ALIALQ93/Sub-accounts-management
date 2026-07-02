@@ -466,6 +466,7 @@ export default function TrialBalancePage() {
                         accountId: row.account_id,
                         from: fromDate || undefined,
                         to: toDate || undefined,
+                        costCenterId: costCenterId || undefined,
                       },
                     );
 

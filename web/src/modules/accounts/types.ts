@@ -43,6 +43,16 @@ export interface AccountStatementLine {
   source_type: string | null;
   source_id: string | null;
   voucher_no: string | null;
+  cost_center_id?: string | null;
+  cost_center_code?: string | null;
+  cost_center_name?: string | null;
+}
+
+export interface AccountStatementParams {
+  accountId: string;
+  fromDate?: string;
+  toDate?: string;
+  costCenterId?: string;
 }
 
 export interface AccountStatementResult {

@@ -8,44 +8,56 @@ import {
 } from "@/components/open-in-new-tab-link";
 import { AccountStatementSection } from "@/modules/accounts/components/account-statement-section";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
+import {
+  buildAccountStatementShareParams,
+  parseAccountStatementShareParams,
+} from "@/modules/reports/utils/account-statement-utils";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import type { Currency } from "@/modules/currencies/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
-import type { Account } from "@/modules/vouchers/types";
+import type { Account, CostCenter } from "@/modules/vouchers/types";
 
 function readInitialParams() {
   if (typeof window === "undefined") {
-    return { accountId: "", from: "", to: "" };
+    return parseAccountStatementShareParams(new URLSearchParams());
   }
-  const params = new URLSearchParams(window.location.search);
-  return {
-    accountId: params.get("accountId") ?? "",
-    from: params.get("from") ?? "",
-    to: params.get("to") ?? "",
-  };
+  return parseAccountStatementShareParams(
+    new URLSearchParams(window.location.search),
+  );
 }
 
 export default function AccountStatementReportPage() {
   const initial = readInitialParams();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [accountId, setAccountId] = useState(initial.accountId);
   const [fromDate, setFromDate] = useState(initial.from);
   const [toDate, setToDate] = useState(initial.to);
+  const [costCenterId, setCostCenterId] = useState(initial.costCenterId);
+  const [search, setSearch] = useState(initial.search);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
   const syncUrl = useCallback(
-    (nextAccountId: string, from: string, to: string) => {
-      const nextUrl = buildUrlWithQuery("/reports/account-statement", {
-        accountId: nextAccountId || undefined,
-        from: from || undefined,
-        to: to || undefined,
+    (
+      overrides?: Partial<
+        ReturnType<typeof buildAccountStatementShareParams>
+      >,
+    ) => {
+      const params = buildAccountStatementShareParams({
+        accountId,
+        fromDate,
+        toDate,
+        costCenterId,
+        search,
+        ...overrides,
       });
+      const nextUrl = buildUrlWithQuery("/reports/account-statement", params);
       window.history.replaceState(null, "", nextUrl);
     },
-    [],
+    [accountId, fromDate, toDate, costCenterId, search],
   );
 
   useEffect(() => {
@@ -53,13 +65,16 @@ export default function AccountStatementReportPage() {
 
     const load = async () => {
       try {
-        const [accountsData, currenciesData] = await Promise.all([
-          voucherApi.listAccounts(),
-          currencyApi.listActiveCurrencies(),
-        ]);
+        const [accountsData, currenciesData, costCentersData] =
+          await Promise.all([
+            voucherApi.listAccounts(),
+            currencyApi.listActiveCurrencies(),
+            voucherApi.listCostCenters(),
+          ]);
         if (cancelled) return;
         setAccounts(accountsData);
         setCurrencies(currenciesData);
+        setCostCenters(costCentersData);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "تعذّر تحميل البيانات.");
@@ -90,25 +105,53 @@ export default function AccountStatementReportPage() {
     return currencies.find((currency) => currency.id === selectedAccount.currency_id);
   }, [currencies, selectedAccount]);
 
-  const shareHref = useMemo(
+  const shareParams = useMemo(
     () =>
-      buildUrlWithQuery("/reports/account-statement", {
+      buildAccountStatementShareParams({
+        accountId,
+        fromDate,
+        toDate,
+        costCenterId,
+        search,
+      }),
+    [accountId, fromDate, toDate, costCenterId, search],
+  );
+
+  const shareHref = useMemo(
+    () => buildUrlWithQuery("/reports/account-statement", shareParams),
+    [shareParams],
+  );
+
+  const trialBalanceHref = useMemo(
+    () =>
+      buildUrlWithQuery("/reports/trial-balance", {
         accountId: accountId || undefined,
         from: fromDate || undefined,
         to: toDate || undefined,
+        costCenterId: costCenterId || undefined,
       }),
-    [accountId, fromDate, toDate],
+    [accountId, fromDate, toDate, costCenterId],
   );
 
   const onAccountChange = (id: string) => {
     setAccountId(id);
-    syncUrl(id, fromDate, toDate);
+    syncUrl({ accountId: id });
   };
 
   const onPeriodChange = (from: string, to: string) => {
     setFromDate(from);
     setToDate(to);
-    syncUrl(accountId, from, to);
+    syncUrl({ fromDate: from, toDate: to });
+  };
+
+  const onCostCenterChange = (id: string) => {
+    setCostCenterId(id);
+    syncUrl({ costCenterId: id });
+  };
+
+  const onSearchChange = (value: string) => {
+    setSearch(value);
+    syncUrl({ search: value });
   };
 
   return (
@@ -120,14 +163,24 @@ export default function AccountStatementReportPage() {
             اختر حساباً مرحّلاً لعرض حركاته — بدون المرور بدليل الحسابات.
           </p>
         </div>
-        {accountId && (
-          <OpenInNewTabLink
-            href={shareHref}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            ↗ نسخة في تبويب جديد
-          </OpenInNewTabLink>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {accountId && (
+            <Link
+              href={trialBalanceHref}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              ميزان المراجعة
+            </Link>
+          )}
+          {accountId && (
+            <OpenInNewTabLink
+              href={shareHref}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              ↗ نسخة في تبويب جديد
+            </OpenInNewTabLink>
+          )}
+        </div>
       </div>
 
       <ReportsNav active="account-statement" />
@@ -191,7 +244,13 @@ export default function AccountStatementReportPage() {
             currencySymbol={selectedCurrency.symbol}
             initialFromDate={fromDate}
             initialToDate={toDate}
+            initialCostCenterId={costCenterId}
+            initialSearch={search}
+            costCenters={costCenters}
             onPeriodChange={onPeriodChange}
+            onCostCenterChange={onCostCenterChange}
+            onSearchChange={onSearchChange}
+            showCostCenterFilter
             fullHeight
           />
         </section>
