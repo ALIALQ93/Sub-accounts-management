@@ -44,6 +44,7 @@ import {
 } from "@/modules/vouchers/utils/voucher-currency-utils";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
 import { useVoucherFeedback } from "@/modules/vouchers/hooks/use-voucher-feedback";
+import { useVoucherSaveFlow } from "@/modules/vouchers/hooks/use-voucher-save-flow";
 import {
   getVoucherSaveFeedback,
   resolveVoucherSaveStatus,
@@ -94,6 +95,17 @@ export function ReceiptVoucherForm({
 
   const { feedback, feedbackRef, showError, showSuccess, showWarning, showFromError, clearFeedback } =
     useVoucherFeedback();
+  const {
+    beginSave,
+    endSave,
+    resolveVoucherIdForSave,
+    updateSavedVoucherId,
+    redirectAfterDraftSave,
+  } = useVoucherSaveFlow({
+    initialMode,
+    voucherId,
+    showSuccess,
+  });
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -211,59 +223,65 @@ export function ReceiptVoucherForm({
   };
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
-    if (!currencyId) {
-      showError("اختر عملة السند.");
-      return null;
-    }
-    if (!receiptAccountId) {
-      showError("حساب القبض غير معرّف. عيّنه من إعدادات السندات.");
-      return null;
-    }
-    if (validCreditLines.length === 0) {
-      showError("أضف سطراً دائنًا واحداً على الأقل.");
-      return null;
-    }
-
-    const accountError = validateReceiptVoucherAccounts({
-      currencyId,
-      receiptAccountId,
-      creditLines: validCreditLines,
-      accounts,
-      currencies,
-    });
-    if (accountError) {
-      showError(accountError);
-      return null;
-    }
-
-    for (const line of validCreditLines) {
-      const categoryError = validateLineCategory(line, lineCategories);
-      if (categoryError) {
-        showError(categoryError);
-        return null;
-      }
-    }
-    if (exchangeRate <= 0) {
-      showError("سعر الصرف يجب أن يكون أكبر من صفر.");
-      return null;
-    }
-    if (isInvoiceMode && !customerId) {
-      showError("العميل مطلوب في وضع إغلاق الحركات.");
-      return null;
-    }
+    if (!beginSave()) return null;
 
     try {
+      if (!currencyId) {
+        showError("اختر عملة السند.");
+        return null;
+      }
+      if (!receiptAccountId) {
+        showError("حساب القبض غير معرّف. عيّنه من إعدادات السندات.");
+        return null;
+      }
+      if (validCreditLines.length === 0) {
+        showError("أضف سطراً دائنًا واحداً على الأقل.");
+        return null;
+      }
+
+      const accountError = validateReceiptVoucherAccounts({
+        currencyId,
+        receiptAccountId,
+        creditLines: validCreditLines,
+        accounts,
+        currencies,
+      });
+      if (accountError) {
+        showError(accountError);
+        return null;
+      }
+
+      for (const line of validCreditLines) {
+        const categoryError = validateLineCategory(line, lineCategories);
+        if (categoryError) {
+          showError(categoryError);
+          return null;
+        }
+      }
+      if (exchangeRate <= 0) {
+        showError("سعر الصرف يجب أن يكون أكبر من صفر.");
+        return null;
+      }
+      if (isInvoiceMode && !customerId) {
+        showError("العميل مطلوب في وضع إغلاق الحركات.");
+        return null;
+      }
+
       const resolvedNo = await resolveVoucherNo();
       if (!resolvedNo) return null;
 
       const effectiveStatus = resolveVoucherSaveStatus(status, targetStatus);
       const payload = buildHeaderPayload(effectiveStatus, resolvedNo);
-      const savedHeader = voucherId
-        ? await voucherApi.updateVoucher(voucherId, payload)
+      const currentVoucherId = resolveVoucherIdForSave();
+      const savedHeader = currentVoucherId
+        ? await voucherApi.updateVoucher(currentVoucherId, payload)
         : await voucherApi.createVoucher(payload);
 
       const activeId = savedHeader.id;
-      if (!voucherId) setVoucherId(activeId);
+      if (!currentVoucherId) {
+        updateSavedVoucherId(activeId);
+        setVoucherId(activeId);
+      }
 
       await syncVoucherLines(activeId);
       if (isInvoiceMode) {
@@ -274,13 +292,32 @@ export function ReceiptVoucherForm({
         await voucherApi.syncPostedVoucherJournal(activeId);
       }
 
+      const feedbackMessage = getVoucherSaveFeedback(status, targetStatus);
+      if (redirectAfterDraftSave(activeId, feedbackMessage, targetStatus)) {
+        return activeId;
+      }
+
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      showSuccess(getVoucherSaveFeedback(status, targetStatus));
+      showSuccess(feedbackMessage);
+
+      if (initialMode === "edit") {
+        const details = await voucherApi.getVoucherById(activeId);
+        const { receiptAccountId: loadedReceiptAccount, creditLines: loadedCredits } =
+          splitReceiptVoucherLines(
+            details.lines,
+            defaultReceiptAccountFromSettings,
+          );
+        setReceiptAccountId(loadedReceiptAccount);
+        setCreditLines(loadedCredits);
+      }
+
       return activeId;
     } catch (error) {
       showFromError(error);
       return null;
+    } finally {
+      endSave();
     }
   };
 

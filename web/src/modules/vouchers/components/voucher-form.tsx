@@ -33,6 +33,7 @@ import {
 } from "@/modules/vouchers/utils/voucher-type-config";
 import { useVoucherFeedback } from "@/modules/vouchers/hooks/use-voucher-feedback";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
+import { useVoucherSaveFlow } from "@/modules/vouchers/hooks/use-voucher-save-flow";
 import {
   getVoucherSaveFeedback,
   resolveVoucherSaveStatus,
@@ -83,6 +84,17 @@ export function VoucherForm({
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
     useVoucherFeedback();
+  const {
+    beginSave,
+    endSave,
+    resolveVoucherIdForSave,
+    updateSavedVoucherId,
+    redirectAfterDraftSave,
+  } = useVoucherSaveFlow({
+    initialMode,
+    voucherId,
+    showSuccess,
+  });
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -204,16 +216,18 @@ export function VoucherForm({
   };
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
-    for (const line of lines) {
-      if (!line.account_id || Number(line.amount || 0) <= 0) continue;
-      const categoryError = validateLineCategory(line, lineCategories);
-      if (categoryError) {
-        showError(categoryError);
-        return null;
-      }
-    }
+    if (!beginSave()) return null;
 
     try {
+      for (const line of lines) {
+        if (!line.account_id || Number(line.amount || 0) <= 0) continue;
+        const categoryError = validateLineCategory(line, lineCategories);
+        if (categoryError) {
+          showError(categoryError);
+          return null;
+        }
+      }
+
       let resolvedNo = voucherNo.trim();
       if (!resolvedNo) {
         const reserved = await resolveVoucherNo();
@@ -224,12 +238,16 @@ export function VoucherForm({
       const effectiveStatus = resolveVoucherSaveStatus(status, targetStatus);
       const payload = buildHeaderPayload(effectiveStatus, resolvedNo);
 
-      const savedHeader = voucherId
-        ? await voucherApi.updateVoucher(voucherId, payload)
+      const currentVoucherId = resolveVoucherIdForSave();
+      const savedHeader = currentVoucherId
+        ? await voucherApi.updateVoucher(currentVoucherId, payload)
         : await voucherApi.createVoucher(payload);
 
       const activeId = savedHeader.id;
-      if (!voucherId) setVoucherId(activeId);
+      if (!currentVoucherId) {
+        updateSavedVoucherId(activeId);
+        setVoucherId(activeId);
+      }
 
       await syncVoucherLines(activeId);
       if (settlementMode === "invoice") {
@@ -240,14 +258,26 @@ export function VoucherForm({
         await voucherApi.syncPostedVoucherJournal(activeId);
       }
 
+      const feedbackMessage = getVoucherSaveFeedback(status, targetStatus);
+      if (redirectAfterDraftSave(activeId, feedbackMessage, targetStatus)) {
+        return activeId;
+      }
+
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      showSuccess(getVoucherSaveFeedback(status, targetStatus));
+      showSuccess(feedbackMessage);
+
+      if (initialMode === "edit") {
+        const details = await voucherApi.getVoucherById(activeId);
+        setLines(details.lines);
+      }
 
       return activeId;
     } catch (error) {
       showFromError(error);
       return null;
+    } finally {
+      endSave();
     }
   };
 

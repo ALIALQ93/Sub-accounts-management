@@ -37,6 +37,7 @@ import {
 } from "@/modules/vouchers/utils/voucher-currency-utils";
 import { useVoucherFeedback } from "@/modules/vouchers/hooks/use-voucher-feedback";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
+import { useVoucherSaveFlow } from "@/modules/vouchers/hooks/use-voucher-save-flow";
 import {
   getVoucherSaveFeedback,
   resolveVoucherSaveStatus,
@@ -79,6 +80,17 @@ export function SettlementVoucherForm({
 
   const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
     useVoucherFeedback();
+  const {
+    beginSave,
+    endSave,
+    resolveVoucherIdForSave,
+    updateSavedVoucherId,
+    redirectAfterDraftSave,
+  } = useVoucherSaveFlow({
+    initialMode,
+    voucherId,
+    showSuccess,
+  });
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -200,66 +212,72 @@ export function SettlementVoucherForm({
   };
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
-    if (!currencyId) {
-      showError("اختر عملة السند.");
-      return null;
-    }
-    if (!clearingAccountId) {
-      showError("الحساب الوسيط غير معرّف. عيّنه من إعدادات السندات.");
-      return null;
-    }
-    if (validUserLines.length === 0) {
-      showError("أضف سطراً واحداً على الأقل (مدين أو دائن).");
-      return null;
-    }
-
-    const accountError = validateSettlementVoucherAccounts({
-      currencyId,
-      clearingAccountId,
-      userLines: validUserLines,
-      accounts,
-      currencies,
-    });
-    if (accountError) {
-      showError(accountError);
-      return null;
-    }
-
-    const costCenterError = validateCostCenterBalance({
-      lines: validUserLines,
-      costCenters,
-      requireCostCenter: true,
-      excludeNullCostCenter: true,
-    });
-    if (costCenterError) {
-      showError(costCenterError);
-      return null;
-    }
-
-    for (const line of validUserLines) {
-      const categoryError = validateLineCategory(line, lineCategories);
-      if (categoryError) {
-        showError(categoryError);
-        return null;
-      }
-    }
-    if (exchangeRate <= 0) {
-      showError("سعر الصرف يجب أن يكون أكبر من صفر.");
-      return null;
-    }
+    if (!beginSave()) return null;
 
     try {
+      if (!currencyId) {
+        showError("اختر عملة السند.");
+        return null;
+      }
+      if (!clearingAccountId) {
+        showError("الحساب الوسيط غير معرّف. عيّنه من إعدادات السندات.");
+        return null;
+      }
+      if (validUserLines.length === 0) {
+        showError("أضف سطراً واحداً على الأقل (مدين أو دائن).");
+        return null;
+      }
+
+      const accountError = validateSettlementVoucherAccounts({
+        currencyId,
+        clearingAccountId,
+        userLines: validUserLines,
+        accounts,
+        currencies,
+      });
+      if (accountError) {
+        showError(accountError);
+        return null;
+      }
+
+      const costCenterError = validateCostCenterBalance({
+        lines: validUserLines,
+        costCenters,
+        requireCostCenter: true,
+        excludeNullCostCenter: true,
+      });
+      if (costCenterError) {
+        showError(costCenterError);
+        return null;
+      }
+
+      for (const line of validUserLines) {
+        const categoryError = validateLineCategory(line, lineCategories);
+        if (categoryError) {
+          showError(categoryError);
+          return null;
+        }
+      }
+      if (exchangeRate <= 0) {
+        showError("سعر الصرف يجب أن يكون أكبر من صفر.");
+        return null;
+      }
+
       const resolvedNo = await resolveVoucherNo();
       if (!resolvedNo) return null;
 
       const effectiveStatus = resolveVoucherSaveStatus(status, targetStatus);
       const payload = buildHeaderPayload(effectiveStatus, resolvedNo);
-      const savedHeader = voucherId
-        ? await voucherApi.updateVoucher(voucherId, payload)
+      const currentVoucherId = resolveVoucherIdForSave();
+      const savedHeader = currentVoucherId
+        ? await voucherApi.updateVoucher(currentVoucherId, payload)
         : await voucherApi.createVoucher(payload);
 
       const activeId = savedHeader.id;
-      if (!voucherId) setVoucherId(activeId);
+      if (!currentVoucherId) {
+        updateSavedVoucherId(activeId);
+        setVoucherId(activeId);
+      }
 
       await syncVoucherLines(activeId);
 
@@ -267,13 +285,32 @@ export function SettlementVoucherForm({
         await voucherApi.syncPostedVoucherJournal(activeId);
       }
 
+      const feedbackMessage = getVoucherSaveFeedback(status, targetStatus);
+      if (redirectAfterDraftSave(activeId, feedbackMessage, targetStatus)) {
+        return activeId;
+      }
+
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      showSuccess(getVoucherSaveFeedback(status, targetStatus));
+      showSuccess(feedbackMessage);
+
+      if (initialMode === "edit") {
+        const details = await voucherApi.getVoucherById(activeId);
+        const { clearingAccountId: loadedClearingAccount, userLines: loadedLines } =
+          splitSettlementVoucherLines(
+            details.lines,
+            defaultClearingAccountFromSettings,
+          );
+        setClearingAccountId(loadedClearingAccount);
+        setUserLines(loadedLines);
+      }
+
       return activeId;
     } catch (error) {
       showFromError(error);
       return null;
+    } finally {
+      endSave();
     }
   };
 
