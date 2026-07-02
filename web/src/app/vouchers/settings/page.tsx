@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PermissionGate } from "@/components/permission-gate";
+import { useAuth } from "@/modules/auth/auth-context";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import { VoucherSettingsNav } from "@/modules/vouchers/components/voucher-settings-nav";
@@ -19,6 +21,8 @@ import { currencyApi } from "@/modules/currencies/services/currency-api";
 import type { CostCenter } from "@/modules/vouchers/types";
 
 export default function VoucherSettingsPage() {
+  const { hasPermission } = useAuth();
+  const formDisabled = !hasPermission("vouchers.settings");
   const [settings, setSettings] = useState<VoucherSettings>({
     auto_number_enabled: true,
     allow_manual_override: false,
@@ -168,6 +172,12 @@ export default function VoucherSettingsPage() {
 
       {!isLoading && (
         <>
+          {formDisabled && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              عرض فقط — التعديل يتطلب صلاحية «إعدادات السندات والترقيم».
+            </p>
+          )}
+
           <section className="rounded-xl border border-slate-200 bg-white p-4">
             <h2 className="mb-3 text-base font-semibold text-slate-900">
               الترقيم العام
@@ -177,6 +187,7 @@ export default function VoucherSettingsPage() {
                 <input
                   type="checkbox"
                   checked={settings.auto_number_enabled}
+                  disabled={formDisabled || isSaving}
                   onChange={(event) =>
                     setSettings((current) => ({
                       ...current,
@@ -190,6 +201,7 @@ export default function VoucherSettingsPage() {
                 <input
                   type="checkbox"
                   checked={settings.allow_manual_override}
+                  disabled={formDisabled || isSaving}
                   onChange={(event) =>
                     setSettings((current) => ({
                       ...current,
@@ -230,11 +242,13 @@ export default function VoucherSettingsPage() {
                     onChange={(id) =>
                       updateTypeDefault(row.voucher_type, "default_account_id", id || null)
                     }
+                    disabled={formDisabled || isSaving}
                   />
                   <label className="grid gap-1 text-sm">
                     <span className="font-medium text-slate-700">العملة الافتراضية</span>
                     <select
                       value={row.default_currency_id ?? ""}
+                      disabled={formDisabled || isSaving}
                       onChange={(event) =>
                         updateTypeDefault(
                           row.voucher_type,
@@ -262,6 +276,7 @@ export default function VoucherSettingsPage() {
                         id || null,
                       )
                     }
+                    disabled={formDisabled || isSaving}
                   />
                 </div>
               </article>
@@ -293,6 +308,7 @@ export default function VoucherSettingsPage() {
                     <span>البادئة</span>
                     <input
                       value={row.prefix}
+                      disabled={formDisabled || isSaving}
                       onChange={(event) =>
                         updateSequence(row.voucher_type, "prefix", event.target.value)
                       }
@@ -306,6 +322,7 @@ export default function VoucherSettingsPage() {
                       min={1}
                       max={8}
                       value={row.padding}
+                      disabled={formDisabled || isSaving}
                       onChange={(event) =>
                         updateSequence(
                           row.voucher_type,
@@ -320,6 +337,7 @@ export default function VoucherSettingsPage() {
                     <input
                       type="checkbox"
                       checked={row.include_year}
+                      disabled={formDisabled || isSaving}
                       onChange={(event) =>
                         updateSequence(
                           row.voucher_type,
@@ -340,14 +358,16 @@ export default function VoucherSettingsPage() {
           </section>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void onSave()}
-              disabled={isSaving}
-              className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              حفظ الإعدادات
-            </button>
+            <PermissionGate permission="vouchers.settings">
+              <button
+                type="button"
+                onClick={() => void onSave()}
+                disabled={isSaving}
+                className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                حفظ الإعدادات
+              </button>
+            </PermissionGate>
           </div>
 
           <p className="text-xs text-slate-500">

@@ -31,6 +31,7 @@ import {
   isSettlementModeAllowed,
   VOUCHER_TYPE_CONFIG,
 } from "@/modules/vouchers/utils/voucher-type-config";
+import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
 
 const DEFAULT_LINES: VoucherLine[] = [];
 const DEFAULT_ALLOCATIONS: VoucherAllocation[] = [];
@@ -79,8 +80,10 @@ export function VoucherForm({
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
 
-  const readOnly = status === "posted" || status === "cancelled";
   const isCreate = initialMode === "create" && !voucherId;
+  const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly } =
+    useVoucherFormPermissions(isCreate ? "create" : "edit", status);
+  const readOnly = formReadOnly;
   const voucherNoReadOnly =
     readOnly ||
     (autoNumberEnabled && !allowManualOverride && (Boolean(voucherId) || isCreate));
@@ -540,6 +543,7 @@ export function VoucherForm({
         lineCategories={lineCategories}
         onChange={setLines}
         readOnly={readOnly || isSaving}
+        allowLineDelete={canDeleteLine}
       />
 
       <VoucherAllocations
@@ -557,38 +561,46 @@ export function VoucherForm({
           <p className="font-mono">فرق: {totals.difference.toFixed(2)}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onSaveDraft}
-            disabled={readOnly || isSaving}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-          >
-            حفظ مسودة
-          </button>
-          <button
-            type="button"
-            onClick={onApprove}
-            disabled={readOnly || isSaving}
-            className="rounded-md border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 disabled:opacity-50"
-          >
-            اعتماد
-          </button>
-          <button
-            type="button"
-            onClick={onPost}
-            disabled={!canPost || isSaving}
-            className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            ترحيل
-          </button>
-          <button
-            type="button"
-            onClick={onReverse}
-            disabled={status !== "posted" || isSaving}
-            className="rounded-md border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
-          >
-            عكس
-          </button>
+          {canSave && (
+            <>
+              <button
+                type="button"
+                onClick={onSaveDraft}
+                disabled={isSaving}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+              >
+                حفظ مسودة
+              </button>
+              <button
+                type="button"
+                onClick={onApprove}
+                disabled={isSaving}
+                className="rounded-md border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 disabled:opacity-50"
+              >
+                اعتماد
+              </button>
+            </>
+          )}
+          {canPostPermission && (
+            <button
+              type="button"
+              onClick={onPost}
+              disabled={!canPost || isSaving}
+              className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              ترحيل
+            </button>
+          )}
+          {canPostPermission && (
+            <button
+              type="button"
+              onClick={onReverse}
+              disabled={status !== "posted" || isSaving}
+              className="rounded-md border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
+            >
+              عكس
+            </button>
+          )}
           <Link
             href="/vouchers"
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"

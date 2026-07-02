@@ -12,6 +12,7 @@ import {
 interface VoucherLineCategoriesSettingsProps {
   categories: VoucherLineCategory[];
   onChange: (categories: VoucherLineCategory[]) => void;
+  readOnly?: boolean;
 }
 
 const EMPTY_FORM: VoucherLineCategoryFormValues = {
@@ -141,6 +142,7 @@ function CategoryFormPanel({
 export function VoucherLineCategoriesSettings({
   categories,
   onChange,
+  readOnly = false,
 }: VoucherLineCategoriesSettingsProps) {
   const [addingFor, setAddingFor] = useState<VoucherType | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -262,14 +264,16 @@ export function VoucherLineCategoriesSettings({
               <h3 className="font-semibold text-slate-900">
                 {getVoucherTypeLabel(type)}
               </h3>
-              <button
-                type="button"
-                onClick={() => startAdd(type)}
-                disabled={isSaving || Boolean(editingId)}
-                className="rounded-md border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-800 disabled:opacity-50"
-              >
-                + إضافة نوع
-              </button>
+              {readOnly ? null : (
+                <button
+                  type="button"
+                  onClick={() => startAdd(type)}
+                  disabled={isSaving || Boolean(editingId)}
+                  className="rounded-md border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-800 disabled:opacity-50"
+                >
+                  + إضافة نوع
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -312,24 +316,26 @@ export function VoucherLineCategoriesSettings({
                         )}
                       </td>
                       <td className="border border-slate-100 p-2">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => startEdit(row)}
-                            disabled={isSaving || Boolean(addingFor)}
-                            className="rounded-md border border-blue-300 px-2 py-1 text-xs text-blue-800 disabled:opacity-50"
-                          >
-                            تعديل
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void toggleActive(row)}
-                            disabled={isSaving || editingId === row.id}
-                            className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-800 disabled:opacity-50"
-                          >
-                            {row.is_active ? "تعطيل" : "تفعيل"}
-                          </button>
-                        </div>
+                        {!readOnly && (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => startEdit(row)}
+                              disabled={isSaving || Boolean(addingFor)}
+                              className="rounded-md border border-blue-300 px-2 py-1 text-xs text-blue-800 disabled:opacity-50"
+                            >
+                              تعديل
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void toggleActive(row)}
+                              disabled={isSaving || editingId === row.id}
+                              className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-800 disabled:opacity-50"
+                            >
+                              {row.is_active ? "تعطيل" : "تفعيل"}
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -347,7 +353,7 @@ export function VoucherLineCategoriesSettings({
               </table>
             </div>
 
-            {addingFor === type && (
+            {!readOnly && addingFor === type && (
               <CategoryFormPanel
                 title="إضافة نوع جديد"
                 form={form}
@@ -359,7 +365,7 @@ export function VoucherLineCategoriesSettings({
               />
             )}
 
-            {editingCategory?.voucher_type === type && (
+            {!readOnly && editingCategory?.voucher_type === type && (
               <CategoryFormPanel
                 title={`تعديل: ${editingCategory.name_ar}`}
                 form={form}

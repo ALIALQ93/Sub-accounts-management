@@ -12,6 +12,7 @@ interface PartySettingsPanelProps {
   accounts: Account[];
   settings: PartySettings | null;
   onSettingsChange: (settings: PartySettings) => void;
+  readOnly?: boolean;
 }
 
 const LABELS: Record<
@@ -37,6 +38,7 @@ export function PartySettingsPanel({
   accounts,
   settings,
   onSettingsChange,
+  readOnly = false,
 }: PartySettingsPanelProps) {
   const labels = LABELS[kind];
   const parentOptions = getPartyParentAccountOptions(accounts);
@@ -81,15 +83,18 @@ export function PartySettingsPanel({
           value={parentAccountId}
           onChange={(id) => setParentAccountId(id)}
           placeholder="ابحث عن حساب أب (مجمع / غير مرحّل)..."
+          disabled={readOnly || isSaving}
         />
-        <button
-          type="button"
-          onClick={() => void onSave()}
-          disabled={isSaving}
-          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-        >
-          {isSaving ? "جاري الحفظ..." : "حفظ الإعدادات"}
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => void onSave()}
+            disabled={isSaving}
+            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {isSaving ? "جاري الحفظ..." : "حفظ الإعدادات"}
+          </button>
+        )}
       </div>
 
       {error && (

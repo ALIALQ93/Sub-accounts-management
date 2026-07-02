@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/modules/auth/auth-context";
 import { VoucherLineCategoriesSettings } from "@/modules/vouchers/components/voucher-line-categories-settings";
 import { VoucherSettingsNav } from "@/modules/vouchers/components/voucher-settings-nav";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
@@ -8,6 +9,8 @@ import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line
 import type { VoucherLineCategory } from "@/modules/vouchers/types";
 
 export default function VoucherLineCategoriesPage() {
+  const { hasPermission } = useAuth();
+  const readOnly = !hasPermission("vouchers.settings");
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [feedback, setFeedback] = useState("");
@@ -53,10 +56,18 @@ export default function VoucherLineCategoriesPage() {
       )}
 
       {!isLoading && (
-        <VoucherLineCategoriesSettings
-          categories={lineCategories}
-          onChange={setLineCategories}
-        />
+        <>
+          {readOnly && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              عرض فقط — التعديل يتطلب صلاحية «إعدادات السندات والترقيم».
+            </p>
+          )}
+          <VoucherLineCategoriesSettings
+            categories={lineCategories}
+            onChange={setLineCategories}
+            readOnly={readOnly}
+          />
+        </>
       )}
 
       {feedback && (

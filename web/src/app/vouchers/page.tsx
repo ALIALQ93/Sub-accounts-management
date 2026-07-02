@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PermissionGate } from "@/components/permission-gate";
 import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
@@ -72,15 +73,16 @@ export default function VouchersListPage() {
         {VOUCHER_TYPES.map((type) => {
           const config = VOUCHER_TYPE_CONFIG[type];
           return (
-            <Link
-              key={type}
-              href={config.newRoute}
-              className={`rounded-xl border p-4 transition hover:shadow-md ${config.colorClass}`}
-            >
-              <p className="font-semibold">{config.labelAr}</p>
-              <p className="mt-1 text-xs opacity-90">{config.descriptionAr}</p>
-              <p className="mt-3 text-sm font-medium">+ إنشاء جديد</p>
-            </Link>
+            <PermissionGate key={type} permission="vouchers.create">
+              <Link
+                href={config.newRoute}
+                className={`block rounded-xl border p-4 transition hover:shadow-md ${config.colorClass}`}
+              >
+                <p className="font-semibold">{config.labelAr}</p>
+                <p className="mt-1 text-xs opacity-90">{config.descriptionAr}</p>
+                <p className="mt-3 text-sm font-medium">+ إنشاء جديد</p>
+              </Link>
+            </PermissionGate>
           );
         })}
       </section>

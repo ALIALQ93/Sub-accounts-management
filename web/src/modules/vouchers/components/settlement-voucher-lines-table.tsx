@@ -24,6 +24,7 @@ interface SettlementVoucherLinesTableProps {
   voucherCurrencyId: string;
   amountStep: string;
   readOnly: boolean;
+  allowLineDelete?: boolean;
   onChange: (lines: VoucherLine[]) => void;
 }
 
@@ -56,6 +57,7 @@ export function SettlementVoucherLinesTable({
   voucherCurrencyId,
   amountStep,
   readOnly,
+  allowLineDelete = true,
   onChange,
 }: SettlementVoucherLinesTableProps) {
   const selectedCurrency = useMemo(
@@ -228,7 +230,7 @@ export function SettlementVoucherLinesTable({
                   <button
                     type="button"
                     onClick={() => removeLine(line.id)}
-                    disabled={readOnly}
+                    disabled={readOnly || !allowLineDelete}
                     className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
                   >
                     حذف

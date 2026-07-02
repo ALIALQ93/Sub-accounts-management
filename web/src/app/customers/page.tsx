@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PermissionGate } from "@/components/permission-gate";
 import { OpenInNewTabLink } from "@/components/open-in-new-tab-link";
+import { useAuth } from "@/modules/auth/auth-context";
 import { PartyFormModal } from "@/modules/parties/components/party-form-modal";
 import { PartySettingsPanel } from "@/modules/parties/components/party-settings-panel";
 import { partyApi } from "@/modules/parties/services/party-api";
@@ -11,6 +13,8 @@ import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { Account, Customer } from "@/modules/vouchers/types";
 
 export default function CustomersPage() {
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission("customers.edit");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [partySettings, setPartySettings] = useState<PartySettings | null>(null);
@@ -136,13 +140,15 @@ export default function CustomersPage() {
             إدارة العملاء — يُنشأ حساب ذمم مدينة فرعي تلقائياً باسم كل عميل.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          + إضافة عميل
-        </button>
+        <PermissionGate permission="customers.create">
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            + إضافة عميل
+          </button>
+        </PermissionGate>
       </section>
 
       {!isLoading && (
@@ -151,6 +157,7 @@ export default function CustomersPage() {
           accounts={accounts}
           settings={partySettings}
           onSettingsChange={setPartySettings}
+          readOnly={!canEdit}
         />
       )}
 
@@ -238,22 +245,26 @@ export default function CustomersPage() {
                       </td>
                       <td className="border border-slate-100 p-2">
                         <div className="flex flex-wrap gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(customer)}
-                            disabled={isSaving}
-                            className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
-                          >
-                            تعديل
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void toggleActive(customer)}
-                            disabled={isSaving}
-                            className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
-                          >
-                            {customer.is_active ? "تعطيل" : "تفعيل"}
-                          </button>
+                          {canEdit && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(customer)}
+                                disabled={isSaving}
+                                className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                              >
+                                تعديل
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void toggleActive(customer)}
+                                disabled={isSaving}
+                                className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                              >
+                                {customer.is_active ? "تعطيل" : "تفعيل"}
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

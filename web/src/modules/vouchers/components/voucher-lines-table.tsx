@@ -18,6 +18,7 @@ interface VoucherLinesTableProps {
   lineCategories?: VoucherLineCategory[];
   defaultCostCenterId?: string;
   readOnly: boolean;
+  allowLineDelete?: boolean;
   onChange: (lines: VoucherLine[]) => void;
 }
 
@@ -41,6 +42,7 @@ export function VoucherLinesTable({
   lineCategories = [],
   defaultCostCenterId = "",
   readOnly,
+  allowLineDelete = true,
   onChange,
 }: VoucherLinesTableProps) {
   const updateLine = (id: string, patch: Partial<VoucherLine>) => {
@@ -187,7 +189,7 @@ export function VoucherLinesTable({
                   <button
                     type="button"
                     onClick={() => removeLine(line.id)}
-                    disabled={readOnly}
+                    disabled={readOnly || !allowLineDelete}
                     className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
                   >
                     حذف

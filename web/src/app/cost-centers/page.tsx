@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PermissionGate } from "@/components/permission-gate";
+import { useAuth } from "@/modules/auth/auth-context";
 import { CostCenterFormModal } from "@/modules/cost-centers/components/cost-center-form-modal";
 import {
   costCenterApi,
@@ -9,6 +11,8 @@ import {
 import type { CostCenter } from "@/modules/vouchers/types";
 
 export default function CostCentersPage() {
+  const { hasPermission } = useAuth();
+  const canEdit = hasPermission("cost_centers.edit");
   const [centers, setCenters] = useState<CostCenter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -130,13 +134,15 @@ export default function CostCentersPage() {
             تعريف مراكز الكلفة لاستخدامها في السندات والتقارير.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          + إضافة مركز كلفة
-        </button>
+        <PermissionGate permission="cost_centers.create">
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            + إضافة مركز كلفة
+          </button>
+        </PermissionGate>
       </section>
 
       {loadError && (
@@ -196,22 +202,26 @@ export default function CostCentersPage() {
                     </td>
                     <td className="border border-slate-100 p-2">
                       <div className="flex flex-wrap gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(center)}
-                          disabled={isSaving}
-                          className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
-                        >
-                          تعديل
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void toggleActive(center)}
-                          disabled={isSaving}
-                          className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
-                        >
-                          {center.is_active ? "تعطيل" : "تفعيل"}
-                        </button>
+                        {canEdit && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(center)}
+                              disabled={isSaving}
+                              className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                            >
+                              تعديل
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void toggleActive(center)}
+                              disabled={isSaving}
+                              className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                            >
+                              {center.is_active ? "تعطيل" : "تفعيل"}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

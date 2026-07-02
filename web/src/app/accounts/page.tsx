@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { PermissionGate } from "@/components/permission-gate";
+import { useAuth } from "@/modules/auth/auth-context";
 import { AccountCardModal } from "@/modules/accounts/components/account-card-modal";
 import { AccountEditModal } from "@/modules/accounts/components/account-edit-modal";
 import type { AccountEditValues } from "@/modules/accounts/components/account-edit-modal";
@@ -26,6 +28,9 @@ import type { SupabaseConnectionStatus } from "@/modules/vouchers/services/vouch
 import type { Account } from "@/modules/vouchers/types";
 
 export default function AccountsPage() {
+  const { hasPermission } = useAuth();
+  const canCreateAccount = hasPermission("accounts.create");
+  const canEditAccount = hasPermission("accounts.edit");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -309,25 +314,29 @@ export default function AccountsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => openAddModal()}
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            + إضافة حساب
-          </button>
+          <PermissionGate permission="accounts.create">
+            <button
+              type="button"
+              onClick={() => openAddModal()}
+              className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              + إضافة حساب
+            </button>
+          </PermissionGate>
           <Link
             href="/currencies"
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
           >
             العملات
           </Link>
-          <Link
-            href="/vouchers/new"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-          >
-            إنشاء سند
-          </Link>
+          <PermissionGate permission="vouchers.create">
+            <Link
+              href="/vouchers/new"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+            >
+              إنشاء سند
+            </Link>
+          </PermissionGate>
         </div>
       </section>
 
@@ -499,6 +508,9 @@ export default function AccountsPage() {
               onViewCard={openCardModal}
               onToggleActive={toggleActive}
               onAddChild={openAddChild}
+              canAddChild={canCreateAccount}
+              canEdit={canEditAccount}
+              canToggleActive={canEditAccount}
             />
           </div>
         )}

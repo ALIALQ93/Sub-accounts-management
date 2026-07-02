@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/modules/auth/auth-context";
 
 const NAV_ITEMS = [
   { href: "/vouchers", label: "كل السندات", match: (path: string) => path === "/vouchers" },
@@ -23,16 +24,22 @@ const NAV_ITEMS = [
   {
     href: "/vouchers/settings",
     label: "إعدادات",
+    permission: "vouchers.settings" as const,
     match: (path: string) => path.startsWith("/vouchers/settings"),
   },
 ] as const;
 
 export function VouchersNav() {
   const pathname = usePathname();
+  const { hasPermission } = useAuth();
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !("permission" in item) || hasPermission(item.permission),
+  );
 
   return (
     <nav className="flex flex-wrap gap-2 border-b border-slate-200 pb-3">
-      {NAV_ITEMS.map((item) => {
+      {visibleItems.map((item) => {
         const active = item.match(pathname);
         return (
           <Link

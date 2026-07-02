@@ -21,6 +21,9 @@ interface AccountTreeTableProps {
   onViewCard: (node: AccountTreeNode) => void;
   onToggleActive: (node: AccountTreeNode) => void;
   onAddChild: (node: AccountTreeNode) => void;
+  canAddChild?: boolean;
+  canEdit?: boolean;
+  canToggleActive?: boolean;
 }
 
 export function AccountTreeTable({
@@ -34,6 +37,9 @@ export function AccountTreeTable({
   onViewCard,
   onToggleActive,
   onAddChild,
+  canAddChild = true,
+  canEdit = true,
+  canToggleActive = true,
 }: AccountTreeTableProps) {
   if (rows.length === 0) {
     return (
@@ -170,19 +176,23 @@ export function AccountTreeTable({
                 <td className={TD}>
                   <div className="flex flex-wrap gap-1">
                     <ActionButton label="بطاقة" onClick={() => onViewCard(node)} />
-                    <ActionButton
-                      label="+ فرع"
-                      tone="emerald"
-                      disabled={isSaving || !node.is_active}
-                      onClick={() => onAddChild(node)}
-                    />
-                    <ActionButton
-                      label="تعديل"
-                      tone="blue"
-                      disabled={isSaving}
-                      onClick={() => onEdit(node)}
-                    />
-                    {!rootAccount && (
+                    {canAddChild && (
+                      <ActionButton
+                        label="+ فرع"
+                        tone="emerald"
+                        disabled={isSaving || !node.is_active}
+                        onClick={() => onAddChild(node)}
+                      />
+                    )}
+                    {canEdit && (
+                      <ActionButton
+                        label="تعديل"
+                        tone="blue"
+                        disabled={isSaving}
+                        onClick={() => onEdit(node)}
+                      />
+                    )}
+                    {canToggleActive && !rootAccount && (
                       <ActionButton
                         label={node.is_active ? "تعطيل" : "تفعيل"}
                         tone="amber"

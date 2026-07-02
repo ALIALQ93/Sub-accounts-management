@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/modules/auth/auth-context";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import type { Currency, CurrencyRateHistoryEntry } from "@/modules/currencies/types";
 import { getCurrencyRateChangeSourceLabel } from "@/modules/currencies/utils/currency-rate-history-labels";
 
 export default function CurrenciesPage() {
+  const { hasPermission } = useAuth();
+  const canEditCurrency = hasPermission("currencies.edit");
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [rateHistory, setRateHistory] = useState<CurrencyRateHistoryEntry[]>([]);
   const [historyFilterCurrencyId, setHistoryFilterCurrencyId] = useState("");
@@ -229,6 +232,7 @@ export default function CurrenciesPage() {
                     defaultEffectiveFrom={today}
                     isSaving={isSaving}
                     baseCurrencyLocked={baseCurrencyLocked}
+                    canEdit={canEditCurrency}
                     onToggleActive={toggleActive}
                     onSaveRate={saveRate}
                     onSetAsBase={setAsBase}
@@ -324,6 +328,7 @@ function CurrencyRow({
   defaultEffectiveFrom,
   isSaving,
   baseCurrencyLocked,
+  canEdit,
   onToggleActive,
   onSaveRate,
   onSetAsBase,
@@ -332,6 +337,7 @@ function CurrencyRow({
   defaultEffectiveFrom: string;
   isSaving: boolean;
   baseCurrencyLocked: boolean;
+  canEdit: boolean;
   onToggleActive: (currency: Currency) => void;
   onSaveRate: (currency: Currency, rate: string, effectiveFrom: string) => void;
   onSetAsBase: (currency: Currency) => void;
@@ -356,7 +362,8 @@ function CurrencyRow({
           <input
             value={rate}
             onChange={(event) => setRate(event.target.value)}
-            className="w-28 rounded-md border border-slate-300 px-2 py-1 font-mono text-sm"
+            disabled={!canEdit || isSaving}
+            className="w-28 rounded-md border border-slate-300 px-2 py-1 font-mono text-sm disabled:bg-slate-50"
             dir="ltr"
           />
         )}
@@ -369,7 +376,8 @@ function CurrencyRow({
             type="date"
             value={effectiveFrom}
             onChange={(event) => setEffectiveFrom(event.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1 text-sm"
+            disabled={!canEdit || isSaving}
+            className="rounded-md border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
           />
         )}
       </td>
@@ -389,38 +397,42 @@ function CurrencyRow({
         )}
       </td>
       <td className="border-b border-slate-100 p-2">
-        <div className="flex flex-wrap gap-2">
-          {!currency.is_base && !baseCurrencyLocked && (
-            <button
-              type="button"
-              onClick={() => onSetAsBase(currency)}
-              disabled={isSaving}
-              className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-800 disabled:opacity-50"
-            >
-              تعيين كأساس
-            </button>
-          )}
-          {!currency.is_base && (
-            <>
+        {canEdit ? (
+          <div className="flex flex-wrap gap-2">
+            {!currency.is_base && !baseCurrencyLocked && (
               <button
                 type="button"
-                onClick={() => onSaveRate(currency, rate, effectiveFrom)}
+                onClick={() => onSetAsBase(currency)}
                 disabled={isSaving}
-                className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-800 disabled:opacity-50"
               >
-                حفظ السعر
+                تعيين كأساس
               </button>
-              <button
-                type="button"
-                onClick={() => onToggleActive(currency)}
-                disabled={isSaving}
-                className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
-              >
-                {currency.is_active ? "تعطيل" : "تفعيل"}
-              </button>
-            </>
-          )}
-        </div>
+            )}
+            {!currency.is_base && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSaveRate(currency, rate, effectiveFrom)}
+                  disabled={isSaving}
+                  className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                >
+                  حفظ السعر
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleActive(currency)}
+                  disabled={isSaving}
+                  className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                >
+                  {currency.is_active ? "تعطيل" : "تفعيل"}
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-slate-500">عرض فقط</span>
+        )}
       </td>
     </tr>
   );
