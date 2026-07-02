@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { JournalEntryDetails } from "@/modules/vouchers/types";
 
@@ -85,14 +85,12 @@ export default function JournalDetailPage({ params }: JournalDetailPageProps) {
             </p>
             {details.header.source_type === "voucher" &&
               details.header.source_id && (
-                <p className="md:col-span-2">
-                  <Link
+                <div className="md:col-span-2">
+                  <DocumentActionLinks
                     href={`/vouchers/${details.header.source_id}`}
-                    className="inline-flex rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700"
-                  >
-                    فتح السند المصدر
-                  </Link>
-                </p>
+                    openLabel="فتح السند المصدر"
+                  />
+                </div>
               )}
           </div>
         )}

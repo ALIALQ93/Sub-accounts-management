@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { OpenInNewTabLink } from "@/components/open-in-new-tab-link";
 import type { AccountStatementResult } from "@/modules/accounts/types";
 import { formatCurrencyAmount } from "@/modules/currencies/utils/convert-amount";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
@@ -138,21 +139,39 @@ export function AccountStatementSection({
                     >
                       <td className={TD}>{line.entry_date}</td>
                       <td className={TD}>
-                        <Link
-                          href={`/journals/${line.journal_entry_id}`}
-                          className="font-mono text-xs font-medium text-blue-900 hover:underline"
-                        >
-                          {line.entry_no}
-                        </Link>
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          <Link
+                            href={`/journals/${line.journal_entry_id}`}
+                            className="font-mono text-xs font-medium text-blue-900 hover:underline"
+                          >
+                            {line.entry_no}
+                          </Link>
+                          <OpenInNewTabLink
+                            href={`/journals/${line.journal_entry_id}`}
+                            className="text-xs text-slate-500 hover:text-blue-900"
+                            title="فتح القيد في تبويب جديد"
+                          >
+                            ↗
+                          </OpenInNewTabLink>
+                        </span>
                       </td>
                       <td className={TD}>
                         {line.source_type === "voucher" && line.source_id ? (
-                          <Link
-                            href={`/vouchers/${line.source_id}`}
-                            className="font-mono text-xs font-medium text-blue-900 hover:underline"
-                          >
-                            {line.voucher_no ?? "سند"}
-                          </Link>
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            <Link
+                              href={`/vouchers/${line.source_id}`}
+                              className="font-mono text-xs font-medium text-blue-900 hover:underline"
+                            >
+                              {line.voucher_no ?? "سند"}
+                            </Link>
+                            <OpenInNewTabLink
+                              href={`/vouchers/${line.source_id}`}
+                              className="text-xs text-slate-500 hover:text-blue-900"
+                              title="فتح السند في تبويب جديد"
+                            >
+                              ↗
+                            </OpenInNewTabLink>
+                          </span>
                         ) : (
                           <span className="text-xs text-slate-500">—</span>
                         )}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
@@ -137,12 +138,7 @@ export default function VouchersListPage() {
                       <StatusChip status={item.status} />
                     </td>
                     <td className="border border-slate-100 p-2">
-                      <Link
-                        href={`/vouchers/${item.id}`}
-                        className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700"
-                      >
-                        فتح
-                      </Link>
+                      <DocumentActionLinks href={`/vouchers/${item.id}`} />
                     </td>
                   </tr>
                 ))}

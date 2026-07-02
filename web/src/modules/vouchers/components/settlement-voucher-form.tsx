@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import {
   validateLineCategory,
@@ -634,12 +635,10 @@ export function SettlementVoucherForm({
             قائمة السندات
           </Link>
           {journalEntryId && (
-            <Link
+            <DocumentActionLinks
               href={`/journals/${journalEntryId}`}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm"
-            >
-              فتح القيد
-            </Link>
+              openLabel="فتح القيد"
+            />
           )}
         </div>
         {feedback && (

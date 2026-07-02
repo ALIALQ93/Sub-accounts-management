@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { JournalEntryListItem } from "@/modules/vouchers/types";
 
@@ -132,12 +132,10 @@ export default function JournalsPage() {
                       {entry.description ?? "-"}
                     </td>
                     <td className="border-b border-slate-100 p-2">
-                      <Link
+                      <DocumentActionLinks
                         href={`/journals/${entry.id}`}
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700"
-                      >
-                        تفاصيل
-                      </Link>
+                        openLabel="تفاصيل"
+                      />
                     </td>
                   </tr>
                 ))}

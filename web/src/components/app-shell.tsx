@@ -18,7 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/vendors", label: "الموردين" },
   { href: "/open-movements", label: "الحركات المفتوحة" },
   { href: "/journals", label: "قيود اليومية" },
-  { href: "/reports/trial-balance", label: "ميزان المراجعة" },
+  { href: "/reports", label: "التقارير" },
 ];
 
 function isActive(pathname: string, href: string): boolean {

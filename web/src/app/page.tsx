@@ -170,10 +170,10 @@ export default function Home() {
             قيود اليومية
           </Link>
           <Link
-            href="/reports/trial-balance"
+            href="/reports"
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
           >
-            ميزان المراجعة
+            التقارير
           </Link>
         </div>
       </section>

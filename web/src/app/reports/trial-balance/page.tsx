@@ -1,19 +1,46 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  buildUrlWithQuery,
+  OpenInNewTabLink,
+} from "@/components/open-in-new-tab-link";
+import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { TrialBalanceRow } from "@/modules/vouchers/types";
 
+function readInitialParams() {
+  if (typeof window === "undefined") {
+    return { from: "", to: "", q: "" };
+  }
+  const params = new URLSearchParams(window.location.search);
+  return {
+    from: params.get("from") ?? "",
+    to: params.get("to") ?? "",
+    q: params.get("q") ?? "",
+  };
+}
+
 export default function TrialBalancePage() {
+  const initial = readInitialParams();
   const [rows, setRows] = useState<TrialBalanceRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [query, setQuery] = useState(initial.q);
+  const [fromDate, setFromDate] = useState(initial.from);
+  const [toDate, setToDate] = useState(initial.to);
 
   const fetchRows = async (from?: string, to?: string) => {
     return voucherApi.listTrialBalanceRows(from, to);
+  };
+
+  const syncUrl = (from: string, to: string, q: string) => {
+    const nextUrl = buildUrlWithQuery("/reports/trial-balance", {
+      from: from || undefined,
+      to: to || undefined,
+      q: q || undefined,
+    });
+    window.history.replaceState(null, "", nextUrl);
   };
 
   const loadRows = async (from?: string, to?: string) => {
@@ -34,7 +61,7 @@ export default function TrialBalancePage() {
 
     const loadInitial = async () => {
       try {
-        const data = await fetchRows();
+        const data = await fetchRows(initial.from || undefined, initial.to || undefined);
         if (!cancelled) setRows(data);
       } catch (err) {
         if (!cancelled) {
@@ -49,17 +76,30 @@ export default function TrialBalancePage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const applyDateFilter = async () => {
+    syncUrl(fromDate, toDate, query);
     await loadRows(fromDate || undefined, toDate || undefined);
   };
 
   const resetDateFilter = async () => {
     setFromDate("");
     setToDate("");
+    syncUrl("", "", query);
     await loadRows();
   };
+
+  const shareHref = useMemo(
+    () =>
+      buildUrlWithQuery("/reports/trial-balance", {
+        from: fromDate || undefined,
+        to: toDate || undefined,
+        q: query || undefined,
+      }),
+    [fromDate, toDate, query],
+  );
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -85,14 +125,32 @@ export default function TrialBalancePage() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl p-6">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">ميزان المراجعة</h1>
+    <main className="mx-auto w-full max-w-6xl p-4 md:p-6">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">ميزان المراجعة</h1>
+          <p className="mt-1 text-xs text-slate-600">
+            طبّق فترة ثم افتح ↗ في تبويب جديد لمقارنة فترة أخرى.
+          </p>
+        </div>
+        <OpenInNewTabLink
+          href={shareHref}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          ↗ نسخة في تبويب جديد
+        </OpenInNewTabLink>
+      </div>
 
-      <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4">
+      <ReportsNav active="trial-balance" />
+
+      <section className="mb-4 mt-4 rounded-lg border border-slate-200 bg-white p-4">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              syncUrl(fromDate, toDate, event.target.value);
+            }}
             placeholder="بحث بكود الحساب أو الاسم"
             className="rounded-md border border-slate-300 px-3 py-2 text-sm lg:col-span-2"
           />
