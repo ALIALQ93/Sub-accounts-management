@@ -5,6 +5,7 @@
 -- =============================================================================
 
 alter table public.currencies enable row level security;
+alter table public.currency_rate_history enable row level security;
 alter table public.accounts enable row level security;
 alter table public.cost_centers enable row level security;
 alter table public.journal_entries enable row level security;
@@ -29,6 +30,14 @@ create policy "currencies_insert_all" on public.currencies
 drop policy if exists "currencies_update_all" on public.currencies;
 create policy "currencies_update_all" on public.currencies
   for update to anon, authenticated using (true) with check (true);
+
+-- currency_rate_history (قراءة فقط من الواجهة — الإدراج عبر دوال SQL)
+drop policy if exists "currency_rate_history_select_all" on public.currency_rate_history;
+create policy "currency_rate_history_select_all" on public.currency_rate_history
+  for select to anon, authenticated using (true);
+drop policy if exists "currency_rate_history_insert_all" on public.currency_rate_history;
+create policy "currency_rate_history_insert_all" on public.currency_rate_history
+  for insert to anon, authenticated with check (true);
 
 -- accounts
 drop policy if exists "accounts_select_all" on public.accounts;

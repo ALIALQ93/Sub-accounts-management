@@ -20,6 +20,7 @@ drop table if exists public.customers cascade;
 drop table if exists public.vendors cascade;
 drop table if exists public.accounts cascade;
 drop table if exists public.cost_centers cascade;
+drop table if exists public.currency_rate_history cascade;
 drop table if exists public.currencies cascade;
 
 drop function if exists public.peek_voucher_no(varchar) cascade;
@@ -40,3 +41,10 @@ drop function if exists public.vouchers_before_update_handle_posting() cascade;
 drop function if exists public.vouchers_prevent_delete_when_posted() cascade;
 drop function if exists public.currencies_validate_base_rate() cascade;
 drop function if exists public.currencies_prevent_deactivate_base() cascade;
+drop function if exists public.currencies_prevent_base_change() cascade;
+drop function if exists public.has_accounting_activity() cascade;
+drop function if exists public.set_base_currency(uuid) cascade;
+drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, varchar, date, text) cascade;
+drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
+drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
+drop function if exists public.currencies_prevent_direct_rate_change() cascade;

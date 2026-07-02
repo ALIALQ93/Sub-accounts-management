@@ -15,6 +15,21 @@ export interface CurrencyFormValues {
   is_active: boolean;
 }
 
+export type CurrencyRateChangeSource = "manual" | "base_change" | "initial";
+
+export interface CurrencyRateHistoryEntry {
+  id: string;
+  currency_id: string;
+  currency_code: string;
+  currency_name_ar: string;
+  exchange_rate: number;
+  previous_rate: number | null;
+  change_source: CurrencyRateChangeSource;
+  effective_from: string;
+  note: string | null;
+  created_at: string;
+}
+
 export interface AccountDirectBalance {
   account_id: string;
   debit: number;

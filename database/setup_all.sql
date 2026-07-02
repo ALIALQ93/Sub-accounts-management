@@ -27,6 +27,7 @@ drop table if exists public.customers cascade;
 drop table if exists public.vendors cascade;
 drop table if exists public.accounts cascade;
 drop table if exists public.cost_centers cascade;
+drop table if exists public.currency_rate_history cascade;
 drop table if exists public.currencies cascade;
 
 drop function if exists public.peek_voucher_no(varchar) cascade;
@@ -47,6 +48,13 @@ drop function if exists public.vouchers_before_update_handle_posting() cascade;
 drop function if exists public.vouchers_prevent_delete_when_posted() cascade;
 drop function if exists public.currencies_validate_base_rate() cascade;
 drop function if exists public.currencies_prevent_deactivate_base() cascade;
+drop function if exists public.currencies_prevent_base_change() cascade;
+drop function if exists public.has_accounting_activity() cascade;
+drop function if exists public.set_base_currency(uuid) cascade;
+drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, varchar, date, text) cascade;
+drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
+drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
+drop function if exists public.currencies_prevent_direct_rate_change() cascade;
 
 
 -- =============================================================================
@@ -82,6 +90,21 @@ create unique index idx_currencies_single_base
   where is_base = true;
 
 create index idx_currencies_active on public.currencies(is_active);
+
+create table public.currency_rate_history (
+  id uuid primary key default gen_random_uuid(),
+  currency_id uuid not null references public.currencies(id) on delete cascade,
+  exchange_rate numeric(18, 6) not null check (exchange_rate > 0),
+  previous_rate numeric(18, 6) null check (previous_rate is null or previous_rate > 0),
+  change_source varchar(30) not null default 'manual'
+    check (change_source in ('manual', 'base_change', 'initial')),
+  effective_from date not null default current_date,
+  note text null,
+  created_at timestamptz not null default now()
+);
+
+create index idx_currency_rate_history_currency_effective
+  on public.currency_rate_history(currency_id, effective_from desc, created_at desc);
 
 create table public.accounts (
   id uuid primary key default gen_random_uuid(),
@@ -551,6 +574,230 @@ begin
 end;
 $$;
 
+create or replace function public.has_accounting_activity()
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1
+    from public.journal_entries je
+    where je.status = 'posted'
+  )
+  or exists (
+    select 1
+    from public.vouchers v
+    where v.status = 'posted'
+  );
+$$;
+
+create or replace function public.currencies_prevent_base_change()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.is_base is distinct from new.is_base then
+    if coalesce(current_setting('app.allow_base_currency_change', true), '') <> 'on' then
+      raise exception 'Base currency can only be changed via set_base_currency().';
+    end if;
+
+    if public.has_accounting_activity() then
+      raise exception 'Cannot change base currency after the first posted accounting transaction.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.set_base_currency(p_currency_id uuid)
+returns void
+language plpgsql
+as $$
+declare
+  v_new public.currencies%rowtype;
+  v_pivot_rate numeric(18, 6);
+begin
+  if public.has_accounting_activity() then
+    raise exception 'Cannot change base currency after the first posted accounting transaction.';
+  end if;
+
+  select * into v_new
+  from public.currencies
+  where id = p_currency_id;
+
+  if not found then
+    raise exception 'Currency not found.';
+  end if;
+
+  if v_new.is_base then
+    return;
+  end if;
+
+  v_pivot_rate := v_new.exchange_rate;
+  if v_pivot_rate <= 0 then
+    raise exception 'Invalid exchange rate on target currency.';
+  end if;
+
+  perform set_config('app.allow_base_currency_change', 'on', true);
+
+  insert into public.currency_rate_history (
+    currency_id,
+    exchange_rate,
+    previous_rate,
+    change_source,
+    effective_from,
+    note
+  )
+  select
+    c.id,
+    case
+      when c.id = p_currency_id then 1
+      else round((c.exchange_rate / v_pivot_rate)::numeric, 6)
+    end,
+    c.exchange_rate,
+    'base_change',
+    current_date,
+    'تغيير العملة الأساسية إلى ' || v_new.code
+  from public.currencies c;
+
+  update public.currencies
+  set
+    is_base = (id = p_currency_id),
+    exchange_rate = case
+      when id = p_currency_id then 1
+      else round((exchange_rate / v_pivot_rate)::numeric, 6)
+    end,
+    is_active = case
+      when id = p_currency_id then true
+      else is_active
+    end,
+    updated_at = now();
+end;
+$$;
+
+create or replace function public.log_currency_rate_change(
+  p_currency_id uuid,
+  p_exchange_rate numeric,
+  p_previous_rate numeric,
+  p_change_source varchar,
+  p_effective_from date default current_date,
+  p_note text default null
+)
+returns void
+language plpgsql
+as $$
+begin
+  insert into public.currency_rate_history (
+    currency_id,
+    exchange_rate,
+    previous_rate,
+    change_source,
+    effective_from,
+    note
+  )
+  values (
+    p_currency_id,
+    p_exchange_rate,
+    p_previous_rate,
+    p_change_source,
+    p_effective_from,
+    p_note
+  );
+end;
+$$;
+
+create or replace function public.currencies_prevent_direct_rate_change()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.exchange_rate is distinct from new.exchange_rate then
+    if coalesce(current_setting('app.allow_currency_rate_change', true), '') <> 'on'
+       and coalesce(current_setting('app.allow_base_currency_change', true), '') <> 'on' then
+      raise exception 'Exchange rate must be changed via update_currency_exchange_rate().';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.update_currency_exchange_rate(
+  p_currency_id uuid,
+  p_exchange_rate numeric,
+  p_effective_from date default current_date,
+  p_note text default null
+)
+returns void
+language plpgsql
+as $$
+declare
+  v_currency public.currencies%rowtype;
+  v_old_rate numeric(18, 6);
+begin
+  if p_exchange_rate <= 0 then
+    raise exception 'Exchange rate must be greater than zero.';
+  end if;
+
+  select * into v_currency
+  from public.currencies
+  where id = p_currency_id;
+
+  if not found then
+    raise exception 'Currency not found.';
+  end if;
+
+  if v_currency.is_base then
+    raise exception 'Base currency exchange rate is always 1.';
+  end if;
+
+  v_old_rate := v_currency.exchange_rate;
+  if v_old_rate = p_exchange_rate then
+    return;
+  end if;
+
+  perform public.log_currency_rate_change(
+    p_currency_id,
+    p_exchange_rate,
+    v_old_rate,
+    'manual',
+    p_effective_from,
+    p_note
+  );
+
+  perform set_config('app.allow_currency_rate_change', 'on', true);
+
+  update public.currencies
+  set
+    exchange_rate = p_exchange_rate,
+    updated_at = now()
+  where id = p_currency_id;
+end;
+$$;
+
+create or replace function public.get_currency_rate_at_date(
+  p_currency_id uuid,
+  p_as_of date default current_date
+)
+returns numeric
+language sql
+stable
+as $$
+  select coalesce(
+    (
+      select h.exchange_rate
+      from public.currency_rate_history h
+      where h.currency_id = p_currency_id
+        and h.effective_from <= p_as_of
+      order by h.effective_from desc, h.created_at desc
+      limit 1
+    ),
+    (select c.exchange_rate from public.currencies c where c.id = p_currency_id),
+    1::numeric
+  );
+$$;
+
 -- ---------------------------------------------------------------------------
 -- قواعد العمل: القيود
 -- ---------------------------------------------------------------------------
@@ -908,6 +1155,14 @@ create trigger trg_currencies_prevent_deactivate_base
 before update on public.currencies
 for each row execute function public.currencies_prevent_deactivate_base();
 
+create trigger trg_currencies_prevent_base_change
+before update on public.currencies
+for each row execute function public.currencies_prevent_base_change();
+
+create trigger trg_currencies_prevent_direct_rate_change
+before update on public.currencies
+for each row execute function public.currencies_prevent_direct_rate_change();
+
 create trigger trg_accounts_updated_at
 before update on public.accounts
 for each row execute function public.set_updated_at();
@@ -1008,6 +1263,23 @@ values
   ('SYP', 'ليرة سورية', 'Syrian Pound', 'ل.س', 0.105, 0, false, false),
   ('AED', 'درهم إماراتي', 'UAE Dirham', 'د.إ', 357, 2, false, false);
 
+insert into public.currency_rate_history (
+  currency_id,
+  exchange_rate,
+  previous_rate,
+  change_source,
+  effective_from,
+  note
+)
+select
+  id,
+  exchange_rate,
+  null,
+  'initial',
+  current_date,
+  'سعر ابتدائي'
+from public.currencies;
+
 insert into public.accounts (code, name_ar, parent_id, currency_id, level, is_postable, is_active)
 values
   ('1', 'الموجودات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
@@ -1065,6 +1337,7 @@ values
 -- =============================================================================
 
 alter table public.currencies enable row level security;
+alter table public.currency_rate_history enable row level security;
 alter table public.accounts enable row level security;
 alter table public.cost_centers enable row level security;
 alter table public.journal_entries enable row level security;
@@ -1089,6 +1362,14 @@ create policy "currencies_insert_all" on public.currencies
 drop policy if exists "currencies_update_all" on public.currencies;
 create policy "currencies_update_all" on public.currencies
   for update to anon, authenticated using (true) with check (true);
+
+-- currency_rate_history
+drop policy if exists "currency_rate_history_select_all" on public.currency_rate_history;
+create policy "currency_rate_history_select_all" on public.currency_rate_history
+  for select to anon, authenticated using (true);
+drop policy if exists "currency_rate_history_insert_all" on public.currency_rate_history;
+create policy "currency_rate_history_insert_all" on public.currency_rate_history
+  for insert to anon, authenticated with check (true);
 
 -- accounts
 drop policy if exists "accounts_select_all" on public.accounts;
