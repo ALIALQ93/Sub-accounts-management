@@ -15,8 +15,8 @@ export interface FlatAccountRow {
 }
 
 export interface AccountFormValues {
-  code: string;
   name_ar: string;
+  name_en: string;
   parent_id: string;
   is_postable: boolean;
 }

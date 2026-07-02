@@ -15,6 +15,7 @@ import {
   getVisibleTree,
   isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
+import { generateAccountCode } from "@/modules/accounts/utils/generate-account-code";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { SupabaseConnectionStatus } from "@/modules/vouchers/services/voucher-api";
 import type { Account } from "@/modules/vouchers/types";
@@ -94,8 +95,8 @@ export default function AccountsPage() {
   const parentOptions = useMemo(() => getParentOptions(accounts), [accounts]);
 
   const onCreate = async (values: AccountFormValues) => {
-    if (!values.code.trim() || !values.name_ar.trim()) {
-      setFormError("يرجى تعبئة كود الحساب واسم الحساب.");
+    if (!values.name_ar.trim()) {
+      setFormError("يرجى تعبئة اسم الحساب بالعربية.");
       return;
     }
     if (!values.parent_id) {
@@ -103,12 +104,21 @@ export default function AccountsPage() {
       return;
     }
 
+    const parent = accounts.find((account) => account.id === values.parent_id);
+    if (!parent) {
+      setFormError("الحساب الأب غير موجود.");
+      return;
+    }
+
+    const code = generateAccountCode(parent, accounts);
+
     setIsSaving(true);
     setFormError("");
     try {
       await voucherApi.createAccount({
-        code: values.code.trim(),
+        code,
         name_ar: values.name_ar.trim(),
+        name_en: values.name_en.trim() || null,
         parent_id: values.parent_id,
         is_postable: values.is_postable,
         is_active: true,
@@ -153,7 +163,10 @@ export default function AccountsPage() {
     setIsSaving(true);
     setEditError("");
     try {
-      const payload: Partial<Account> = { name_ar: values.name_ar.trim() };
+      const payload: Partial<Account> = {
+        name_ar: values.name_ar.trim(),
+        name_en: values.name_en.trim() || null,
+      };
       if (
         editingAccount.childCount === 0 &&
         !isRootAccount(editingAccount)
@@ -322,6 +335,7 @@ export default function AccountsPage() {
         open={isAddModalOpen}
         formKey={formKey}
         parentAccounts={parentOptions}
+        allAccounts={accounts}
         presetParentId={presetParentId}
         isSaving={isSaving}
         error={formError}

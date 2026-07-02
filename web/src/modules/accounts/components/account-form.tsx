@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Account } from "@/modules/vouchers/types";
 import type { AccountFormValues } from "@/modules/accounts/types";
 import { isRootAccount } from "@/modules/accounts/utils/account-tree";
+import { previewAccountCode } from "@/modules/accounts/utils/generate-account-code";
 
 interface AccountFormProps {
   parentAccounts: Account[];
+  allAccounts: Account[];
   presetParentId?: string;
   isSaving: boolean;
   error: string;
@@ -15,14 +17,15 @@ interface AccountFormProps {
 }
 
 const EMPTY_FORM: AccountFormValues = {
-  code: "",
   name_ar: "",
+  name_en: "",
   parent_id: "",
   is_postable: true,
 };
 
 export function AccountForm({
   parentAccounts,
+  allAccounts,
   presetParentId,
   isSaving,
   error,
@@ -40,6 +43,14 @@ export function AccountForm({
     (account) => account.id === values.parent_id,
   );
 
+  const suggestedCode = useMemo(
+    () =>
+      values.parent_id
+        ? previewAccountCode(values.parent_id, allAccounts)
+        : "—",
+    [values.parent_id, allAccounts],
+  );
+
   const handleSubmit = async () => {
     await onSubmit(values);
   };
@@ -47,20 +58,15 @@ export function AccountForm({
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1 text-sm">
-          <span className="text-slate-700">كود الحساب *</span>
-          <input
-            value={values.code}
-            onChange={(event) =>
-              setValues((current) => ({ ...current, code: event.target.value }))
-            }
-            placeholder="مثال: 1-01-001"
-            className="rounded-md border border-slate-300 px-3 py-2 font-mono text-sm"
-          />
-        </label>
+        <div className="grid gap-1 text-sm sm:col-span-2">
+          <span className="text-slate-700">كود الحساب (تلقائي)</span>
+          <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-700">
+            {suggestedCode}
+          </p>
+        </div>
 
         <label className="grid gap-1 text-sm">
-          <span className="text-slate-700">اسم الحساب *</span>
+          <span className="text-slate-700">اسم الحساب بالعربية *</span>
           <input
             value={values.name_ar}
             onChange={(event) =>
@@ -71,6 +77,22 @@ export function AccountForm({
             }
             placeholder="اسم الحساب بالعربية"
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+
+        <label className="grid gap-1 text-sm">
+          <span className="text-slate-700">اسم الحساب بالإنجليزية</span>
+          <input
+            value={values.name_en}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                name_en: event.target.value,
+              }))
+            }
+            placeholder="Account name in English"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            dir="ltr"
           />
         </label>
 
@@ -150,7 +172,7 @@ export function AccountForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSaving}
+          disabled={isSaving || !parentSelected}
           className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
         >
           {isSaving ? "جاري الحفظ..." : "إضافة الحساب"}

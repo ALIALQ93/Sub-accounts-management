@@ -128,7 +128,8 @@ function nodeMatchesQuery(node: AccountTreeNode, query: string): boolean {
 
   return (
     node.code.toLowerCase().includes(normalized) ||
-    node.name_ar.toLowerCase().includes(normalized)
+    node.name_ar.toLowerCase().includes(normalized) ||
+    (node.name_en ?? "").toLowerCase().includes(normalized)
   );
 }
 

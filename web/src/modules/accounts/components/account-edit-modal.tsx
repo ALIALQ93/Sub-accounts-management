@@ -12,6 +12,7 @@ import type { Account } from "@/modules/vouchers/types";
 
 export interface AccountEditValues {
   name_ar: string;
+  name_en: string;
   is_postable: boolean;
 }
 
@@ -44,6 +45,7 @@ function AccountEditForm({
 }: AccountEditFormProps) {
   const [values, setValues] = useState<AccountEditValues>(() => ({
     name_ar: account.name_ar,
+    name_en: account.name_en ?? "",
     is_postable: account.is_postable,
   }));
 
@@ -68,7 +70,7 @@ function AccountEditForm({
         </label>
 
         <label className="grid gap-1 text-sm">
-          <span className="text-slate-700">اسم الحساب *</span>
+          <span className="text-slate-700">اسم الحساب بالعربية *</span>
           <input
             value={values.name_ar}
             onChange={(event) =>
@@ -78,6 +80,22 @@ function AccountEditForm({
               }))
             }
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+
+        <label className="grid gap-1 text-sm">
+          <span className="text-slate-700">اسم الحساب بالإنجليزية</span>
+          <input
+            value={values.name_en}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                name_en: event.target.value,
+              }))
+            }
+            placeholder="Account name in English"
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            dir="ltr"
           />
         </label>
 

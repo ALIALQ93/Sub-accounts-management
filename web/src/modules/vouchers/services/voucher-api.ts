@@ -241,7 +241,7 @@ export const voucherApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("accounts")
-      .select("id, code, name_ar, is_postable, is_active, parent_id, level")
+      .select("id, code, name_ar, name_en, is_postable, is_active, parent_id, level")
       .eq("is_active", true)
       .eq("is_postable", true)
       .order("code", { ascending: true });
@@ -253,7 +253,7 @@ export const voucherApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("accounts")
-      .select("id, code, name_ar, is_postable, is_active, parent_id, level")
+      .select("id, code, name_ar, name_en, is_postable, is_active, parent_id, level")
       .order("code", { ascending: true });
     throwIfSupabaseError(error);
     return (data ?? []) as Account[];

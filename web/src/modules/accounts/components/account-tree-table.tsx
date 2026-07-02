@@ -79,9 +79,16 @@ export function AccountTreeTable({
                     ) : (
                       <span className="inline-block w-5" />
                     )}
-                    <span className="font-medium text-slate-900">
-                      {node.name_ar}
-                    </span>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <span className="font-medium text-slate-900">
+                        {node.name_ar}
+                      </span>
+                      {node.name_en && (
+                        <span className="text-xs text-slate-500" dir="ltr">
+                          {node.name_en}
+                        </span>
+                      )}
+                    </div>
                     {hasChildren && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                         {node.childCount} فرع

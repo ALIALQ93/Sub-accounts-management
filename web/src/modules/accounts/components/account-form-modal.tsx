@@ -9,6 +9,7 @@ interface AccountFormModalProps {
   open: boolean;
   formKey: number;
   parentAccounts: Account[];
+  allAccounts: Account[];
   presetParentId?: string;
   isSaving: boolean;
   error: string;
@@ -20,6 +21,7 @@ export function AccountFormModal({
   open,
   formKey,
   parentAccounts,
+  allAccounts,
   presetParentId,
   isSaving,
   error,
@@ -44,6 +46,7 @@ export function AccountFormModal({
       <AccountForm
         key={formKey}
         parentAccounts={parentAccounts}
+        allAccounts={allAccounts}
         presetParentId={presetParentId}
         isSaving={isSaving}
         error={error}

@@ -7,6 +7,7 @@ create table if not exists public.accounts (
   id uuid primary key default gen_random_uuid(),
   code varchar(30) not null unique,
   name_ar varchar(200) not null,
+  name_en varchar(200) null,
   parent_id uuid null references public.accounts(id) on delete restrict,
   level int not null default 1 check (level >= 1),
   is_postable boolean not null default true,

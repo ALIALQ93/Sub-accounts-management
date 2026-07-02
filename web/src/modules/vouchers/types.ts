@@ -63,6 +63,7 @@ export interface Account {
   id: string;
   code: string;
   name_ar: string;
+  name_en?: string | null;
   is_postable: boolean;
   is_active: boolean;
   parent_id: string | null;
