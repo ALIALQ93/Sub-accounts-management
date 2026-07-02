@@ -99,3 +99,64 @@ export function validateReceiptVoucherAccounts(params: {
 
   return null;
 }
+
+export function validatePaymentVoucherAccounts(params: {
+  currencyId: string;
+  paymentAccountId: string;
+  debitLines: Array<{ account_id?: string }>;
+  accounts: Account[];
+  currencies: Currency[];
+}): string | null {
+  const { currencyId, paymentAccountId, debitLines, accounts, currencies } =
+    params;
+
+  if (!currencyId) {
+    return "اختر عملة السند.";
+  }
+
+  const voucherCurrency = getCurrencyById(currencies, currencyId);
+  if (!voucherCurrency) {
+    return "عملة السند غير صالحة.";
+  }
+
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+
+  if (!paymentAccountId) {
+    return "حساب الدفع غير معرّف. عيّنه من إعدادات السندات.";
+  }
+
+  const paymentAccount = accountById.get(paymentAccountId);
+  if (!paymentAccount) {
+    return "حساب الدفع غير موجود أو غير نشط.";
+  }
+
+  if (!accountMatchesVoucherCurrency(paymentAccount, currencyId)) {
+    const accountCurrency = paymentAccount.currency_id
+      ? getCurrencyById(currencies, paymentAccount.currency_id)
+      : undefined;
+    return `حساب الدفع (${paymentAccount.code}) بعملة ${
+      accountCurrency?.code ?? "—"
+    } لا يطابق عملة السند (${voucherCurrency.code}). عدّل الإعدادات أو غيّر عملة السند.`;
+  }
+
+  for (const line of debitLines) {
+    if (!line.account_id) continue;
+    const lineAccount = accountById.get(line.account_id);
+    if (!lineAccount) {
+      return "أحد حسابات الأسطر غير موجود أو غير نشط.";
+    }
+    if (!accountMatchesVoucherCurrency(lineAccount, currencyId)) {
+      const lineCurrency = lineAccount.currency_id
+        ? getCurrencyById(currencies, lineAccount.currency_id)
+        : undefined;
+      return `حساب ${lineAccount.code} بعملة ${
+        lineCurrency?.code ?? "—"
+      } لا يطابق عملة السند (${voucherCurrency.code}).`;
+    }
+    if (line.account_id === paymentAccountId) {
+      return "لا يمكن أن يكون حساب الدفع هو نفس حساب سطر المدين.";
+    }
+  }
+
+  return null;
+}

@@ -1,4 +1,4 @@
-import { VoucherForm } from "@/modules/vouchers/components/voucher-form";
+import { VoucherEditRouter } from "@/modules/vouchers/components/voucher-edit-router";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 
 interface VoucherEditPageProps {
@@ -11,7 +11,7 @@ export default async function VoucherEditPage({ params }: VoucherEditPageProps) 
   return (
     <main className="flex w-full flex-col gap-4">
       <VouchersNav />
-      <VoucherForm initialMode="edit" initialVoucherId={id} />
+      <VoucherEditRouter voucherId={id} />
     </main>
   );
 }
