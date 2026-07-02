@@ -30,7 +30,7 @@ export default function RootLayout({
       dir="rtl"
       className={`${ibmPlexSansArabic.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col overflow-hidden">
         <AppShell>{children}</AppShell>
       </body>
     </html>

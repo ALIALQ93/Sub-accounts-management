@@ -298,11 +298,11 @@ export default function AccountsPage() {
   ];
 
   return (
-    <main className="flex w-full flex-col gap-4">
-      <section className="flex flex-wrap items-center justify-between gap-3">
+    <main className="flex min-h-full w-full flex-col gap-3">
+      <section className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">دليل الحسابات</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-xl font-bold text-slate-900">دليل الحسابات</h1>
+          <p className="text-xs text-slate-600">
             شجرة الحسابات: 7 حسابات رئيسية + فروع يضيفها المستخدم.
           </p>
         </div>
@@ -374,22 +374,22 @@ export default function AccountsPage() {
         </section>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">إجمالي الحسابات</p>
-          <p className="mt-2 text-2xl font-bold text-slate-900">{stats.total}</p>
+      <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">إجمالي الحسابات</p>
+          <p className="mt-1 text-xl font-bold text-slate-900">{stats.total}</p>
         </article>
-        <article className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">حسابات نشطة</p>
-          <p className="mt-2 text-2xl font-bold text-emerald-700">{stats.active}</p>
+        <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">حسابات نشطة</p>
+          <p className="mt-1 text-xl font-bold text-emerald-700">{stats.active}</p>
         </article>
-        <article className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">قابلة للترحيل</p>
-          <p className="mt-2 text-2xl font-bold text-blue-900">{stats.postable}</p>
+        <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">قابلة للترحيل</p>
+          <p className="mt-1 text-xl font-bold text-blue-900">{stats.postable}</p>
         </article>
-        <article className="rounded-lg border border-slate-200 bg-white p-4">
-          <p className="text-sm text-slate-500">حسابات أب</p>
-          <p className="mt-2 text-2xl font-bold text-slate-700">{stats.parent}</p>
+        <article className="rounded-lg border border-slate-200 bg-white p-3">
+          <p className="text-xs text-slate-500">حسابات أب</p>
+          <p className="mt-1 text-xl font-bold text-slate-700">{stats.parent}</p>
         </article>
       </section>
 
@@ -427,8 +427,8 @@ export default function AccountsPage() {
         onClose={closeCardModal}
       />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4 md:p-5">
-        <div className="mb-4 flex flex-wrap items-end gap-3">
+      <section className="flex min-h-0 flex-1 flex-col rounded-xl border-2 border-slate-300 bg-white p-2 md:p-3">
+        <div className="mb-2 flex shrink-0 flex-wrap items-end gap-2">
           <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
             <span className="text-slate-700">بحث</span>
             <input
@@ -485,18 +485,20 @@ export default function AccountsPage() {
         )}
 
         {!isLoading && !loadError && (
-          <AccountTreeTable
-            rows={rows}
-            accountsById={accountsById}
-            displayBalances={displayBalances}
-            expandedIds={expandedIds}
-            isSaving={isSaving}
-            onToggleExpand={toggleExpand}
-            onEdit={openEditModal}
-            onViewCard={openCardModal}
-            onToggleActive={toggleActive}
-            onAddChild={openAddChild}
-          />
+          <div className="min-h-0 flex-1 overflow-auto">
+            <AccountTreeTable
+              rows={rows}
+              accountsById={accountsById}
+              displayBalances={displayBalances}
+              expandedIds={expandedIds}
+              isSaving={isSaving}
+              onToggleExpand={toggleExpand}
+              onEdit={openEditModal}
+              onViewCard={openCardModal}
+              onToggleActive={toggleActive}
+              onAddChild={openAddChild}
+            />
+          </div>
         )}
       </section>
     </main>

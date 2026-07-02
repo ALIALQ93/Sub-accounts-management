@@ -44,34 +44,28 @@ export function AccountTreeTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="h-full min-h-[calc(100svh-240px)] overflow-auto rounded-xl border-2 border-slate-300 bg-white shadow-sm">
       <table className="w-full table-fixed border-collapse text-sm">
         <colgroup>
-          <col className="w-[108px]" />
+          <col className="w-[130px]" />
           <col />
-          <col className="w-[72px]" />
-          <col className="w-[130px]" />
-          <col className="w-[130px]" />
-          <col className="w-[130px]" />
-          <col className="w-[200px]" />
-          <col className="w-[220px]" />
+          <col className="w-[90px]" />
+          <col className="w-[min(12vw,180px)]" />
+          <col className="w-[min(12vw,180px)]" />
+          <col className="w-[min(12vw,180px)]" />
+          <col className="w-[min(16vw,240px)]" />
+          <col className="w-[min(18vw,280px)]" />
         </colgroup>
-        <thead className="bg-slate-50">
-          <tr className="text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-            <th className="border-b border-slate-200 px-3 py-3">الكود</th>
-            <th className="border-b border-slate-200 px-3 py-3">الحساب</th>
-            <th className="border-b border-slate-200 px-3 py-3">العملة</th>
-            <th className="border-b border-slate-200 bg-blue-50/50 px-3 py-3">
-              مدين
-            </th>
-            <th className="border-b border-slate-200 bg-blue-50/50 px-3 py-3">
-              دائن
-            </th>
-            <th className="border-b border-slate-200 bg-blue-50/50 px-3 py-3">
-              الرصيد
-            </th>
-            <th className="border-b border-slate-200 px-3 py-3">الخصائص</th>
-            <th className="border-b border-slate-200 px-3 py-3">إجراءات</th>
+        <thead className="sticky top-0 z-10 bg-slate-100 shadow-[0_1px_0_0_rgb(203_213_225)]">
+          <tr className="text-right text-xs font-semibold uppercase tracking-wide text-slate-700">
+            <th className={TH}>الكود</th>
+            <th className={TH}>الحساب</th>
+            <th className={TH}>العملة</th>
+            <th className={`${TH} bg-blue-100/70`}>مدين</th>
+            <th className={`${TH} bg-blue-100/70`}>دائن</th>
+            <th className={`${TH} bg-blue-100/70`}>الرصيد</th>
+            <th className={TH}>الخصائص</th>
+            <th className={TH}>إجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -96,10 +90,10 @@ export function AccountTreeTable({
                 key={node.id}
                 className="group align-top odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/30"
               >
-                <td className="border-b border-slate-100 px-3 py-3 font-mono text-xs text-slate-800">
+                <td className={`${TD} font-mono text-xs text-slate-800`}>
                   {node.code}
                 </td>
-                <td className="border-b border-slate-100 px-3 py-3">
+                <td className={TD}>
                   <div
                     className="flex min-w-0 items-start gap-2"
                     style={{ paddingRight: `${depth * 18}px` }}
@@ -142,19 +136,19 @@ export function AccountTreeTable({
                     </div>
                   </div>
                 </td>
-                <td className="border-b border-slate-100 px-3 py-3 text-center font-mono text-xs font-medium text-slate-700">
+                <td className={`${TD} text-center font-mono text-xs font-medium text-slate-700`}>
                   {balance?.currency_code ?? "—"}
                 </td>
-                <td className="border-b border-slate-100 bg-blue-50/20 px-3 py-3 text-left font-mono text-xs tabular-nums text-slate-800">
+                <td className={`${TD} bg-blue-50/30 text-left font-mono text-xs tabular-nums text-slate-800`}>
                   {balance ? fmt(balance.display_debit) : "—"}
                 </td>
-                <td className="border-b border-slate-100 bg-blue-50/20 px-3 py-3 text-left font-mono text-xs tabular-nums text-slate-800">
+                <td className={`${TD} bg-blue-50/30 text-left font-mono text-xs tabular-nums text-slate-800`}>
                   {balance ? fmt(balance.display_credit) : "—"}
                 </td>
-                <td className="border-b border-slate-100 bg-blue-50/20 px-3 py-3 text-left font-mono text-xs font-semibold tabular-nums text-blue-900">
+                <td className={`${TD} bg-blue-50/30 text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}>
                   {balance ? fmt(balance.display_balance) : "—"}
                 </td>
-                <td className="border-b border-slate-100 px-3 py-3">
+                <td className={TD}>
                   <div className="flex flex-wrap gap-1.5">
                     {statementType && (
                       <span
@@ -181,7 +175,7 @@ export function AccountTreeTable({
                     </span>
                   </div>
                 </td>
-                <td className="border-b border-slate-100 px-3 py-3">
+                <td className={TD}>
                   <div className="flex flex-wrap gap-1">
                     <ActionButton label="بطاقة" onClick={() => onViewCard(node)} />
                     <ActionButton
@@ -214,6 +208,11 @@ export function AccountTreeTable({
     </div>
   );
 }
+
+const TH =
+  "border border-slate-300 px-4 py-3.5 first:border-r-2 last:border-l-2";
+const TD =
+  "border border-slate-300 px-4 py-3.5 align-top first:border-r-2 last:border-l-2";
 
 function ActionButton({
   label,

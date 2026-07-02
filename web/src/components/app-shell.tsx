@@ -30,22 +30,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-[#f8f9ff] text-slate-900">
-      <div className="mx-auto grid min-h-screen w-full max-w-[1440px] grid-cols-1 lg:grid-cols-[280px_1fr]">
-        <aside className="border-b border-slate-200 bg-white p-4 lg:border-b-0 lg:border-l">
-          <div className="mb-4 rounded-lg bg-slate-50 p-3">
-            <h1 className="text-lg font-bold">Sub Accounts</h1>
-            <p className="text-xs text-slate-600">نظام محاسبة وإدارة سندات</p>
+    <div className="min-h-screen w-full bg-[#f8f9ff] text-slate-900">
+      <div className="grid min-h-screen w-full grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="border-b border-slate-200 bg-white p-3 lg:border-b-0 lg:border-l">
+          <div className="mb-3 rounded-lg bg-slate-50 p-2.5">
+            <h1 className="text-base font-bold">Sub Accounts</h1>
+            <p className="text-[11px] text-slate-600">نظام محاسبة وإدارة سندات</p>
           </div>
 
-          <nav className="grid gap-1">
+          <nav className="grid gap-0.5">
             {NAV_ITEMS.map((item) => {
               const active = isActive(pathname, item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                  className={`rounded-md px-2.5 py-1.5 text-sm font-medium transition ${
                     active
                       ? "bg-blue-900 text-white"
                       : "text-slate-700 hover:bg-slate-100"
@@ -58,16 +58,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        <div className="flex flex-col">
-          <header className="border-b border-slate-200 bg-white px-6 py-4">
-            <p className="text-sm text-slate-500">لوحة تشغيل النظام</p>
-            <p className="text-base font-semibold">
+        <div className="flex min-h-screen min-w-0 flex-col">
+          <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5">
+            <p className="text-xs text-slate-500">لوحة تشغيل النظام</p>
+            <p className="text-sm font-semibold">
               {NAV_ITEMS.find((item) => isActive(pathname, item.href))?.label ??
                 "شاشة"}
             </p>
           </header>
 
-          <div className="flex-1 p-4 md:p-6">{children}</div>
+          <div className="min-h-0 flex-1 overflow-auto p-2 md:p-3">
+            {children}
+          </div>
         </div>
       </div>
     </div>
