@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PermissionGate } from "@/components/permission-gate";
 import { useAuth } from "@/modules/auth/auth-context";
+import { AccountBulkImportModal } from "@/modules/accounts/components/account-bulk-import-modal";
 import { AccountCardModal } from "@/modules/accounts/components/account-card-modal";
 import { AccountEditModal } from "@/modules/accounts/components/account-edit-modal";
 import type { AccountEditValues } from "@/modules/accounts/components/account-edit-modal";
@@ -40,6 +41,7 @@ export default function AccountsPage() {
   const [query, setQuery] = useState("");
   const [statementFilter, setStatementFilter] = useState<StatementFilter>("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [presetParentId, setPresetParentId] = useState<string | undefined>();
@@ -317,6 +319,13 @@ export default function AccountsPage() {
           <PermissionGate permission="accounts.create">
             <button
               type="button"
+              onClick={() => setIsBulkImportOpen(true)}
+              className="rounded-md border border-blue-900 px-4 py-2 text-sm font-medium text-blue-900"
+            >
+              إضافة جماعية
+            </button>
+            <button
+              type="button"
               onClick={() => openAddModal()}
               className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
             >
@@ -403,6 +412,19 @@ export default function AccountsPage() {
           <p className="mt-1 text-xl font-bold text-slate-700">{stats.parent}</p>
         </article>
       </section>
+
+      <AccountBulkImportModal
+        open={isBulkImportOpen}
+        accounts={accounts}
+        currencies={currencies}
+        isSaving={isSaving}
+        onClose={() => setIsBulkImportOpen(false)}
+        onImported={async () => {
+          const data = await reloadAll();
+          const { tree: nextTree } = getVisibleTree(data, query, statementFilter);
+          setExpandedIds(new Set(collectExpandableIds(nextTree)));
+        }}
+      />
 
       <AccountFormModal
         open={isAddModalOpen}
