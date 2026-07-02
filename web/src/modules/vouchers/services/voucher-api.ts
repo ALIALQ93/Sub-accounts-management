@@ -41,7 +41,71 @@ function throwIfSupabaseError(error: PostgrestError | null): void {
   }
 }
 
+export interface SupabaseConnectionStatus {
+  configured: boolean;
+  supabaseHost: string;
+  accountCount: number | null;
+  errorMessage: string | null;
+}
+
 export const voucherApi = {
+  async checkSupabaseConnection(): Promise<SupabaseConnectionStatus> {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    const keyConfigured = Boolean(
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    );
+    const configured = Boolean(url && keyConfigured);
+
+    let supabaseHost = "غير مضبوط";
+    try {
+      if (url) supabaseHost = new URL(url).hostname;
+    } catch {
+      supabaseHost = "رابط غير صالح";
+    }
+
+    if (!configured) {
+      return {
+        configured: false,
+        supabaseHost,
+        accountCount: null,
+        errorMessage:
+          "متغيرات Supabase غير موجودة في build الاستضافة. أضف NEXT_PUBLIC_SUPABASE_URL و NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY في Vercel ثم أعد النشر.",
+      };
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      const { count, error } = await supabase
+        .from("accounts")
+        .select("id", { count: "exact", head: true });
+
+      if (error) {
+        return {
+          configured: true,
+          supabaseHost,
+          accountCount: null,
+          errorMessage: error.message,
+        };
+      }
+
+      return {
+        configured: true,
+        supabaseHost,
+        accountCount: count ?? 0,
+        errorMessage: null,
+      };
+    } catch (err) {
+      return {
+        configured: true,
+        supabaseHost,
+        accountCount: null,
+        errorMessage:
+          err instanceof Error ? err.message : "فشل الاتصال بقاعدة البيانات.",
+      };
+    }
+  },
+
   async getDashboardStats(): Promise<DashboardStats> {
     const supabase = getSupabaseClient();
     const today = new Date().toISOString().slice(0, 10);

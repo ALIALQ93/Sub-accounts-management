@@ -13,6 +13,7 @@ import {
   getVisibleTree,
 } from "@/modules/accounts/utils/account-tree";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
+import type { SupabaseConnectionStatus } from "@/modules/vouchers/services/voucher-api";
 import type { Account } from "@/modules/vouchers/types";
 
 export default function AccountsPage() {
@@ -31,6 +32,9 @@ export default function AccountsPage() {
   const [editNameAr, setEditNameAr] = useState("");
   const [editIsPostable, setEditIsPostable] = useState(true);
   const [editingHasChildren, setEditingHasChildren] = useState(false);
+  const [connection, setConnection] = useState<SupabaseConnectionStatus | null>(
+    null,
+  );
 
   const loadAccounts = async () => {
     const data = await voucherApi.listAllAccounts();
@@ -43,9 +47,13 @@ export default function AccountsPage() {
 
     const load = async () => {
       try {
-        const data = await voucherApi.listAllAccounts();
+        const [data, connectionStatus] = await Promise.all([
+          voucherApi.listAllAccounts(),
+          voucherApi.checkSupabaseConnection(),
+        ]);
         if (!cancelled) {
           setAccounts(data);
+          setConnection(connectionStatus);
           const { tree } = getVisibleTree(data, "", "all");
           setExpandedIds(new Set(collectExpandableIds(tree)));
         }
@@ -232,6 +240,51 @@ export default function AccountsPage() {
           </Link>
         </div>
       </section>
+
+      {!isLoading && connection && (connection.errorMessage || accounts.length === 0) && (
+        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+          <h2 className="font-semibold">تشخيص الاتصال</h2>
+          <ul className="mt-2 list-inside list-disc space-y-1">
+            <li>
+              Supabase:{" "}
+              <span className="font-mono">{connection.supabaseHost}</span>
+            </li>
+            <li>
+              متغيرات البيئة:{" "}
+              {connection.configured ? "مضبوطة ✅" : "ناقصة ❌"}
+            </li>
+            <li>
+              عدد الحسابات من API:{" "}
+              {connection.accountCount ?? "تعذّر القراءة"}
+            </li>
+          </ul>
+          {connection.errorMessage && (
+            <p className="mt-2 text-rose-800">{connection.errorMessage}</p>
+          )}
+          {!connection.errorMessage && accounts.length === 0 && (
+            <div className="mt-2 space-y-1">
+              <p>
+                البيانات موجودة في Supabase لكن التطبيق لا يقرأها. جرّب بالترتيب:
+              </p>
+              <ol className="list-inside list-decimal space-y-1 pr-2">
+                <li>
+                  في Vercel → Settings → Environment Variables أضف:
+                  <span className="font-mono"> NEXT_PUBLIC_SUPABASE_URL</span> و
+                  <span className="font-mono">
+                    {" "}
+                    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+                  </span>
+                </li>
+                <li>اضغط Redeploy بعد حفظ المتغيرات</li>
+                <li>
+                  في Supabase SQL Editor شغّل ملف{" "}
+                  <span className="font-mono">accounting_rls_policies.sql</span>
+                </li>
+              </ol>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-lg border border-slate-200 bg-white p-4">
