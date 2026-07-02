@@ -3,6 +3,7 @@
 import { Modal } from "@/components/modal";
 import { AccountForm } from "@/modules/accounts/components/account-form";
 import type { AccountFormValues } from "@/modules/accounts/types";
+import type { Currency } from "@/modules/currencies/types";
 import type { Account } from "@/modules/vouchers/types";
 
 interface AccountFormModalProps {
@@ -10,6 +11,7 @@ interface AccountFormModalProps {
   formKey: number;
   parentAccounts: Account[];
   allAccounts: Account[];
+  currencies: Currency[];
   presetParentId?: string;
   isSaving: boolean;
   error: string;
@@ -22,6 +24,7 @@ export function AccountFormModal({
   formKey,
   parentAccounts,
   allAccounts,
+  currencies,
   presetParentId,
   isSaving,
   error,
@@ -47,6 +50,7 @@ export function AccountFormModal({
         key={formKey}
         parentAccounts={parentAccounts}
         allAccounts={allAccounts}
+        currencies={currencies}
         presetParentId={presetParentId}
         isSaving={isSaving}
         error={error}

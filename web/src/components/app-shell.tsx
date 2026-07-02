@@ -13,6 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/vouchers", label: "السندات" },
   { href: "/vouchers/new", label: "سند جديد" },
   { href: "/accounts", label: "دليل الحسابات" },
+  { href: "/currencies", label: "العملات" },
   { href: "/customers", label: "العملاء" },
   { href: "/vendors", label: "الموردين" },
   { href: "/open-movements", label: "الحركات المفتوحة" },

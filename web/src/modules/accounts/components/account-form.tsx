@@ -3,12 +3,15 @@
 import { useMemo, useState } from "react";
 import type { Account } from "@/modules/vouchers/types";
 import type { AccountFormValues } from "@/modules/accounts/types";
+import { getDefaultCurrencyId } from "@/modules/accounts/utils/compute-account-balances";
 import { isRootAccount } from "@/modules/accounts/utils/account-tree";
 import { previewAccountCode } from "@/modules/accounts/utils/generate-account-code";
+import type { Currency } from "@/modules/currencies/types";
 
 interface AccountFormProps {
   parentAccounts: Account[];
   allAccounts: Account[];
+  currencies: Currency[];
   presetParentId?: string;
   isSaving: boolean;
   error: string;
@@ -20,12 +23,14 @@ const EMPTY_FORM: AccountFormValues = {
   name_ar: "",
   name_en: "",
   parent_id: "",
+  currency_id: "",
   is_postable: true,
 };
 
 export function AccountForm({
   parentAccounts,
   allAccounts,
+  currencies,
   presetParentId,
   isSaving,
   error,
@@ -35,8 +40,15 @@ export function AccountForm({
   const [values, setValues] = useState<AccountFormValues>(() => ({
     ...EMPTY_FORM,
     parent_id: presetParentId ?? "",
+    currency_id: getDefaultCurrencyId(
+      currencies,
+      presetParentId,
+      allAccounts,
+    ),
     is_postable: true,
   }));
+
+  const activeCurrencies = currencies.filter((currency) => currency.is_active);
 
   const parentSelected = Boolean(values.parent_id);
   const selectedParent = parentAccounts.find(
@@ -101,13 +113,18 @@ export function AccountForm({
           <select
             value={values.parent_id}
             disabled={Boolean(presetParentId)}
-            onChange={(event) =>
+            onChange={(event) => {
+              const parentId = event.target.value;
+              const parent = allAccounts.find((account) => account.id === parentId);
               setValues((current) => ({
                 ...current,
-                parent_id: event.target.value,
+                parent_id: parentId,
+                currency_id:
+                  parent?.currency_id ??
+                  getDefaultCurrencyId(currencies, parentId, allAccounts),
                 is_postable: true,
-              }))
-            }
+              }));
+            }}
             className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
           >
             <option value="">اختر الحساب الأب</option>
@@ -118,6 +135,32 @@ export function AccountForm({
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="grid gap-1 text-sm sm:col-span-2">
+          <span className="text-slate-700">عملة الحساب *</span>
+          <select
+            value={values.currency_id}
+            disabled={!parentSelected}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                currency_id: event.target.value,
+              }))
+            }
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+          >
+            <option value="">اختر العملة</option>
+            {activeCurrencies.map((currency) => (
+              <option key={currency.id} value={currency.id}>
+                {currency.code} — {currency.name_ar}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-500">
+            يمكن أن تختلف عن عملة الحساب الأب. بطاقة الأب تعرض المجموع بعد
+            التحويل.
+          </span>
         </label>
 
         <label className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm sm:col-span-2">
@@ -172,7 +215,7 @@ export function AccountForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isSaving || !parentSelected}
+          disabled={isSaving || !parentSelected || !values.currency_id}
           className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
         >
           {isSaving ? "جاري الحفظ..." : "إضافة الحساب"}

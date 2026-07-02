@@ -103,3 +103,16 @@ create policy "voucher_allocations_insert_all" on public.voucher_allocations
 drop policy if exists "voucher_allocations_update_all" on public.voucher_allocations;
 create policy "voucher_allocations_update_all" on public.voucher_allocations
   for update to anon, authenticated using (true) with check (true);
+
+-- currencies
+alter table public.currencies enable row level security;
+
+drop policy if exists "currencies_select_all" on public.currencies;
+create policy "currencies_select_all" on public.currencies
+  for select to anon, authenticated using (true);
+drop policy if exists "currencies_insert_all" on public.currencies;
+create policy "currencies_insert_all" on public.currencies
+  for insert to anon, authenticated with check (true);
+drop policy if exists "currencies_update_all" on public.currencies;
+create policy "currencies_update_all" on public.currencies
+  for update to anon, authenticated using (true) with check (true);

@@ -8,11 +8,13 @@ import {
   getStatementType,
   isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
+import type { Currency } from "@/modules/currencies/types";
 import type { Account } from "@/modules/vouchers/types";
 
 export interface AccountEditValues {
   name_ar: string;
   name_en: string;
+  currency_id: string;
   is_postable: boolean;
 }
 
@@ -20,6 +22,7 @@ interface AccountEditModalProps {
   open: boolean;
   account: AccountTreeNode | null;
   accountsById: Map<string, Account>;
+  currencies: Currency[];
   isSaving: boolean;
   error: string;
   onClose: () => void;
@@ -29,6 +32,7 @@ interface AccountEditModalProps {
 interface AccountEditFormProps {
   account: AccountTreeNode;
   accountsById: Map<string, Account>;
+  currencies: Currency[];
   isSaving: boolean;
   error: string;
   onClose: () => void;
@@ -38,6 +42,7 @@ interface AccountEditFormProps {
 function AccountEditForm({
   account,
   accountsById,
+  currencies,
   isSaving,
   error,
   onClose,
@@ -46,8 +51,11 @@ function AccountEditForm({
   const [values, setValues] = useState<AccountEditValues>(() => ({
     name_ar: account.name_ar,
     name_en: account.name_en ?? "",
+    currency_id: account.currency_id ?? "",
     is_postable: account.is_postable,
   }));
+
+  const activeCurrencies = currencies.filter((currency) => currency.is_active);
 
   const hasChildren = account.childCount > 0;
   const rootAccount = isRootAccount(account);
@@ -97,6 +105,27 @@ function AccountEditForm({
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             dir="ltr"
           />
+        </label>
+
+        <label className="grid gap-1 text-sm sm:col-span-2">
+          <span className="text-slate-700">عملة الحساب *</span>
+          <select
+            value={values.currency_id}
+            onChange={(event) =>
+              setValues((current) => ({
+                ...current,
+                currency_id: event.target.value,
+              }))
+            }
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">اختر العملة</option>
+            {activeCurrencies.map((currency) => (
+              <option key={currency.id} value={currency.id}>
+                {currency.code} — {currency.name_ar}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div className="grid gap-1 text-sm sm:col-span-2">
@@ -187,6 +216,7 @@ export function AccountEditModal({
   open,
   account,
   accountsById,
+  currencies,
   isSaving,
   error,
   onClose,
@@ -205,6 +235,7 @@ export function AccountEditModal({
         key={account.id}
         account={account}
         accountsById={accountsById}
+        currencies={currencies}
         isSaving={isSaving}
         error={error}
         onClose={onClose}

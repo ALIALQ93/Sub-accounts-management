@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AccountCardModal } from "@/modules/accounts/components/account-card-modal";
 import { AccountEditModal } from "@/modules/accounts/components/account-edit-modal";
 import type { AccountEditValues } from "@/modules/accounts/components/account-edit-modal";
 import { AccountFormModal } from "@/modules/accounts/components/account-form-modal";
 import { AccountTreeTable } from "@/modules/accounts/components/account-tree-table";
 import type { AccountFormValues, AccountTreeNode, StatementFilter } from "@/modules/accounts/types";
+import { computeAccountDisplayBalances } from "@/modules/accounts/utils/compute-account-balances";
 import {
+  buildAccountTree,
   collectExpandableIds,
   computeAccountStats,
   flattenAccountTree,
@@ -16,6 +19,8 @@ import {
   isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
 import { generateAccountCode } from "@/modules/accounts/utils/generate-account-code";
+import { currencyApi } from "@/modules/currencies/services/currency-api";
+import type { AccountDirectBalance, Currency } from "@/modules/currencies/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { SupabaseConnectionStatus } from "@/modules/vouchers/services/voucher-api";
 import type { Account } from "@/modules/vouchers/types";
@@ -38,14 +43,26 @@ export default function AccountsPage() {
     null,
   );
   const [editError, setEditError] = useState("");
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [directBalances, setDirectBalances] = useState<AccountDirectBalance[]>(
+    [],
+  );
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
+  const [cardAccount, setCardAccount] = useState<AccountTreeNode | null>(null);
   const [connection, setConnection] = useState<SupabaseConnectionStatus | null>(
     null,
   );
 
-  const loadAccounts = async () => {
-    const data = await voucherApi.listAllAccounts();
-    setAccounts(data);
-    return data;
+  const reloadAll = async () => {
+    const [accountsData, currenciesData, balancesData] = await Promise.all([
+      voucherApi.listAllAccounts(),
+      currencyApi.listCurrencies(),
+      currencyApi.listDirectBalances().catch(() => [] as AccountDirectBalance[]),
+    ]);
+    setAccounts(accountsData);
+    setCurrencies(currenciesData);
+    setDirectBalances(balancesData);
+    return accountsData;
   };
 
   useEffect(() => {
@@ -53,12 +70,19 @@ export default function AccountsPage() {
 
     const load = async () => {
       try {
-        const [data, connectionStatus] = await Promise.all([
-          voucherApi.listAllAccounts(),
-          voucherApi.checkSupabaseConnection(),
-        ]);
+        const [data, connectionStatus, currenciesData, balancesData] =
+          await Promise.all([
+            voucherApi.listAllAccounts(),
+            voucherApi.checkSupabaseConnection(),
+            currencyApi.listCurrencies(),
+            currencyApi.listDirectBalances().catch(
+              () => [] as AccountDirectBalance[],
+            ),
+          ]);
         if (!cancelled) {
           setAccounts(data);
+          setCurrencies(currenciesData);
+          setDirectBalances(balancesData);
           setConnection(connectionStatus);
           const { tree } = getVisibleTree(data, "", "all");
           setExpandedIds(new Set(collectExpandableIds(tree)));
@@ -94,6 +118,18 @@ export default function AccountsPage() {
 
   const parentOptions = useMemo(() => getParentOptions(accounts), [accounts]);
 
+  const fullTree = useMemo(() => buildAccountTree(accounts), [accounts]);
+
+  const displayBalances = useMemo(
+    () =>
+      computeAccountDisplayBalances(fullTree, directBalances, currencies),
+    [fullTree, directBalances, currencies],
+  );
+
+  const cardBalance = cardAccount
+    ? displayBalances.get(cardAccount.id) ?? null
+    : null;
+
   const onCreate = async (values: AccountFormValues) => {
     if (!values.name_ar.trim()) {
       setFormError("يرجى تعبئة اسم الحساب بالعربية.");
@@ -101,6 +137,10 @@ export default function AccountsPage() {
     }
     if (!values.parent_id) {
       setFormError("يجب اختيار حساب أب. الحسابات الرئيسية السبعة ثابتة.");
+      return;
+    }
+    if (!values.currency_id) {
+      setFormError("يجب اختيار عملة الحساب.");
       return;
     }
 
@@ -120,10 +160,11 @@ export default function AccountsPage() {
         name_ar: values.name_ar.trim(),
         name_en: values.name_en.trim() || null,
         parent_id: values.parent_id,
+        currency_id: values.currency_id,
         is_postable: values.is_postable,
         is_active: true,
       });
-      const data = await loadAccounts();
+      const data = await reloadAll();
       const { tree: nextTree } = getVisibleTree(data, query, statementFilter);
       setExpandedIds((current) => {
         const next = new Set(current);
@@ -159,6 +200,10 @@ export default function AccountsPage() {
       setEditError("اسم الحساب مطلوب.");
       return;
     }
+    if (!values.currency_id) {
+      setEditError("يجب اختيار عملة الحساب.");
+      return;
+    }
 
     setIsSaving(true);
     setEditError("");
@@ -166,6 +211,7 @@ export default function AccountsPage() {
       const payload: Partial<Account> = {
         name_ar: values.name_ar.trim(),
         name_en: values.name_en.trim() || null,
+        currency_id: values.currency_id,
       };
       if (
         editingAccount.childCount === 0 &&
@@ -175,7 +221,7 @@ export default function AccountsPage() {
       }
       await voucherApi.updateAccount(editingAccount.id, payload);
       closeEditModal();
-      await loadAccounts();
+      await reloadAll();
     } catch (err) {
       setEditError(err instanceof Error ? err.message : "فشل تعديل الحساب.");
     } finally {
@@ -190,7 +236,7 @@ export default function AccountsPage() {
       await voucherApi.updateAccount(account.id, {
         is_active: !account.is_active,
       });
-      await loadAccounts();
+      await reloadAll();
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "فشل تغيير حالة الحساب.",
@@ -235,6 +281,16 @@ export default function AccountsPage() {
     setExpandedIds((current) => new Set(current).add(account.id));
   };
 
+  const openCardModal = (account: AccountTreeNode) => {
+    setCardAccount(account);
+    setIsCardModalOpen(true);
+  };
+
+  const closeCardModal = () => {
+    setIsCardModalOpen(false);
+    setCardAccount(null);
+  };
+
   const filterOptions: Array<{ value: StatementFilter; label: string }> = [
     { value: "all", label: "الكل" },
     { value: "balance_sheet", label: "الميزانية" },
@@ -258,6 +314,12 @@ export default function AccountsPage() {
           >
             + إضافة حساب
           </button>
+          <Link
+            href="/currencies"
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+          >
+            العملات
+          </Link>
           <Link
             href="/vouchers/new"
             className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
@@ -336,6 +398,7 @@ export default function AccountsPage() {
         formKey={formKey}
         parentAccounts={parentOptions}
         allAccounts={accounts}
+        currencies={currencies}
         presetParentId={presetParentId}
         isSaving={isSaving}
         error={formError}
@@ -347,10 +410,20 @@ export default function AccountsPage() {
         open={isEditModalOpen}
         account={editingAccount}
         accountsById={accountsById}
+        currencies={currencies}
         isSaving={isSaving}
         error={editError}
         onClose={closeEditModal}
         onSubmit={onEdit}
+      />
+
+      <AccountCardModal
+        open={isCardModalOpen}
+        account={cardAccount}
+        balance={cardBalance}
+        directBalances={directBalances}
+        currencies={currencies}
+        onClose={closeCardModal}
       />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
@@ -414,10 +487,12 @@ export default function AccountsPage() {
           <AccountTreeTable
             rows={rows}
             accountsById={accountsById}
+            displayBalances={displayBalances}
             expandedIds={expandedIds}
             isSaving={isSaving}
             onToggleExpand={toggleExpand}
             onEdit={openEditModal}
+            onViewCard={openCardModal}
             onToggleActive={toggleActive}
             onAddChild={openAddChild}
           />

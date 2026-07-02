@@ -64,6 +64,7 @@ export interface Account {
   code: string;
   name_ar: string;
   name_en?: string | null;
+  currency_id?: string | null;
   is_postable: boolean;
   is_active: boolean;
   parent_id: string | null;

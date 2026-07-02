@@ -3,12 +3,31 @@
 
 create extension if not exists pgcrypto;
 
+create table if not exists public.currencies (
+  id uuid primary key default gen_random_uuid(),
+  code varchar(10) not null unique,
+  name_ar varchar(100) not null,
+  name_en varchar(100) not null,
+  symbol varchar(10) not null,
+  exchange_rate numeric(18, 6) not null default 1 check (exchange_rate > 0),
+  decimal_places smallint not null default 2 check (decimal_places >= 0 and decimal_places <= 6),
+  is_base boolean not null default false,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_currencies_single_base
+  on public.currencies (is_base)
+  where is_base = true;
+
 create table if not exists public.accounts (
   id uuid primary key default gen_random_uuid(),
   code varchar(30) not null unique,
   name_ar varchar(200) not null,
   name_en varchar(200) null,
   parent_id uuid null references public.accounts(id) on delete restrict,
+  currency_id uuid null references public.currencies(id) on delete restrict,
   level int not null default 1 check (level >= 1),
   is_postable boolean not null default true,
   is_active boolean not null default true,
@@ -643,14 +662,23 @@ create trigger trg_vouchers_prevent_delete_when_posted
 before delete on public.vouchers
 for each row execute function public.vouchers_prevent_delete_when_posted();
 
--- Seed the 7 root accounts.
-insert into public.accounts (code, name_ar, parent_id, level, is_postable, is_active)
+-- Seed currencies then root accounts.
+insert into public.currencies (code, name_ar, name_en, symbol, exchange_rate, decimal_places, is_base, is_active)
 values
-  ('1', 'الموجودات', null, 1, false, true),
-  ('2', 'الالتزامات', null, 1, false, true),
-  ('3', 'حقوق الملكية', null, 1, false, true),
-  ('4', 'المبيعات', null, 1, false, true),
-  ('5', 'المشتريات', null, 1, false, true),
-  ('6', 'المصاريف', null, 1, false, true),
-  ('7', 'الايرادات', null, 1, false, true)
+  ('IQD', 'دينار عراقي', 'Iraqi Dinar', 'د.ع', 1, 0, true, true),
+  ('USD', 'دولار أمريكي', 'US Dollar', '$', 1310, 2, false, false),
+  ('EUR', 'يورو', 'Euro', '€', 1420, 2, false, false),
+  ('SYP', 'ليرة سورية', 'Syrian Pound', 'ل.س', 0.105, 0, false, false),
+  ('AED', 'درهم إماراتي', 'UAE Dirham', 'د.إ', 357, 2, false, false)
+on conflict (code) do nothing;
+
+insert into public.accounts (code, name_ar, parent_id, currency_id, level, is_postable, is_active)
+values
+  ('1', 'الموجودات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
+  ('2', 'الالتزامات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
+  ('3', 'حقوق الملكية', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
+  ('4', 'المبيعات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
+  ('5', 'المشتريات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
+  ('6', 'المصاريف', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
+  ('7', 'الايرادات', null, (select id from public.currencies where code = 'IQD'), 1, false, true)
 on conflict (code) do nothing;

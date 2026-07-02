@@ -7,14 +7,18 @@ import {
   getStatementType,
   isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
+import type { AccountDisplayBalance } from "@/modules/currencies/types";
+import { formatCurrencyAmount } from "@/modules/currencies/utils/convert-amount";
 
 interface AccountTreeTableProps {
   rows: FlatAccountRow[];
   accountsById: Map<string, Account>;
+  displayBalances: Map<string, AccountDisplayBalance>;
   expandedIds: Set<string>;
   isSaving: boolean;
   onToggleExpand: (id: string) => void;
   onEdit: (node: AccountTreeNode) => void;
+  onViewCard: (node: AccountTreeNode) => void;
   onToggleActive: (node: AccountTreeNode) => void;
   onAddChild: (node: AccountTreeNode) => void;
 }
@@ -22,10 +26,12 @@ interface AccountTreeTableProps {
 export function AccountTreeTable({
   rows,
   accountsById,
+  displayBalances,
   expandedIds,
   isSaving,
   onToggleExpand,
   onEdit,
+  onViewCard,
   onToggleActive,
   onAddChild,
 }: AccountTreeTableProps) {
@@ -39,11 +45,15 @@ export function AccountTreeTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] border-collapse text-sm">
+      <table className="w-full min-w-[1180px] border-collapse text-sm">
         <thead className="sticky top-0 bg-slate-50">
           <tr className="text-right text-slate-700">
             <th className="border-b border-slate-200 p-2">كود الحساب</th>
             <th className="border-b border-slate-200 p-2">اسم الحساب</th>
+            <th className="border-b border-slate-200 p-2">العملة</th>
+            <th className="border-b border-slate-200 p-2">مدين</th>
+            <th className="border-b border-slate-200 p-2">دائن</th>
+            <th className="border-b border-slate-200 p-2">الرصيد</th>
             <th className="border-b border-slate-200 p-2">التصنيف</th>
             <th className="border-b border-slate-200 p-2">نوع الحساب</th>
             <th className="border-b border-slate-200 p-2">الحالة</th>
@@ -56,6 +66,16 @@ export function AccountTreeTable({
             const isExpanded = expandedIds.has(node.id);
             const statementType = getStatementType(node, accountsById);
             const rootAccount = isRootAccount(node);
+            const balance = displayBalances.get(node.id);
+
+            const fmt = (value: number) =>
+              balance
+                ? formatCurrencyAmount(
+                    value,
+                    balance.decimal_places,
+                    balance.currency_symbol,
+                  )
+                : "—";
 
             return (
               <tr key={node.id} className="odd:bg-white even:bg-slate-50/60">
@@ -96,6 +116,18 @@ export function AccountTreeTable({
                     )}
                   </div>
                 </td>
+                <td className="border-b border-slate-100 p-2 font-mono">
+                  {balance?.currency_code ?? "—"}
+                </td>
+                <td className="border-b border-slate-100 p-2 font-mono">
+                  {balance ? fmt(balance.display_debit) : "—"}
+                </td>
+                <td className="border-b border-slate-100 p-2 font-mono">
+                  {balance ? fmt(balance.display_credit) : "—"}
+                </td>
+                <td className="border-b border-slate-100 p-2 font-mono font-medium text-blue-900">
+                  {balance ? fmt(balance.display_balance) : "—"}
+                </td>
                 <td className="border-b border-slate-100 p-2">
                   {statementType ? (
                     <span
@@ -127,6 +159,13 @@ export function AccountTreeTable({
                 </td>
                 <td className="border-b border-slate-100 p-2">
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onViewCard(node)}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700"
+                    >
+                      بطاقة
+                    </button>
                     <button
                       type="button"
                       onClick={() => onAddChild(node)}

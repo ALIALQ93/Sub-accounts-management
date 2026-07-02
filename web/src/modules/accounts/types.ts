@@ -18,6 +18,7 @@ export interface AccountFormValues {
   name_ar: string;
   name_en: string;
   parent_id: string;
+  currency_id: string;
   is_postable: boolean;
 }
 
