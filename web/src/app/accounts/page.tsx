@@ -1,7 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { AccountForm } from "@/modules/accounts/components/account-form";
+import { AccountTreeTable } from "@/modules/accounts/components/account-tree-table";
+import type { AccountFormValues, AccountTreeNode, StatementFilter } from "@/modules/accounts/types";
+import {
+  collectExpandableIds,
+  computeAccountStats,
+  flattenAccountTree,
+  getParentOptions,
+  getVisibleTree,
+} from "@/modules/accounts/utils/account-tree";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { Account } from "@/modules/vouchers/types";
 
@@ -9,24 +19,23 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [code, setCode] = useState("");
-  const [nameAr, setNameAr] = useState("");
-  const [parentId, setParentId] = useState("");
-  const [isPostable, setIsPostable] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [query, setQuery] = useState("");
+  const [statementFilter, setStatementFilter] = useState<StatementFilter>("all");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [showForm, setShowForm] = useState(true);
+  const [presetParentId, setPresetParentId] = useState<string | undefined>();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNameAr, setEditNameAr] = useState("");
   const [editIsPostable, setEditIsPostable] = useState(true);
+  const [editingHasChildren, setEditingHasChildren] = useState(false);
 
   const loadAccounts = async () => {
-    try {
-      const data = await voucherApi.listAllAccounts();
-      setAccounts(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل تحميل الحسابات.");
-    } finally {
-      setIsLoading(false);
-    }
+    const data = await voucherApi.listAllAccounts();
+    setAccounts(data);
+    return data;
   };
 
   useEffect(() => {
@@ -35,10 +44,16 @@ export default function AccountsPage() {
     const load = async () => {
       try {
         const data = await voucherApi.listAllAccounts();
-        if (!cancelled) setAccounts(data);
+        if (!cancelled) {
+          setAccounts(data);
+          const { tree } = getVisibleTree(data, "", "all");
+          setExpandedIds(new Set(collectExpandableIds(tree)));
+        }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "فشل تحميل الحسابات.");
+          setLoadError(
+            err instanceof Error ? err.message : "فشل تحميل الحسابات.",
+          );
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -51,257 +66,286 @@ export default function AccountsPage() {
     };
   }, []);
 
-  const onCreate = async () => {
-    if (!code.trim() || !nameAr.trim()) {
-      setError("يرجى تعبئة كود الحساب واسم الحساب.");
+  const stats = useMemo(() => computeAccountStats(accounts), [accounts]);
+
+  const { tree, accountsById } = useMemo(
+    () => getVisibleTree(accounts, query, statementFilter),
+    [accounts, query, statementFilter],
+  );
+
+  const rows = useMemo(
+    () => flattenAccountTree(tree, expandedIds),
+    [tree, expandedIds],
+  );
+
+  const parentOptions = useMemo(() => getParentOptions(accounts), [accounts]);
+
+  const onCreate = async (values: AccountFormValues) => {
+    if (!values.code.trim() || !values.name_ar.trim()) {
+      setFormError("يرجى تعبئة كود الحساب واسم الحساب.");
+      return;
+    }
+    if (!values.parent_id) {
+      setFormError("يجب اختيار حساب أب. الحسابات الرئيسية السبعة ثابتة.");
       return;
     }
 
     setIsSaving(true);
-    setError("");
+    setFormError("");
     try {
       await voucherApi.createAccount({
-        code: code.trim(),
-        name_ar: nameAr.trim(),
-        parent_id: parentId || null,
-        is_postable: parentId ? false : isPostable,
+        code: values.code.trim(),
+        name_ar: values.name_ar.trim(),
+        parent_id: values.parent_id,
+        is_postable: values.is_postable,
         is_active: true,
       });
-      setCode("");
-      setNameAr("");
-      setParentId("");
-      setIsPostable(true);
-      await loadAccounts();
+      const data = await loadAccounts();
+      const { tree: nextTree } = getVisibleTree(data, query, statementFilter);
+      setExpandedIds((current) => {
+        const next = new Set(current);
+        next.add(values.parent_id);
+        for (const id of collectExpandableIds(nextTree)) {
+          next.add(id);
+        }
+        return next;
+      });
+      setPresetParentId(undefined);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل إنشاء الحساب.");
+      setFormError(err instanceof Error ? err.message : "فشل إنشاء الحساب.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const startEdit = (account: Account) => {
+  const startEdit = (account: AccountTreeNode) => {
     setEditingId(account.id);
     setEditNameAr(account.name_ar);
     setEditIsPostable(account.is_postable);
+    setEditingHasChildren(account.childCount > 0);
+    setActionError("");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditNameAr("");
     setEditIsPostable(true);
+    setEditingHasChildren(false);
   };
 
   const saveEdit = async () => {
     if (!editingId) return;
     if (!editNameAr.trim()) {
-      setError("اسم الحساب مطلوب.");
+      setActionError("اسم الحساب مطلوب.");
       return;
     }
 
     setIsSaving(true);
-    setError("");
+    setActionError("");
     try {
-      await voucherApi.updateAccount(editingId, {
-        name_ar: editNameAr.trim(),
-        is_postable: editIsPostable,
-      });
+      const payload: Partial<Account> = { name_ar: editNameAr.trim() };
+      if (!editingHasChildren) {
+        payload.is_postable = editIsPostable;
+      }
+      await voucherApi.updateAccount(editingId, payload);
       cancelEdit();
       await loadAccounts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل تعديل الحساب.");
+      setActionError(err instanceof Error ? err.message : "فشل تعديل الحساب.");
     } finally {
       setIsSaving(false);
     }
   };
 
-  const toggleActive = async (account: Account) => {
+  const toggleActive = async (account: AccountTreeNode) => {
     setIsSaving(true);
-    setError("");
+    setActionError("");
     try {
-      await voucherApi.updateAccount(account.id, { is_active: !account.is_active });
+      await voucherApi.updateAccount(account.id, {
+        is_active: !account.is_active,
+      });
       await loadAccounts();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل تغيير حالة الحساب.");
+      setActionError(
+        err instanceof Error ? err.message : "فشل تغيير حالة الحساب.",
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
+  const toggleExpand = (id: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpandedIds(new Set(collectExpandableIds(tree)));
+  };
+
+  const collapseAll = () => {
+    setExpandedIds(new Set());
+  };
+
+  const openAddChild = (account: AccountTreeNode) => {
+    setPresetParentId(account.id);
+    setShowForm(true);
+    setFormError("");
+    setExpandedIds((current) => new Set(current).add(account.id));
+  };
+
+  const filterOptions: Array<{ value: StatementFilter; label: string }> = [
+    { value: "all", label: "الكل" },
+    { value: "balance_sheet", label: "الميزانية" },
+    { value: "income_statement", label: "قائمة الدخل" },
+  ];
+
   return (
-    <main className="mx-auto w-full max-w-6xl p-6">
-      <section className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">دليل الحسابات</h1>
-        <Link
-          href="/vouchers/new"
-          className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-        >
-          إنشاء سند
-        </Link>
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">دليل الحسابات</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            شجرة الحسابات: 7 حسابات رئيسية + فروع يضيفها المستخدم.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setPresetParentId(undefined);
+              setShowForm((current) => !current);
+            }}
+            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            {showForm ? "إخفاء نموذج الإضافة" : "إضافة حساب فرعي"}
+          </button>
+          <Link
+            href="/vouchers/new"
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+          >
+            إنشاء سند
+          </Link>
+        </div>
       </section>
 
-      <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">إضافة حساب</h2>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <input
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            placeholder="كود الحساب"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            value={nameAr}
-            onChange={(event) => setNameAr(event.target.value)}
-            placeholder="اسم الحساب"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <select
-            value={parentId}
-            onChange={(event) => setParentId(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">بدون أب (حساب رئيسي)</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.code} - {account.name_ar}
-              </option>
-            ))}
-          </select>
-          <div className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm">
-            <input
-              id="isPostable"
-              type="checkbox"
-              checked={isPostable}
-              disabled={Boolean(parentId)}
-              onChange={(event) => setIsPostable(event.target.checked)}
-            />
-            <label htmlFor="isPostable">قابل للترحيل</label>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={isSaving}
-          className="mt-3 rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-        >
-          إضافة حساب
-        </button>
-        {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-sm text-slate-500">إجمالي الحسابات</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{stats.total}</p>
+        </article>
+        <article className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-sm text-slate-500">حسابات نشطة</p>
+          <p className="mt-2 text-2xl font-bold text-emerald-700">{stats.active}</p>
+        </article>
+        <article className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-sm text-slate-500">قابلة للترحيل</p>
+          <p className="mt-2 text-2xl font-bold text-blue-900">{stats.postable}</p>
+        </article>
+        <article className="rounded-lg border border-slate-200 bg-white p-4">
+          <p className="text-sm text-slate-500">حسابات أب</p>
+          <p className="mt-2 text-2xl font-bold text-slate-700">{stats.parent}</p>
+        </article>
       </section>
+
+      {showForm && (
+        <AccountForm
+          key={presetParentId ?? "new-account"}
+          parentAccounts={parentOptions}
+          presetParentId={presetParentId}
+          isSaving={isSaving}
+          error={formError}
+          onSubmit={onCreate}
+          onCancel={
+            presetParentId
+              ? () => {
+                  setPresetParentId(undefined);
+                  setFormError("");
+                }
+              : undefined
+          }
+        />
+      )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
-        {isLoading && <p className="text-sm text-slate-600">جاري تحميل الحسابات...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
+            <span className="text-slate-700">بحث</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="كود أو اسم الحساب"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+          </label>
 
-        {!isLoading && !error && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">كود الحساب</th>
-                  <th className="border-b border-slate-200 p-2">اسم الحساب</th>
-                  <th className="border-b border-slate-200 p-2">حالة الترحيل</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  <th className="border-b border-slate-200 p-2">إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((account) => (
-                  <tr key={account.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {account.code}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {editingId === account.id ? (
-                        <input
-                          value={editNameAr}
-                          onChange={(event) => setEditNameAr(event.target.value)}
-                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        <>
-                          {"\u00A0".repeat(((account.level ?? 1) - 1) * 2)}
-                          {account.name_ar}
-                        </>
-                      )}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {editingId === account.id ? (
-                        <label className="inline-flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editIsPostable}
-                            onChange={(event) => setEditIsPostable(event.target.checked)}
-                          />
-                          <span>{editIsPostable ? "مرحّل عليه" : "حساب أب"}</span>
-                        </label>
-                      ) : account.is_postable ? (
-                        "مرحّل عليه"
-                      ) : (
-                        "حساب أب"
-                      )}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {account.is_active ? "نشط" : "غير نشط"}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      <div className="flex flex-wrap gap-2">
-                        {editingId === account.id ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={saveEdit}
-                              disabled={isSaving}
-                              className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
-                            >
-                              حفظ
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEdit}
-                              disabled={isSaving}
-                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-50"
-                            >
-                              إلغاء
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => startEdit(account)}
-                              disabled={isSaving}
-                              className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
-                            >
-                              تعديل
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleActive(account)}
-                              disabled={isSaving}
-                              className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
-                            >
-                              {account.is_active ? "تعطيل" : "تفعيل"}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
-                {accounts.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="border-b border-slate-100 p-4 text-center text-slate-500"
-                    >
-                      لا توجد حسابات.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="flex flex-wrap gap-2">
+            {filterOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setStatementFilter(option.value)}
+                className={`rounded-full px-3 py-1.5 text-sm ${
+                  statementFilter === option.value
+                    ? "bg-blue-900 text-white"
+                    : "border border-slate-300 text-slate-700"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={expandAll}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700"
+            >
+              توسيع الكل
+            </button>
+            <button
+              type="button"
+              onClick={collapseAll}
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700"
+            >
+              طي الكل
+            </button>
+          </div>
+        </div>
+
+        {isLoading && (
+          <p className="text-sm text-slate-600">جاري تحميل الحسابات...</p>
+        )}
+        {!isLoading && loadError && (
+          <p className="text-sm text-rose-700">{loadError}</p>
+        )}
+        {!isLoading && actionError && (
+          <p className="mb-3 text-sm text-rose-700">{actionError}</p>
+        )}
+
+        {!isLoading && !loadError && (
+          <AccountTreeTable
+            rows={rows}
+            accountsById={accountsById}
+            expandedIds={expandedIds}
+            editingId={editingId}
+            editNameAr={editNameAr}
+            editIsPostable={editIsPostable}
+            isSaving={isSaving}
+            onToggleExpand={toggleExpand}
+            onStartEdit={startEdit}
+            onCancelEdit={cancelEdit}
+            onSaveEdit={saveEdit}
+            onToggleActive={toggleActive}
+            onAddChild={openAddChild}
+            onEditNameChange={setEditNameAr}
+            onEditPostableChange={setEditIsPostable}
+          />
         )}
       </section>
     </main>
