@@ -16,13 +16,11 @@ import {
 } from "@/modules/vouchers/components/payment-voucher-lines-table";
 import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
+import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
-import {
-  ApiError,
-  voucherApi,
-} from "@/modules/vouchers/services/voucher-api";
+import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
   Account,
   CostCenter,
@@ -44,6 +42,7 @@ import {
   getCurrencyById,
   validatePaymentVoucherAccounts,
 } from "@/modules/vouchers/utils/voucher-currency-utils";
+import { useVoucherFeedback } from "@/modules/vouchers/hooks/use-voucher-feedback";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
 import {
   getVoucherSaveFeedback,
@@ -93,7 +92,8 @@ export function PaymentVoucherForm({
   const [defaultPaymentAccountFromSettings, setDefaultPaymentAccountFromSettings] =
     useState("");
 
-  const [feedback, setFeedback] = useState("");
+  const { feedback, feedbackRef, showError, showSuccess, showWarning, showFromError, clearFeedback } =
+    useVoucherFeedback();
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -138,12 +138,6 @@ export function PaymentVoucherForm({
     exchangeRate > 0 &&
     (!isInvoiceMode || (allocations.length > 0 && Boolean(vendorId)));
 
-  const getErrorMessage = (error: unknown): string => {
-    if (error instanceof ApiError) return error.message;
-    if (error instanceof Error) return error.message;
-    return "حدث خطأ غير متوقع.";
-  };
-
   const buildHeaderPayload = (
     targetStatus: VoucherStatus,
     resolvedVoucherNo: string,
@@ -169,7 +163,7 @@ export function PaymentVoucherForm({
       setNextNumberPreview(reserved);
       return reserved;
     }
-    setFeedback("رقم السند مطلوب.");
+    showError("رقم السند مطلوب.");
     return null;
   };
 
@@ -218,15 +212,15 @@ export function PaymentVoucherForm({
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
     if (!currencyId) {
-      setFeedback("اختر عملة السند.");
+      showError("اختر عملة السند.");
       return null;
     }
     if (!paymentAccountId) {
-      setFeedback("حساب الدفع غير معرّف. عيّنه من إعدادات السندات.");
+      showError("حساب الدفع غير معرّف. عيّنه من إعدادات السندات.");
       return null;
     }
     if (validDebitLines.length === 0) {
-      setFeedback("أضف سطراً مديناً واحداً على الأقل.");
+      showError("أضف سطراً مديناً واحداً على الأقل.");
       return null;
     }
 
@@ -238,23 +232,23 @@ export function PaymentVoucherForm({
       currencies,
     });
     if (accountError) {
-      setFeedback(accountError);
+      showError(accountError);
       return null;
     }
 
     for (const line of validDebitLines) {
       const categoryError = validateLineCategory(line, lineCategories);
       if (categoryError) {
-        setFeedback(categoryError);
+        showError(categoryError);
         return null;
       }
     }
     if (exchangeRate <= 0) {
-      setFeedback("سعر الصرف يجب أن يكون أكبر من صفر.");
+      showError("سعر الصرف يجب أن يكون أكبر من صفر.");
       return null;
     }
     if (isInvoiceMode && !vendorId) {
-      setFeedback("المورد مطلوب في وضع إغلاق الحركات.");
+      showError("المورد مطلوب في وضع إغلاق الحركات.");
       return null;
     }
 
@@ -282,10 +276,10 @@ export function PaymentVoucherForm({
 
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      setFeedback(getVoucherSaveFeedback(status, targetStatus));
+      showSuccess(getVoucherSaveFeedback(status, targetStatus));
       return activeId;
     } catch (error) {
-      setFeedback(getErrorMessage(error));
+      showFromError(error);
       return null;
     }
   };
@@ -306,7 +300,7 @@ export function PaymentVoucherForm({
         currencies,
         payableAccount.currency_id ?? "",
       );
-      setFeedback(
+      showWarning(
         `حساب ذمم المورد (${payableAccount.code}) بعملة ${
           accountCurrency?.code ?? "—"
         } لا يطابق عملة السند (${selectedCurrency?.code ?? "—"}).`,
@@ -472,7 +466,7 @@ export function PaymentVoucherForm({
         setDebitLines(loadedDebits);
         setAllocations(details.allocations);
       } catch (error) {
-        if (!cancelled) setFeedback(getErrorMessage(error));
+        if (!cancelled) showFromError(error);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -502,6 +496,12 @@ export function PaymentVoucherForm({
       </div>
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
+
+      <VoucherFormFeedback
+        feedback={feedback}
+        feedbackRef={feedbackRef}
+        onDismiss={clearFeedback}
+      />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -742,7 +742,7 @@ export function PaymentVoucherForm({
                 setIsSaving(true);
                 void (async () => {
                   if (!canPost) {
-                    setFeedback(
+                    showError(
                       "تعذر الترحيل. تحقق من حساب الدفع والأسطر والمورد والتخصيصات.",
                     );
                     return;
@@ -752,7 +752,7 @@ export function PaymentVoucherForm({
                   const response = await voucherApi.postVoucher(activeId);
                   setStatus("posted");
                   setJournalEntryId(response.journal_entry_id);
-                  setFeedback(`تم الترحيل. القيد: ${response.journal_entry_no}`);
+                  showSuccess(`تم الترحيل. القيد: ${response.journal_entry_no}`);
                 })().finally(() => setIsSaving(false));
               }}
               disabled={!canPost || isSaving}
@@ -771,9 +771,7 @@ export function PaymentVoucherForm({
             />
           )}
         </div>
-        {feedback && (
-          <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700">{feedback}</p>
-        )}
+        <VoucherFormFeedback feedback={feedback} onDismiss={clearFeedback} className="mt-3" />
       </section>
     </div>
   );

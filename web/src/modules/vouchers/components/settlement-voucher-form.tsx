@@ -15,12 +15,10 @@ import {
 } from "@/modules/vouchers/components/settlement-voucher-lines-table";
 import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
+import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
-import {
-  ApiError,
-  voucherApi,
-} from "@/modules/vouchers/services/voucher-api";
+import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
   Account,
   CostCenter,
@@ -37,6 +35,7 @@ import {
   getAmountStep,
   validateSettlementVoucherAccounts,
 } from "@/modules/vouchers/utils/voucher-currency-utils";
+import { useVoucherFeedback } from "@/modules/vouchers/hooks/use-voucher-feedback";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
 import {
   getVoucherSaveFeedback,
@@ -78,7 +77,8 @@ export function SettlementVoucherForm({
   const [defaultClearingAccountFromSettings, setDefaultClearingAccountFromSettings] =
     useState("");
 
-  const [feedback, setFeedback] = useState("");
+  const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
+    useVoucherFeedback();
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -146,12 +146,6 @@ export function SettlementVoucherForm({
     exchangeRate > 0 &&
     !costCenterBalanceError;
 
-  const getErrorMessage = (error: unknown): string => {
-    if (error instanceof ApiError) return error.message;
-    if (error instanceof Error) return error.message;
-    return "حدث خطأ غير متوقع.";
-  };
-
   const buildHeaderPayload = (
     targetStatus: VoucherStatus,
     resolvedVoucherNo: string,
@@ -177,7 +171,7 @@ export function SettlementVoucherForm({
       setNextNumberPreview(reserved);
       return reserved;
     }
-    setFeedback("رقم السند مطلوب.");
+    showError("رقم السند مطلوب.");
     return null;
   };
 
@@ -207,15 +201,15 @@ export function SettlementVoucherForm({
 
   const saveVoucher = async (targetStatus: VoucherStatus) => {
     if (!currencyId) {
-      setFeedback("اختر عملة السند.");
+      showError("اختر عملة السند.");
       return null;
     }
     if (!clearingAccountId) {
-      setFeedback("الحساب الوسيط غير معرّف. عيّنه من إعدادات السندات.");
+      showError("الحساب الوسيط غير معرّف. عيّنه من إعدادات السندات.");
       return null;
     }
     if (validUserLines.length === 0) {
-      setFeedback("أضف سطراً واحداً على الأقل (مدين أو دائن).");
+      showError("أضف سطراً واحداً على الأقل (مدين أو دائن).");
       return null;
     }
 
@@ -227,7 +221,7 @@ export function SettlementVoucherForm({
       currencies,
     });
     if (accountError) {
-      setFeedback(accountError);
+      showError(accountError);
       return null;
     }
 
@@ -238,19 +232,19 @@ export function SettlementVoucherForm({
       excludeNullCostCenter: true,
     });
     if (costCenterError) {
-      setFeedback(costCenterError);
+      showError(costCenterError);
       return null;
     }
 
     for (const line of validUserLines) {
       const categoryError = validateLineCategory(line, lineCategories);
       if (categoryError) {
-        setFeedback(categoryError);
+        showError(categoryError);
         return null;
       }
     }
     if (exchangeRate <= 0) {
-      setFeedback("سعر الصرف يجب أن يكون أكبر من صفر.");
+      showError("سعر الصرف يجب أن يكون أكبر من صفر.");
       return null;
     }
 
@@ -275,10 +269,10 @@ export function SettlementVoucherForm({
 
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      setFeedback(getVoucherSaveFeedback(status, targetStatus));
+      showSuccess(getVoucherSaveFeedback(status, targetStatus));
       return activeId;
     } catch (error) {
-      setFeedback(getErrorMessage(error));
+      showFromError(error);
       return null;
     }
   };
@@ -406,7 +400,7 @@ export function SettlementVoucherForm({
         setDescription(details.header.description ?? "");
         setUserLines(loadedUserLines);
       } catch (error) {
-        if (!cancelled) setFeedback(getErrorMessage(error));
+        if (!cancelled) showFromError(error);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -437,6 +431,12 @@ export function SettlementVoucherForm({
       </div>
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
+
+      <VoucherFormFeedback
+        feedback={feedback}
+        feedbackRef={feedbackRef}
+        onDismiss={clearFeedback}
+      />
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -651,7 +651,7 @@ export function SettlementVoucherForm({
                 setIsSaving(true);
                 void (async () => {
                   if (!canPost) {
-                    setFeedback(
+                    showError(
                       costCenterBalanceError ??
                         "تعذر الترحيل. تحقق من الحساب الوسيط والأسطر ومراكز الكلفة والعملة.",
                     );
@@ -662,7 +662,7 @@ export function SettlementVoucherForm({
                   const response = await voucherApi.postVoucher(activeId);
                   setStatus("posted");
                   setJournalEntryId(response.journal_entry_id);
-                  setFeedback(`تم الترحيل. القيد: ${response.journal_entry_no}`);
+                  showSuccess(`تم الترحيل. القيد: ${response.journal_entry_no}`);
                 })().finally(() => setIsSaving(false));
               }}
               disabled={!canPost || isSaving}
@@ -681,9 +681,7 @@ export function SettlementVoucherForm({
             />
           )}
         </div>
-        {feedback && (
-          <p className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700">{feedback}</p>
-        )}
+        <VoucherFormFeedback feedback={feedback} onDismiss={clearFeedback} className="mt-3" />
       </section>
     </div>
   );
