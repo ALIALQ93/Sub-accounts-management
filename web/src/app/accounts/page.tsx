@@ -298,7 +298,7 @@ export default function AccountsPage() {
   ];
 
   return (
-    <main className="flex min-h-full w-full flex-col gap-3">
+    <main className="flex w-full flex-col gap-3">
       <section className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold text-slate-900">دليل الحسابات</h1>
@@ -427,7 +427,7 @@ export default function AccountsPage() {
         onClose={closeCardModal}
       />
 
-      <section className="flex min-h-0 flex-1 flex-col rounded-xl border-2 border-slate-300 bg-white p-2 md:p-3">
+      <section className="flex flex-col rounded-xl border-2 border-slate-300 bg-white p-2 md:p-3">
         <div className="mb-2 flex shrink-0 flex-wrap items-end gap-2">
           <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
             <span className="text-slate-700">بحث</span>
@@ -485,7 +485,7 @@ export default function AccountsPage() {
         )}
 
         {!isLoading && !loadError && (
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div className="max-h-[calc(100svh-19rem)] min-h-[18rem] overflow-y-auto overscroll-contain rounded-lg">
             <AccountTreeTable
               rows={rows}
               accountsById={accountsById}

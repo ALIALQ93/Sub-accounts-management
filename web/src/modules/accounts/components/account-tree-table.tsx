@@ -44,28 +44,17 @@ export function AccountTreeTable({
   }
 
   return (
-    <div className="h-full min-h-[calc(100svh-240px)] overflow-auto rounded-xl border-2 border-slate-300 bg-white shadow-sm">
-      <table className="w-full table-fixed border-collapse text-sm">
-        <colgroup>
-          <col className="w-[130px]" />
-          <col />
-          <col className="w-[90px]" />
-          <col className="w-[min(12vw,180px)]" />
-          <col className="w-[min(12vw,180px)]" />
-          <col className="w-[min(12vw,180px)]" />
-          <col className="w-[min(16vw,240px)]" />
-          <col className="w-[min(18vw,280px)]" />
-        </colgroup>
+    <div className="rounded-xl border-2 border-slate-300 bg-white shadow-sm">
+      <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-slate-100 shadow-[0_1px_0_0_rgb(203_213_225)]">
           <tr className="text-right text-xs font-semibold uppercase tracking-wide text-slate-700">
-            <th className={TH}>الكود</th>
-            <th className={TH}>الحساب</th>
-            <th className={TH}>العملة</th>
-            <th className={`${TH} bg-blue-100/70`}>مدين</th>
-            <th className={`${TH} bg-blue-100/70`}>دائن</th>
-            <th className={`${TH} bg-blue-100/70`}>الرصيد</th>
-            <th className={TH}>الخصائص</th>
-            <th className={TH}>إجراءات</th>
+            <th className={`${TH} w-[110px]`}>الكود</th>
+            <th className={`${TH} min-w-[260px]`}>الحساب</th>
+            <th className={`${TH} w-[72px]`}>العملة</th>
+            <th className={`${TH} w-[120px] bg-blue-100/70`}>مدين</th>
+            <th className={`${TH} w-[120px] bg-blue-100/70`}>دائن</th>
+            <th className={`${TH} w-[120px] bg-blue-100/70`}>الرصيد</th>
+            <th className={`${TH} w-[200px]`}>إجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -95,14 +84,14 @@ export function AccountTreeTable({
                 </td>
                 <td className={TD}>
                   <div
-                    className="flex min-w-0 items-start gap-2"
-                    style={{ paddingRight: `${depth * 18}px` }}
+                    className="flex items-start gap-2"
+                    style={{ paddingRight: `${depth * 16}px` }}
                   >
                     {hasChildren ? (
                       <button
                         type="button"
                         onClick={() => onToggleExpand(node.id)}
-                        className="mt-0.5 shrink-0 rounded px-1 text-slate-500 hover:bg-slate-200/80"
+                        className="mt-1 shrink-0 rounded px-1 text-slate-500 hover:bg-slate-200/80"
                         aria-label={isExpanded ? "طي" : "توسيع"}
                       >
                         {isExpanded ? "▾" : "▸"}
@@ -111,69 +100,67 @@ export function AccountTreeTable({
                       <span className="inline-block w-5 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onViewCard(node)}
-                          className="truncate text-right font-semibold text-slate-900 hover:text-blue-900 hover:underline"
+                      <button
+                        type="button"
+                        onClick={() => onViewCard(node)}
+                        title={node.name_ar}
+                        className="block w-full whitespace-normal break-words text-right text-sm font-semibold leading-relaxed text-slate-900 hover:text-blue-900 hover:underline"
+                      >
+                        {node.name_ar}
+                      </button>
+                      {node.name_en && (
+                        <p
+                          className="mt-0.5 whitespace-normal break-words text-xs leading-relaxed text-slate-500"
+                          dir="ltr"
+                          title={node.name_en}
                         >
-                          {node.name_ar}
-                        </button>
+                          {node.name_en}
+                        </p>
+                      )}
+                      <div className="mt-1.5 flex flex-wrap gap-1">
                         {hasChildren && (
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
                             {node.childCount} فرع
                           </span>
                         )}
-                      </div>
-                      {node.name_en && (
-                        <p
-                          className="mt-0.5 truncate text-xs text-slate-500"
-                          dir="ltr"
+                        {statementType && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] ${
+                              statementType === "balance_sheet"
+                                ? "bg-blue-50 text-blue-800"
+                                : "bg-emerald-50 text-emerald-800"
+                            }`}
+                          >
+                            {getStatementLabel(statementType)}
+                          </span>
+                        )}
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+                          {node.is_postable ? "مرحّل" : "أب"}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] ${
+                            node.is_active
+                              ? "bg-emerald-50 text-emerald-800"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
                         >
-                          {node.name_en}
-                        </p>
-                      )}
+                          {node.is_active ? "نشط" : "معطّل"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </td>
                 <td className={`${TD} text-center font-mono text-xs font-medium text-slate-700`}>
                   {balance?.currency_code ?? "—"}
                 </td>
-                <td className={`${TD} bg-blue-50/30 text-left font-mono text-xs tabular-nums text-slate-800`}>
+                <td className={`${TD} bg-blue-50/30 text-left font-mono text-[11px] tabular-nums text-slate-800`}>
                   {balance ? fmt(balance.display_debit) : "—"}
                 </td>
-                <td className={`${TD} bg-blue-50/30 text-left font-mono text-xs tabular-nums text-slate-800`}>
+                <td className={`${TD} bg-blue-50/30 text-left font-mono text-[11px] tabular-nums text-slate-800`}>
                   {balance ? fmt(balance.display_credit) : "—"}
                 </td>
-                <td className={`${TD} bg-blue-50/30 text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}>
+                <td className={`${TD} bg-blue-50/30 text-left font-mono text-[11px] font-semibold tabular-nums text-blue-900`}>
                   {balance ? fmt(balance.display_balance) : "—"}
-                </td>
-                <td className={TD}>
-                  <div className="flex flex-wrap gap-1.5">
-                    {statementType && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] ${
-                          statementType === "balance_sheet"
-                            ? "bg-blue-50 text-blue-800"
-                            : "bg-emerald-50 text-emerald-800"
-                        }`}
-                      >
-                        {getStatementLabel(statementType)}
-                      </span>
-                    )}
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
-                      {node.is_postable ? "مرحّل" : "أب"}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] ${
-                        node.is_active
-                          ? "bg-emerald-50 text-emerald-800"
-                          : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {node.is_active ? "نشط" : "معطّل"}
-                    </span>
-                  </div>
                 </td>
                 <td className={TD}>
                   <div className="flex flex-wrap gap-1">
@@ -210,9 +197,9 @@ export function AccountTreeTable({
 }
 
 const TH =
-  "border border-slate-300 px-4 py-3.5 first:border-r-2 last:border-l-2";
+  "border border-slate-300 px-3 py-3 first:border-r-2 last:border-l-2";
 const TD =
-  "border border-slate-300 px-4 py-3.5 align-top first:border-r-2 last:border-l-2";
+  "border border-slate-300 px-3 py-3 align-top first:border-r-2 last:border-l-2";
 
 function ActionButton({
   label,
