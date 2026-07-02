@@ -37,27 +37,41 @@ export function AccountTreeTable({
 }: AccountTreeTableProps) {
   if (rows.length === 0) {
     return (
-      <p className="p-4 text-center text-sm text-slate-500">
+      <p className="p-8 text-center text-sm text-slate-500">
         لا توجد حسابات مطابقة للبحث.
       </p>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[1180px] border-collapse text-sm">
-        <thead className="sticky top-0 bg-slate-50">
-          <tr className="text-right text-slate-700">
-            <th className="border-b border-slate-200 p-2">كود الحساب</th>
-            <th className="border-b border-slate-200 p-2">اسم الحساب</th>
-            <th className="border-b border-slate-200 p-2">العملة</th>
-            <th className="border-b border-slate-200 p-2">مدين</th>
-            <th className="border-b border-slate-200 p-2">دائن</th>
-            <th className="border-b border-slate-200 p-2">الرصيد</th>
-            <th className="border-b border-slate-200 p-2">التصنيف</th>
-            <th className="border-b border-slate-200 p-2">نوع الحساب</th>
-            <th className="border-b border-slate-200 p-2">الحالة</th>
-            <th className="border-b border-slate-200 p-2">إجراءات</th>
+    <div className="overflow-x-auto rounded-lg border border-slate-200">
+      <table className="w-full table-fixed border-collapse text-sm">
+        <colgroup>
+          <col className="w-[108px]" />
+          <col />
+          <col className="w-[72px]" />
+          <col className="w-[130px]" />
+          <col className="w-[130px]" />
+          <col className="w-[130px]" />
+          <col className="w-[200px]" />
+          <col className="w-[220px]" />
+        </colgroup>
+        <thead className="bg-slate-50">
+          <tr className="text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <th className="border-b border-slate-200 px-3 py-3">الكود</th>
+            <th className="border-b border-slate-200 px-3 py-3">الحساب</th>
+            <th className="border-b border-slate-200 px-3 py-3">العملة</th>
+            <th className="border-b border-slate-200 bg-blue-50/50 px-3 py-3">
+              مدين
+            </th>
+            <th className="border-b border-slate-200 bg-blue-50/50 px-3 py-3">
+              دائن
+            </th>
+            <th className="border-b border-slate-200 bg-blue-50/50 px-3 py-3">
+              الرصيد
+            </th>
+            <th className="border-b border-slate-200 px-3 py-3">الخصائص</th>
+            <th className="border-b border-slate-200 px-3 py-3">إجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -78,119 +92,117 @@ export function AccountTreeTable({
                 : "—";
 
             return (
-              <tr key={node.id} className="odd:bg-white even:bg-slate-50/60">
-                <td className="border-b border-slate-100 p-2 font-mono">
+              <tr
+                key={node.id}
+                className="group align-top odd:bg-white even:bg-slate-50/40 hover:bg-blue-50/30"
+              >
+                <td className="border-b border-slate-100 px-3 py-3 font-mono text-xs text-slate-800">
                   {node.code}
                 </td>
-                <td className="border-b border-slate-100 p-2">
+                <td className="border-b border-slate-100 px-3 py-3">
                   <div
-                    className="flex items-center gap-1"
-                    style={{ paddingRight: `${depth * 16}px` }}
+                    className="flex min-w-0 items-start gap-2"
+                    style={{ paddingRight: `${depth * 18}px` }}
                   >
                     {hasChildren ? (
                       <button
                         type="button"
                         onClick={() => onToggleExpand(node.id)}
-                        className="rounded px-1 text-slate-500 hover:bg-slate-100"
+                        className="mt-0.5 shrink-0 rounded px-1 text-slate-500 hover:bg-slate-200/80"
                         aria-label={isExpanded ? "طي" : "توسيع"}
                       >
                         {isExpanded ? "▾" : "▸"}
                       </button>
                     ) : (
-                      <span className="inline-block w-5" />
+                      <span className="inline-block w-5 shrink-0" />
                     )}
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="font-medium text-slate-900">
-                        {node.name_ar}
-                      </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onViewCard(node)}
+                          className="truncate text-right font-semibold text-slate-900 hover:text-blue-900 hover:underline"
+                        >
+                          {node.name_ar}
+                        </button>
+                        {hasChildren && (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                            {node.childCount} فرع
+                          </span>
+                        )}
+                      </div>
                       {node.name_en && (
-                        <span className="text-xs text-slate-500" dir="ltr">
+                        <p
+                          className="mt-0.5 truncate text-xs text-slate-500"
+                          dir="ltr"
+                        >
                           {node.name_en}
-                        </span>
+                        </p>
                       )}
                     </div>
-                    {hasChildren && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                        {node.childCount} فرع
-                      </span>
-                    )}
                   </div>
                 </td>
-                <td className="border-b border-slate-100 p-2 font-mono">
+                <td className="border-b border-slate-100 px-3 py-3 text-center font-mono text-xs font-medium text-slate-700">
                   {balance?.currency_code ?? "—"}
                 </td>
-                <td className="border-b border-slate-100 p-2 font-mono">
+                <td className="border-b border-slate-100 bg-blue-50/20 px-3 py-3 text-left font-mono text-xs tabular-nums text-slate-800">
                   {balance ? fmt(balance.display_debit) : "—"}
                 </td>
-                <td className="border-b border-slate-100 p-2 font-mono">
+                <td className="border-b border-slate-100 bg-blue-50/20 px-3 py-3 text-left font-mono text-xs tabular-nums text-slate-800">
                   {balance ? fmt(balance.display_credit) : "—"}
                 </td>
-                <td className="border-b border-slate-100 p-2 font-mono font-medium text-blue-900">
+                <td className="border-b border-slate-100 bg-blue-50/20 px-3 py-3 text-left font-mono text-xs font-semibold tabular-nums text-blue-900">
                   {balance ? fmt(balance.display_balance) : "—"}
                 </td>
-                <td className="border-b border-slate-100 p-2">
-                  {statementType ? (
+                <td className="border-b border-slate-100 px-3 py-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {statementType && (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] ${
+                          statementType === "balance_sheet"
+                            ? "bg-blue-50 text-blue-800"
+                            : "bg-emerald-50 text-emerald-800"
+                        }`}
+                      >
+                        {getStatementLabel(statementType)}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+                      {node.is_postable ? "مرحّل" : "أب"}
+                    </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        statementType === "balance_sheet"
-                          ? "bg-blue-50 text-blue-800"
-                          : "bg-emerald-50 text-emerald-800"
+                      className={`rounded-full px-2 py-0.5 text-[11px] ${
+                        node.is_active
+                          ? "bg-emerald-50 text-emerald-800"
+                          : "bg-slate-100 text-slate-600"
                       }`}
                     >
-                      {getStatementLabel(statementType)}
+                      {node.is_active ? "نشط" : "معطّل"}
                     </span>
-                  ) : (
-                    "—"
-                  )}
+                  </div>
                 </td>
-                <td className="border-b border-slate-100 p-2">
-                  {node.is_postable ? "مرحّل عليه" : "حساب أب"}
-                </td>
-                <td className="border-b border-slate-100 p-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${
-                      node.is_active
-                        ? "bg-emerald-50 text-emerald-800"
-                        : "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {node.is_active ? "نشط" : "غير نشط"}
-                  </span>
-                </td>
-                <td className="border-b border-slate-100 p-2">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onViewCard(node)}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700"
-                    >
-                      بطاقة
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onAddChild(node)}
+                <td className="border-b border-slate-100 px-3 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    <ActionButton label="بطاقة" onClick={() => onViewCard(node)} />
+                    <ActionButton
+                      label="+ فرع"
+                      tone="emerald"
                       disabled={isSaving || !node.is_active}
-                      className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-medium text-emerald-700 disabled:opacity-50"
-                    >
-                      + فرع
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onEdit(node)}
+                      onClick={() => onAddChild(node)}
+                    />
+                    <ActionButton
+                      label="تعديل"
+                      tone="blue"
                       disabled={isSaving}
-                      className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
-                    >
-                      تعديل
-                    </button>
+                      onClick={() => onEdit(node)}
+                    />
                     {!rootAccount && (
-                      <button
-                        type="button"
-                        onClick={() => onToggleActive(node)}
+                      <ActionButton
+                        label={node.is_active ? "تعطيل" : "تفعيل"}
+                        tone="amber"
                         disabled={isSaving}
-                        className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
-                      >
-                        {node.is_active ? "تعطيل" : "تفعيل"}
-                      </button>
+                        onClick={() => onToggleActive(node)}
+                      />
                     )}
                   </div>
                 </td>
@@ -200,5 +212,35 @@ export function AccountTreeTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function ActionButton({
+  label,
+  tone = "slate",
+  disabled,
+  onClick,
+}: {
+  label: string;
+  tone?: "slate" | "blue" | "emerald" | "amber";
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const toneClass = {
+    slate: "border-slate-300 text-slate-700 hover:bg-slate-50",
+    blue: "border-blue-300 text-blue-700 hover:bg-blue-50",
+    emerald: "border-emerald-300 text-emerald-700 hover:bg-emerald-50",
+    amber: "border-amber-300 text-amber-700 hover:bg-amber-50",
+  }[tone];
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`rounded-md border px-2 py-1 text-[11px] font-medium disabled:opacity-50 ${toneClass}`}
+    >
+      {label}
+    </button>
   );
 }

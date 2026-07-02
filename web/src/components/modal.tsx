@@ -2,18 +2,28 @@
 
 import { useEffect } from "react";
 
+type ModalSize = "md" | "lg" | "xl";
+
 interface ModalProps {
   open: boolean;
   title: string;
   description?: string;
+  size?: ModalSize;
   onClose: () => void;
   children: React.ReactNode;
 }
+
+const SIZE_CLASS: Record<ModalSize, string> = {
+  md: "max-w-2xl",
+  lg: "max-w-4xl",
+  xl: "max-w-6xl",
+};
 
 export function Modal({
   open,
   title,
   description,
+  size = "md",
   onClose,
   children,
 }: ModalProps) {
@@ -37,21 +47,23 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
     >
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/40"
+        className="absolute inset-0 bg-slate-900/45"
         aria-label="إغلاق"
         onClick={onClose}
       />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="modal-title" className="text-lg font-semibold text-slate-900">
+      <div
+        className={`relative z-10 max-h-[92vh] w-full ${SIZE_CLASS[size]} overflow-y-auto rounded-xl bg-white p-6 shadow-2xl md:p-8`}
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 id="modal-title" className="text-xl font-bold text-slate-900">
               {title}
             </h2>
             {description && (
@@ -61,7 +73,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-slate-300 px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
+            className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
           >
             ✕
           </button>

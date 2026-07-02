@@ -298,7 +298,7 @@ export default function AccountsPage() {
   ];
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+    <main className="flex w-full flex-col gap-4">
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">دليل الحسابات</h1>
@@ -423,10 +423,11 @@ export default function AccountsPage() {
         balance={cardBalance}
         directBalances={directBalances}
         currencies={currencies}
+        accountsById={accountsById}
         onClose={closeCardModal}
       />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-lg border border-slate-200 bg-white p-4 md:p-5">
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
             <span className="text-slate-700">بحث</span>
