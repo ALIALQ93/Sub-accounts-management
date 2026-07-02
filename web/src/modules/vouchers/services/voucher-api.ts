@@ -1,6 +1,7 @@
 "use client";
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { costCenterApi } from "@/modules/cost-centers/services/cost-center-api";
 import type {
   AccountStatementLine,
   AccountStatementResult,
@@ -835,13 +836,7 @@ export const voucherApi = {
   },
 
   async listCostCenters(): Promise<CostCenter[]> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from("cost_centers")
-      .select("*")
-      .order("code", { ascending: true });
-    if (error) return [];
-    return (data ?? []) as CostCenter[];
+    return costCenterApi.listCostCenters();
   },
 
   async listVoucherTypeDefaults(): Promise<VoucherTypeDefaults[]> {
