@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
-import { CompanyLogo } from "@/components/company-logo";
+import { LogoUploadField } from "@/components/logo-upload-field";
 import { SettingsNav } from "@/modules/settings/components/settings-nav";
 import { settingsApi } from "@/modules/settings/services/settings-api";
 import type { CompanySettings, CompanySettingsFormValues } from "@/modules/settings/types";
@@ -70,6 +70,28 @@ export default function CompanySettingsPage() {
     };
   }, []);
 
+  const onLogoChange = async (nextLogoUrl: string | null) => {
+    if (!canEdit) {
+      setError("يتطلب صلاحية تعديل بيانات الشركة.");
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    try {
+      const updated = await settingsApi.updateCompanySettings({
+        ...form,
+        logo_url: nextLogoUrl ?? "",
+      });
+      setSettings(updated);
+      setForm((current) => ({ ...current, logo_url: nextLogoUrl ?? "" }));
+      setSuccess(nextLogoUrl ? "تم رفع الشعار." : "تم إزالة الشعار.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل حفظ الشعار.");
+      throw err;
+    }
+  };
+
   const onSave = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!canEdit) {
@@ -119,32 +141,12 @@ export default function CompanySettingsPage() {
           onSubmit={(event) => void onSave(event)}
           className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4"
         >
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium text-slate-700">رابط شعار الشركة</span>
-            <div className="flex items-start gap-4">
-              <CompanyLogo
-                companyName={form.legal_name_ar || "شركتي"}
-                logoUrl={form.logo_url || null}
-                size="md"
-              />
-              <div className="min-w-0 flex-1">
-                <input
-                  value={form.logo_url}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, logo_url: event.target.value }))
-                  }
-                  disabled={!canEdit || isSaving}
-                  placeholder="https://example.com/logo.png"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs"
-                  dir="ltr"
-                />
-                <span className="mt-1 block text-xs text-slate-500">
-                  يظهر في تسجيل الدخول والشريط الجانبي. PNG أو SVG بخلفية شفافة — يُفضّل
-                  200×200px.
-                </span>
-              </div>
-            </div>
-          </label>
+          <LogoUploadField
+            companyName={form.legal_name_ar || "شركتي"}
+            logoUrl={form.logo_url || null}
+            disabled={!canEdit || isSaving}
+            onLogoChange={onLogoChange}
+          />
 
           <label className="grid gap-1 text-sm">
             <span className="font-medium text-slate-700">الاسم القانوني (عربي) *</span>

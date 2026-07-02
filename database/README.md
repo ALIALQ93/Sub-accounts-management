@@ -35,6 +35,7 @@ database/setup_all.sql
 |-------|-----|
 | `04_auth.sql` | قاعدة قديمة بدون `profiles` / مصادقة |
 | `05_permissions.sql` | بعد `04_auth.sql` — إضافة `user_permissions` و `has_permission` |
+| `06_storage.sql` | بعد `05_permissions.sql` — buckets للشعار ومرفقات السندات |
 
 ## ما يشمله المخطط الحالي
 
@@ -74,6 +75,7 @@ database/setup_all.sql
 | `patch_voucher_line_categories.sql` | إضافة جدول تصنيفات الأسطر |
 | `patch_journal_cost_centers.sql` | مراكز كلفة على القيود |
 | `patch_company_logo.sql` | إضافة حقل `logo_url` في `company_settings` |
+| `06_storage.sql` | إنشاء buckets Storage + سياسات RLS للملفات |
 
 ## إعادة توليد setup_all.sql
 
