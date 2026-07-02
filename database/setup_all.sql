@@ -21,6 +21,7 @@ drop table if exists public.vouchers cascade;
 drop table if exists public.voucher_type_defaults cascade;
 drop table if exists public.voucher_number_sequences cascade;
 drop table if exists public.voucher_settings cascade;
+drop table if exists public.party_settings cascade;
 drop table if exists public.journal_entry_lines cascade;
 drop table if exists public.journal_entries cascade;
 drop table if exists public.customers cascade;
@@ -198,6 +199,17 @@ create table public.vendors (
 );
 
 create index idx_vendors_payable_account_id on public.vendors(payable_account_id);
+
+-- ---------------------------------------------------------------------------
+-- إعدادات العملاء والموردين (حساب أب افتراضي)
+-- ---------------------------------------------------------------------------
+
+create table public.party_settings (
+  id int primary key default 1 check (id = 1),
+  customer_parent_account_id uuid null references public.accounts(id) on delete set null,
+  vendor_parent_account_id uuid null references public.accounts(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
 
 -- ---------------------------------------------------------------------------
 -- إعدادات السندات والترقيم
@@ -1430,6 +1442,9 @@ values
   ('CC-100', 'المبيعات', 'Sales'),
   ('CC-200', 'الإدارة', 'Administration');
 
+insert into public.party_settings (id)
+values (1);
+
 insert into public.voucher_settings (id)
 values (1);
 
@@ -1478,6 +1493,7 @@ alter table public.journal_entries enable row level security;
 alter table public.journal_entry_lines enable row level security;
 alter table public.customers enable row level security;
 alter table public.vendors enable row level security;
+alter table public.party_settings enable row level security;
 alter table public.voucher_settings enable row level security;
 alter table public.voucher_number_sequences enable row level security;
 alter table public.voucher_type_defaults enable row level security;
@@ -1569,6 +1585,17 @@ create policy "vendors_insert_all" on public.vendors
   for insert to anon, authenticated with check (true);
 drop policy if exists "vendors_update_all" on public.vendors;
 create policy "vendors_update_all" on public.vendors
+  for update to anon, authenticated using (true) with check (true);
+
+-- party_settings
+drop policy if exists "party_settings_select_all" on public.party_settings;
+create policy "party_settings_select_all" on public.party_settings
+  for select to anon, authenticated using (true);
+drop policy if exists "party_settings_insert_all" on public.party_settings;
+create policy "party_settings_insert_all" on public.party_settings
+  for insert to anon, authenticated with check (true);
+drop policy if exists "party_settings_update_all" on public.party_settings;
+create policy "party_settings_update_all" on public.party_settings
   for update to anon, authenticated using (true) with check (true);
 
 -- voucher_settings

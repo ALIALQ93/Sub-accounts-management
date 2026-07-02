@@ -141,6 +141,17 @@ create table public.vendors (
 create index idx_vendors_payable_account_id on public.vendors(payable_account_id);
 
 -- ---------------------------------------------------------------------------
+-- إعدادات العملاء والموردين (حساب أب افتراضي)
+-- ---------------------------------------------------------------------------
+
+create table public.party_settings (
+  id int primary key default 1 check (id = 1),
+  customer_parent_account_id uuid null references public.accounts(id) on delete set null,
+  vendor_parent_account_id uuid null references public.accounts(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
 -- إعدادات السندات والترقيم
 -- ---------------------------------------------------------------------------
 
@@ -1370,6 +1381,9 @@ values
   ('CC-000', 'عام', 'General'),
   ('CC-100', 'المبيعات', 'Sales'),
   ('CC-200', 'الإدارة', 'Administration');
+
+insert into public.party_settings (id)
+values (1);
 
 insert into public.voucher_settings (id)
 values (1);

@@ -12,6 +12,7 @@ alter table public.journal_entries enable row level security;
 alter table public.journal_entry_lines enable row level security;
 alter table public.customers enable row level security;
 alter table public.vendors enable row level security;
+alter table public.party_settings enable row level security;
 alter table public.voucher_settings enable row level security;
 alter table public.voucher_number_sequences enable row level security;
 alter table public.voucher_type_defaults enable row level security;
@@ -103,6 +104,17 @@ create policy "vendors_insert_all" on public.vendors
   for insert to anon, authenticated with check (true);
 drop policy if exists "vendors_update_all" on public.vendors;
 create policy "vendors_update_all" on public.vendors
+  for update to anon, authenticated using (true) with check (true);
+
+-- party_settings
+drop policy if exists "party_settings_select_all" on public.party_settings;
+create policy "party_settings_select_all" on public.party_settings
+  for select to anon, authenticated using (true);
+drop policy if exists "party_settings_insert_all" on public.party_settings;
+create policy "party_settings_insert_all" on public.party_settings
+  for insert to anon, authenticated with check (true);
+drop policy if exists "party_settings_update_all" on public.party_settings;
+create policy "party_settings_update_all" on public.party_settings
   for update to anon, authenticated using (true) with check (true);
 
 -- voucher_settings

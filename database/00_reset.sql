@@ -14,6 +14,7 @@ drop table if exists public.vouchers cascade;
 drop table if exists public.voucher_type_defaults cascade;
 drop table if exists public.voucher_number_sequences cascade;
 drop table if exists public.voucher_settings cascade;
+drop table if exists public.party_settings cascade;
 drop table if exists public.journal_entry_lines cascade;
 drop table if exists public.journal_entries cascade;
 drop table if exists public.customers cascade;

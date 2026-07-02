@@ -1,136 +1,109 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { OpenInNewTabLink } from "@/components/open-in-new-tab-link";
+import { PartyFormModal } from "@/modules/parties/components/party-form-modal";
+import { PartySettingsPanel } from "@/modules/parties/components/party-settings-panel";
+import { partyApi } from "@/modules/parties/services/party-api";
+import type { PartyFormValues, PartySettings } from "@/modules/parties/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { Account, Vendor } from "@/modules/vouchers/types";
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [partySettings, setPartySettings] = useState<PartySettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const [vendorCode, setVendorCode] = useState("");
-  const [nameAr, setNameAr] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [payableAccountId, setPayableAccountId] = useState("");
-  const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
-  const [editNameAr, setEditNameAr] = useState("");
-  const [editPhone, setEditPhone] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editPayableAccountId, setEditPayableAccountId] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
 
-  const reloadVendors = async () => {
-    try {
-      const [vendorsData, accountsData] = await Promise.all([
-        voucherApi.listVendors(),
-        voucherApi.listAccounts(),
-      ]);
-      setVendors(vendorsData);
-      setAccounts(accountsData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل تحميل الموردين.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const reload = useCallback(async () => {
+    const [vendorsData, accountsData, settingsData] = await Promise.all([
+      voucherApi.listVendors(),
+      voucherApi.listAllAccounts(),
+      partyApi.getPartySettings(),
+    ]);
+    setVendors(vendorsData);
+    setAccounts(accountsData);
+    setPartySettings(settingsData);
+    return { vendorsData, accountsData, settingsData };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadInitial = async () => {
+    const load = async () => {
       try {
-        const [vendorsData, accountsData] = await Promise.all([
-          voucherApi.listVendors(),
-          voucherApi.listAccounts(),
-        ]);
+        const data = await reload();
         if (cancelled) return;
-        setVendors(vendorsData);
-        setAccounts(accountsData);
+        void data;
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "فشل تحميل الموردين.");
+          setLoadError(err instanceof Error ? err.message : "فشل تحميل الموردين.");
         }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
     };
 
-    void loadInitial();
+    void load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reload]);
 
-  const onCreate = async () => {
-    if (!vendorCode.trim() || !nameAr.trim() || !payableAccountId) {
-      setError("يرجى تعبئة كود المورد والاسم والحساب.");
-      return;
-    }
+  const accountsById = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account])),
+    [accounts],
+  );
 
-    setError("");
+  const defaultParentAccountId = partySettings?.vendor_parent_account_id ?? "";
+
+  const openCreateModal = () => {
+    setModalMode("create");
+    setEditingVendor(null);
+    setFormError("");
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (vendor: Vendor) => {
+    setModalMode("edit");
+    setEditingVendor(vendor);
+    setFormError("");
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    if (isSaving) return;
+    setIsModalOpen(false);
+    setEditingVendor(null);
+    setFormError("");
+  };
+
+  const onSubmit = async (values: PartyFormValues) => {
     setIsSaving(true);
+    setFormError("");
+    setSuccess("");
     try {
-      await voucherApi.createVendor({
-        vendor_code: vendorCode.trim(),
-        name_ar: nameAr.trim(),
-        phone: phone.trim() || null,
-        email: email.trim() || null,
-        payable_account_id: payableAccountId,
-        is_active: true,
-      });
-
-      setVendorCode("");
-      setNameAr("");
-      setPhone("");
-      setEmail("");
-      setPayableAccountId("");
-      await reloadVendors();
+      if (modalMode === "create") {
+        await partyApi.createVendorWithAccount(values, vendors, accounts);
+        setSuccess("تم إضافة المورد وإنشاء حساب الذمم المرتبط.");
+      } else if (editingVendor) {
+        await partyApi.updateVendorWithAccountSync(editingVendor, values);
+        setSuccess("تم تحديث بيانات المورد.");
+      }
+      await reload();
+      setIsModalOpen(false);
+      setEditingVendor(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل إنشاء المورد.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const startEdit = (vendor: Vendor) => {
-    setEditingVendorId(vendor.id);
-    setEditNameAr(vendor.name_ar);
-    setEditPhone(vendor.phone ?? "");
-    setEditEmail(vendor.email ?? "");
-    setEditPayableAccountId(vendor.payable_account_id);
-  };
-
-  const cancelEdit = () => {
-    setEditingVendorId(null);
-    setEditNameAr("");
-    setEditPhone("");
-    setEditEmail("");
-    setEditPayableAccountId("");
-  };
-
-  const saveEdit = async () => {
-    if (!editingVendorId) return;
-    if (!editNameAr.trim() || !editPayableAccountId) {
-      setError("الاسم وحساب الذمم مطلوبان.");
-      return;
-    }
-
-    setIsSaving(true);
-    setError("");
-    try {
-      await voucherApi.updateVendor(editingVendorId, {
-        name_ar: editNameAr.trim(),
-        phone: editPhone.trim() || null,
-        email: editEmail.trim() || null,
-        payable_account_id: editPayableAccountId,
-      });
-      cancelEdit();
-      await reloadVendors();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل تعديل المورد.");
+      setFormError(err instanceof Error ? err.message : "فشل حفظ المورد.");
     } finally {
       setIsSaving(false);
     }
@@ -138,206 +111,156 @@ export default function VendorsPage() {
 
   const toggleActive = async (vendor: Vendor) => {
     setIsSaving(true);
-    setError("");
+    setSuccess("");
+    setLoadError("");
     try {
       await voucherApi.updateVendor(vendor.id, {
         is_active: !vendor.is_active,
       });
-      await reloadVendors();
+      await reload();
+      setSuccess(vendor.is_active ? "تم تعطيل المورد." : "تم تفعيل المورد.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "فشل تغيير حالة المورد.");
+      setLoadError(err instanceof Error ? err.message : "فشل تحديث الحالة.");
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl p-6">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">الموردين</h1>
-
-      <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">إضافة مورد</h2>
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          <input
-            value={vendorCode}
-            onChange={(event) => setVendorCode(event.target.value)}
-            placeholder="كود المورد"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            value={nameAr}
-            onChange={(event) => setNameAr(event.target.value)}
-            placeholder="اسم المورد"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="الهاتف"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <input
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="البريد الإلكتروني"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          />
-          <select
-            value={payableAccountId}
-            onChange={(event) => setPayableAccountId(event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">اختر حساب الذمم الدائنة</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.code} - {account.name_ar}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={onCreate}
-            disabled={isSaving}
-            className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
-            إضافة
-          </button>
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-6">
+      <section className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">الموردين</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            إدارة الموردين — يُنشأ حساب ذمم دائنة فرعي تلقائياً باسم كل مورد.
+          </p>
         </div>
-        {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
+        <button
+          type="button"
+          onClick={openCreateModal}
+          className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+        >
+          + إضافة مورد
+        </button>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      {!isLoading && (
+        <PartySettingsPanel
+          kind="vendor"
+          accounts={accounts}
+          settings={partySettings}
+          onSettingsChange={setPartySettings}
+        />
+      )}
+
+      {loadError && (
+        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {loadError}
+        </p>
+      )}
+      {success && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {success}
+        </p>
+      )}
+
+      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
         {isLoading ? (
           <p className="text-sm text-slate-600">جاري تحميل الموردين...</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-sm">
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[920px] border-collapse text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">الكود</th>
-                  <th className="border-b border-slate-200 p-2">الاسم</th>
-                  <th className="border-b border-slate-200 p-2">الهاتف</th>
-                  <th className="border-b border-slate-200 p-2">البريد</th>
-                  <th className="border-b border-slate-200 p-2">حساب الذمم</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  <th className="border-b border-slate-200 p-2">إجراءات</th>
+                  <th className="border border-slate-200 p-2">الكود</th>
+                  <th className="border border-slate-200 p-2">الاسم</th>
+                  <th className="border border-slate-200 p-2">الهاتف</th>
+                  <th className="border border-slate-200 p-2">البريد</th>
+                  <th className="border border-slate-200 p-2">حساب الذمم</th>
+                  <th className="border border-slate-200 p-2">الحالة</th>
+                  <th className="border border-slate-200 p-2">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
-                {vendors.map((vendor) => (
-                  <tr key={vendor.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {vendor.vendor_code}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {editingVendorId === vendor.id ? (
-                        <input
-                          value={editNameAr}
-                          onChange={(event) => setEditNameAr(event.target.value)}
-                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        vendor.name_ar
-                      )}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {editingVendorId === vendor.id ? (
-                        <input
-                          value={editPhone}
-                          onChange={(event) => setEditPhone(event.target.value)}
-                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        vendor.phone || "-"
-                      )}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {editingVendorId === vendor.id ? (
-                        <input
-                          value={editEmail}
-                          onChange={(event) => setEditEmail(event.target.value)}
-                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
-                        />
-                      ) : (
-                        vendor.email || "-"
-                      )}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {editingVendorId === vendor.id ? (
-                        <select
-                          value={editPayableAccountId}
-                          onChange={(event) =>
-                            setEditPayableAccountId(event.target.value)
-                          }
-                          className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
-                        >
-                          <option value="">اختر الحساب</option>
-                          {accounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.code} - {account.name_ar}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        accounts.find((account) => account.id === vendor.payable_account_id)
-                          ?.code ?? "-"
-                      )}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {vendor.is_active ? "نشط" : "غير نشط"}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      <div className="flex flex-wrap gap-2">
-                        {editingVendorId === vendor.id ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={saveEdit}
-                              disabled={isSaving}
-                              className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                {vendors.map((vendor) => {
+                  const linkedAccount = accountsById.get(vendor.payable_account_id);
+                  return (
+                    <tr key={vendor.id} className="odd:bg-white even:bg-slate-50/60">
+                      <td className="border border-slate-100 p-2 font-mono">
+                        {vendor.vendor_code}
+                      </td>
+                      <td className="border border-slate-100 p-2 font-medium">
+                        {vendor.name_ar}
+                      </td>
+                      <td className="border border-slate-100 p-2">
+                        {vendor.phone || "—"}
+                      </td>
+                      <td className="border border-slate-100 p-2" dir="ltr">
+                        {vendor.email || "—"}
+                      </td>
+                      <td className="border border-slate-100 p-2">
+                        {linkedAccount ? (
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            <Link
+                              href={`/reports/account-statement?accountId=${linkedAccount.id}`}
+                              className="font-mono text-xs font-medium text-blue-900 hover:underline"
                             >
-                              حفظ
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEdit}
-                              disabled={isSaving}
-                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 disabled:opacity-50"
+                              {linkedAccount.code} — {linkedAccount.name_ar}
+                            </Link>
+                            <OpenInNewTabLink
+                              href={`/reports/account-statement?accountId=${linkedAccount.id}`}
+                              className="text-xs text-slate-500 hover:text-blue-900"
+                              title="كشف الحساب في تبويب جديد"
                             >
-                              إلغاء
-                            </button>
-                          </>
+                              ↗
+                            </OpenInNewTabLink>
+                          </span>
                         ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => startEdit(vendor)}
-                              disabled={isSaving}
-                              className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
-                            >
-                              تعديل
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleActive(vendor)}
-                              disabled={isSaving}
-                              className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
-                            >
-                              {vendor.is_active ? "تعطيل" : "تفعيل"}
-                            </button>
-                          </>
+                          "—"
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="border border-slate-100 p-2">
+                        {vendor.is_active ? (
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
+                            نشط
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                            معطّل
+                          </span>
+                        )}
+                      </td>
+                      <td className="border border-slate-100 p-2">
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(vendor)}
+                            disabled={isSaving}
+                            className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                          >
+                            تعديل
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void toggleActive(vendor)}
+                            disabled={isSaving}
+                            className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                          >
+                            {vendor.is_active ? "تعطيل" : "تفعيل"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
                 {vendors.length === 0 && (
                   <tr>
                     <td
                       colSpan={7}
-                      className="border-b border-slate-100 p-4 text-center text-slate-500"
+                      className="border border-slate-100 p-6 text-center text-slate-500"
                     >
-                      لا توجد بيانات موردين.
+                      لا يوجد موردين. اضغط «إضافة مورد» للبدء.
                     </td>
                   </tr>
                 )}
@@ -346,6 +269,21 @@ export default function VendorsPage() {
           </div>
         )}
       </section>
+
+      <PartyFormModal
+        open={isModalOpen}
+        mode={modalMode}
+        kind="vendor"
+        party={editingVendor}
+        allAccounts={accounts}
+        defaultParentAccountId={defaultParentAccountId}
+        existingCustomers={[]}
+        existingVendors={vendors}
+        isSaving={isSaving}
+        error={formError}
+        onClose={closeModal}
+        onSubmit={onSubmit}
+      />
     </main>
   );
 }
