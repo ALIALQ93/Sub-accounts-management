@@ -49,6 +49,7 @@ import {
   getVoucherSaveFeedback,
   resolveVoucherSaveStatus,
 } from "@/modules/vouchers/utils/voucher-save-utils";
+import { validateActiveCustomer } from "@/modules/vouchers/utils/voucher-party-validation";
 
 interface ReceiptVoucherFormProps {
   initialMode?: "create" | "edit";
@@ -265,6 +266,13 @@ export function ReceiptVoucherForm({
       if (isInvoiceMode && !customerId) {
         showError("العميل مطلوب في وضع إغلاق الحركات.");
         return null;
+      }
+      if (isInvoiceMode) {
+        const customerError = validateActiveCustomer(customerId, customers);
+        if (customerError) {
+          showError(customerError);
+          return null;
+        }
       }
 
       const resolvedNo = await resolveVoucherNo();

@@ -44,6 +44,8 @@ import type {
   VoucherTypeDefaults,
 } from "@/modules/vouchers/types";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { formatSupabaseErrorMessage } from "@/modules/vouchers/utils/supabase-error-utils";
+import { sanitizeVoucherHeaderPayload } from "@/modules/vouchers/utils/voucher-payload-utils";
 
 class ApiError extends Error {
   code: string;
@@ -59,7 +61,7 @@ function throwIfSupabaseError(error: PostgrestError | null): void {
   if (error) {
     throw new ApiError({
       code: error.code || "SUPABASE_ERROR",
-      message: error.message || "حدث خطأ غير متوقع من قاعدة البيانات.",
+      message: formatSupabaseErrorMessage(error),
     });
   }
 }
@@ -729,8 +731,14 @@ export const voucherApi = {
       .from("vouchers")
       .select("*")
       .eq("id", id)
-      .single();
+      .maybeSingle();
     throwIfSupabaseError(headerError);
+    if (!header) {
+      throw new ApiError({
+        code: "VOUCHER_NOT_FOUND",
+        message: "السند غير موجود.",
+      });
+    }
 
     const { data: lines, error: linesError } = await supabase
       .from("voucher_lines")
@@ -948,10 +956,16 @@ export const voucherApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("vouchers")
-      .insert(payload)
+      .insert(sanitizeVoucherHeaderPayload(payload))
       .select("*")
-      .single();
+      .maybeSingle();
     throwIfSupabaseError(error);
+    if (!data) {
+      throw new ApiError({
+        code: "VOUCHER_CREATE_FAILED",
+        message: "تعذّر إنشاء السند.",
+      });
+    }
     return data as VoucherHeader;
   },
 
@@ -962,11 +976,17 @@ export const voucherApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("vouchers")
-      .update(payload)
+      .update(sanitizeVoucherHeaderPayload(payload))
       .eq("id", id)
       .select("*")
-      .single();
+      .maybeSingle();
     throwIfSupabaseError(error);
+    if (!data) {
+      throw new ApiError({
+        code: "VOUCHER_NOT_FOUND",
+        message: "السند غير موجود أو لا يمكن تحديثه.",
+      });
+    }
     return data as VoucherHeader;
   },
 

@@ -49,6 +49,7 @@ import {
   getVoucherSaveFeedback,
   resolveVoucherSaveStatus,
 } from "@/modules/vouchers/utils/voucher-save-utils";
+import { validateActiveVendor } from "@/modules/vouchers/utils/voucher-party-validation";
 
 interface PaymentVoucherFormProps {
   initialMode?: "create" | "edit";
@@ -265,6 +266,13 @@ export function PaymentVoucherForm({
       if (isInvoiceMode && !vendorId) {
         showError("المورد مطلوب في وضع إغلاق الحركات.");
         return null;
+      }
+      if (isInvoiceMode) {
+        const vendorError = validateActiveVendor(vendorId, vendors);
+        if (vendorError) {
+          showError(vendorError);
+          return null;
+        }
       }
 
       const resolvedNo = await resolveVoucherNo();

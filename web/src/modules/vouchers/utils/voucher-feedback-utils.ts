@@ -24,6 +24,12 @@ const ERROR_TRANSLATIONS: Array<[RegExp, string]> = [
   [/permission denied|row-level security/i, "ليس لديك صلاحية لتنفيذ هذا الإجراء."],
   [/Only administrators can sync/i, "تحديث قيد السند المرحّل يتطلب مدير النظام."],
   [/Cannot sync unbalanced/i, "تعذّر تحديث القيد: السند غير متوازن."],
+  [/Referenced customer must be active/i, "العميل المرتبط غير نشط."],
+  [/Referenced vendor must be active/i, "المورد المرتبط غير نشط."],
+  [/Invoice settlement voucher requires a customer or vendor/i, "وضع إغلاق الحركات يتطلب اختيار عميل أو مورد."],
+  [/JSON object requested, multiple \(or no\) rows returned/i, "السند غير موجود أو لم يُعثر على سجل مطابق."],
+  [/PGRST116/i, "السند غير موجود أو لم يُعثر على سجل مطابق."],
+  [/invalid input syntax for type uuid/i, "معرّف غير صالح في بيانات السند."],
   [/JWT expired|session/i, "انتهت الجلسة. سجّل الدخول مجدداً."],
 ];
 
