@@ -1863,11 +1863,7 @@ select 'settlement', c.id
 from public.currencies c
 where c.is_base = true;
 
-insert into public.voucher_line_categories (voucher_type, code, name_ar, requires_quantity, quantity_label, sort_order)
-values
-  ('payment', 'PAY-FOOD', 'اطعام', false, null, 10),
-  ('payment', 'PAY-NUTR', 'تغذية', false, null, 20),
-  ('payment', 'PAY-CONST', 'انشائية', true, 'العدد', 30);
+-- تصنيفات أسطر السند: لا بيانات افتراضية — تُعرَّف من إعدادات السندات في التطبيق
 -- =============================================================================
 -- 02_rls.sql — سياسات Row Level Security
 -- =============================================================================

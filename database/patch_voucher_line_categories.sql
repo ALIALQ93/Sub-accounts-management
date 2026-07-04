@@ -32,12 +32,7 @@ create trigger trg_voucher_line_categories_updated_at
 before update on public.voucher_line_categories
 for each row execute function public.set_updated_at();
 
-insert into public.voucher_line_categories (voucher_type, code, name_ar, requires_quantity, quantity_label, sort_order)
-values
-  ('payment', 'PAY-FOOD', 'اطعام', false, null, 10),
-  ('payment', 'PAY-NUTR', 'تغذية', false, null, 20),
-  ('payment', 'PAY-CONST', 'انشائية', true, 'العدد', 30)
-on conflict (voucher_type, code) do nothing;
+-- لا بيانات افتراضية لتصنيفات الأسطر — تُعرَّف من التطبيق
 
 -- تحديث دالة الترحيل (نسخ من 01_schema.sql — vouchers_before_update_handle_posting)
 create or replace function public.vouchers_before_update_handle_posting()
