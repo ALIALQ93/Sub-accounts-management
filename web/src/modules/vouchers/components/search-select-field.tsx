@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Modal } from "@/components/modal";
 
 export interface SearchSelectOption {
@@ -24,6 +25,12 @@ interface SearchSelectFieldProps {
   fallbackLabel?: string;
 }
 
+type DropdownPosition = {
+  top: number;
+  left: number;
+  width: number;
+};
+
 export function SearchSelectField({
   label,
   placeholder = "ابحث...",
@@ -41,7 +48,11 @@ export function SearchSelectField({
   const [isOpen, setIsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalQuery, setModalQuery] = useState("");
+  const [dropdownPosition, setDropdownPosition] =
+    useState<DropdownPosition | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRowRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLUListElement>(null);
 
   const selected = options.find((option) => option.id === value) ?? null;
 
@@ -55,11 +66,43 @@ export function SearchSelectField({
     }
   }, [selected, value, fallbackLabel]);
 
+  const updateDropdownPosition = useCallback(() => {
+    const anchor = inputRowRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    setDropdownPosition({
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || disabled) {
+      setDropdownPosition(null);
+      return;
+    }
+
+    updateDropdownPosition();
+    window.addEventListener("resize", updateDropdownPosition);
+    window.addEventListener("scroll", updateDropdownPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [disabled, isOpen, updateDropdownPosition]);
+
   useEffect(() => {
     const onDocClick = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
+      const target = event.target as Node;
+      if (
+        containerRef.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) {
+        return;
       }
+      setIsOpen(false);
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -96,6 +139,37 @@ export function SearchSelectField({
     setIsOpen(false);
   };
 
+  const dropdownMenu =
+    isOpen && !disabled && dropdownPosition ? (
+      <ul
+        ref={dropdownRef}
+        className="fixed z-[9999] max-h-56 overflow-auto rounded-md border border-slate-300 bg-white shadow-lg"
+        style={{
+          top: dropdownPosition.top,
+          left: dropdownPosition.left,
+          width: dropdownPosition.width,
+        }}
+      >
+        {dropdownOptions.length === 0 && (
+          <li className="px-3 py-2 text-xs text-slate-500">{emptyMessage}</li>
+        )}
+        {dropdownOptions.map((option) => (
+          <li key={option.id}>
+            <button
+              type="button"
+              onClick={() => pickOption(option)}
+              className="block w-full px-3 py-2 text-right hover:bg-blue-50"
+            >
+              <p className="text-sm font-medium text-slate-900">{option.label}</p>
+              {option.sublabel && (
+                <p className="text-xs text-slate-500">{option.sublabel}</p>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
   return (
     <>
       <div ref={containerRef} className="relative grid gap-1 text-sm">
@@ -105,7 +179,7 @@ export function SearchSelectField({
             {required && <span className="text-rose-600"> *</span>}
           </span>
         )}
-        <div className="flex gap-1">
+        <div ref={inputRowRef} className="flex gap-1">
           <input
             value={query}
             onChange={(event) => {
@@ -134,28 +208,6 @@ export function SearchSelectField({
           </button>
         </div>
 
-        {isOpen && !disabled && (
-          <ul className="absolute top-full z-20 mt-1 max-h-56 w-full overflow-auto rounded-md border border-slate-300 bg-white shadow-lg">
-            {dropdownOptions.length === 0 && (
-              <li className="px-3 py-2 text-xs text-slate-500">{emptyMessage}</li>
-            )}
-            {dropdownOptions.map((option) => (
-              <li key={option.id}>
-                <button
-                  type="button"
-                  onClick={() => pickOption(option)}
-                  className="block w-full px-3 py-2 text-right hover:bg-blue-50"
-                >
-                  <p className="text-sm font-medium text-slate-900">{option.label}</p>
-                  {option.sublabel && (
-                    <p className="text-xs text-slate-500">{option.sublabel}</p>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
         {selected && !disabled && (
           <button
             type="button"
@@ -166,6 +218,10 @@ export function SearchSelectField({
           </button>
         )}
       </div>
+
+      {typeof document !== "undefined" && dropdownMenu
+        ? createPortal(dropdownMenu, document.body)
+        : null}
 
       <Modal
         open={isModalOpen}
