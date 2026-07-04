@@ -17,7 +17,6 @@ interface AccountSearchFieldProps {
   hideLabel?: boolean;
   placeholder?: string;
   currencies?: Array<{ id: string; code: string }>;
-  filterCurrencyId?: string;
 }
 
 export function accountToSearchOption(
@@ -42,21 +41,15 @@ export function AccountSearchField({
   hideLabel,
   placeholder = "ابحث بالكود أو الاسم...",
   currencies,
-  filterCurrencyId,
 }: AccountSearchFieldProps) {
   const currencyById = useMemo(
     () => new Map((currencies ?? []).map((currency) => [currency.id, currency.code])),
     [currencies],
   );
 
-  const visibleAccounts = useMemo(() => {
-    if (!filterCurrencyId) return accounts;
-    return accounts.filter((account) => account.currency_id === filterCurrencyId);
-  }, [accounts, filterCurrencyId]);
-
   const options = useMemo(
     () =>
-      visibleAccounts.map((account) =>
+      accounts.map((account) =>
         accountToSearchOption(
           account,
           account.currency_id
@@ -64,7 +57,7 @@ export function AccountSearchField({
             : undefined,
         ),
       ),
-    [visibleAccounts, currencyById],
+    [accounts, currencyById],
   );
 
   const accountById = useMemo(

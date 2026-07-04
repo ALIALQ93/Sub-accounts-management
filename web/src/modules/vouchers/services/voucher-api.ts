@@ -257,7 +257,7 @@ export const voucherApi = {
     const { data, error } = await supabase
       .from("vouchers")
       .select(
-        "id, voucher_no, voucher_type, settlement_mode, voucher_date, status, description, voucher_attachments(count)",
+        "id, voucher_no, voucher_type, settlement_mode, voucher_date, status, description, currency_id, exchange_rate, currencies(code), voucher_attachments(count)",
       )
       .order("voucher_date", { ascending: false });
     throwIfSupabaseError(error);
@@ -268,6 +268,14 @@ export const voucherApi = {
           voucher_attachments?: { count: number }[];
         }
       ).voucher_attachments;
+      const currency = (
+        row as {
+          currencies?: { code?: string } | { code?: string }[] | null;
+        }
+      ).currencies;
+      const currencyCode = Array.isArray(currency)
+        ? currency[0]?.code ?? null
+        : currency?.code ?? null;
 
       return {
         id: row.id as string,
@@ -278,6 +286,10 @@ export const voucherApi = {
         status: row.status as VoucherListItem["status"],
         description: (row.description as string | null) ?? null,
         attachment_count: attachments?.[0]?.count ?? 0,
+        currency_id: (row.currency_id as string | null) ?? null,
+        currency_code: currencyCode,
+        exchange_rate:
+          row.exchange_rate == null ? null : Number(row.exchange_rate),
       };
     });
   },

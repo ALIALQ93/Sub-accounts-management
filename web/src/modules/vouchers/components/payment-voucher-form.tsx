@@ -19,6 +19,7 @@ import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
+import { VoucherCurrencyFields } from "@/modules/vouchers/components/voucher-currency-fields";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
@@ -36,11 +37,11 @@ import { getSettlementModeLabel } from "@/modules/vouchers/utils/voucher-type-co
 import type { Currency } from "@/modules/currencies/types";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import {
-  accountMatchesVoucherCurrency,
   formatVoucherAmount,
   getAmountStep,
-  getCurrencyById,
+  resolveVoucherExchangeRate,
   validatePaymentVoucherAccounts,
+  validateVoucherExchangeRate,
 } from "@/modules/vouchers/utils/voucher-currency-utils";
 import { useVoucherFeedback } from "@/modules/vouchers/hooks/use-voucher-feedback";
 import { useVoucherFormPermissions } from "@/modules/vouchers/hooks/use-voucher-form-permissions";
@@ -79,6 +80,7 @@ export function PaymentVoucherForm({
   );
   const [currencyId, setCurrencyId] = useState("");
   const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [isLoadingRate, setIsLoadingRate] = useState(false);
   const [journalEntryId, setJournalEntryId] = useState("");
   const [status, setStatus] = useState<VoucherStatus>("draft");
   const [description, setDescription] = useState("");
@@ -101,7 +103,7 @@ export function PaymentVoucherForm({
     useState("");
   const [autoPostEnabled, setAutoPostEnabled] = useState(false);
 
-  const { feedback, feedbackRef, showError, showSuccess, showWarning, showFromError, clearFeedback } =
+  const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
     useVoucherFeedback();
   const {
     beginSave,
@@ -126,13 +128,7 @@ export function PaymentVoucherForm({
   const isInvoiceMode = settlementMode === "invoice";
 
   const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
-  const paymentAccount = accounts.find((account) => account.id === paymentAccountId);
-  const isBaseCurrency = selectedCurrency?.is_base ?? false;
   const amountStep = getAmountStep(selectedCurrency?.decimal_places ?? 2);
-
-  const paymentAccountCurrencyMismatch =
-    Boolean(currencyId && paymentAccount) &&
-    !accountMatchesVoucherCurrency(paymentAccount, currencyId);
 
   const totalDebit = useMemo(
     () =>
@@ -152,7 +148,6 @@ export function PaymentVoucherForm({
     !readOnly &&
     Boolean(currencyId) &&
     Boolean(paymentAccountId) &&
-    !paymentAccountCurrencyMismatch &&
     validDebitLines.length > 0 &&
     totalDebit > 0 &&
     exchangeRate > 0 &&
@@ -242,16 +237,22 @@ export function PaymentVoucherForm({
         return null;
       }
 
+      const rateError = validateVoucherExchangeRate({
+        currencyId,
+        exchangeRate,
+        currencies,
+      });
+      if (rateError) {
+        showError(rateError);
+        return null;
+      }
+
       for (const line of validDebitLines) {
         const categoryError = validateLineCategory(line, lineCategories);
         if (categoryError) {
           showError(categoryError);
           return null;
         }
-      }
-      if (exchangeRate <= 0) {
-        showError("سعر الصرف يجب أن يكون أكبر من صفر.");
-        return null;
       }
       if (isInvoiceMode && !vendorId) {
         showError("المورد مطلوب في وضع إغلاق الحركات.");
@@ -328,22 +329,6 @@ export function PaymentVoucherForm({
     const payableAccount = accounts.find(
       (item) => item.id === vendor.payable_account_id,
     );
-    if (
-      currencyId &&
-      payableAccount &&
-      !accountMatchesVoucherCurrency(payableAccount, currencyId)
-    ) {
-      const accountCurrency = getCurrencyById(
-        currencies,
-        payableAccount.currency_id ?? "",
-      );
-      showWarning(
-        `حساب ذمم المورد (${payableAccount.code}) بعملة ${
-          accountCurrency?.code ?? "—"
-        } لا يطابق عملة السند (${selectedCurrency?.code ?? "—"}).`,
-      );
-      return;
-    }
 
     const emptyLine = debitLines.find((line) => !line.account_id);
     if (emptyLine) {
@@ -362,44 +347,27 @@ export function PaymentVoucherForm({
     }
   };
 
+  const refreshExchangeRate = async (
+    nextCurrencyId: string,
+    nextDate: string,
+  ) => {
+    if (!nextCurrencyId) return;
+    setIsLoadingRate(true);
+    try {
+      const rate = await resolveVoucherExchangeRate({
+        currencyId: nextCurrencyId,
+        voucherDate: nextDate,
+        currencies,
+      });
+      setExchangeRate(rate);
+    } finally {
+      setIsLoadingRate(false);
+    }
+  };
+
   const onCurrencyChange = (nextCurrencyId: string) => {
     setCurrencyId(nextCurrencyId);
-    const currency = currencies.find((item) => item.id === nextCurrencyId);
-    if (currency) {
-      setExchangeRate(currency.is_base ? 1 : currency.exchange_rate);
-    }
-
-    setDebitLines((current) =>
-      current.map((line) => {
-        if (!line.account_id) return line;
-        const account = accounts.find((item) => item.id === line.account_id);
-        if (accountMatchesVoucherCurrency(account, nextCurrencyId)) {
-          return line;
-        }
-        return {
-          ...line,
-          account_id: "",
-          account_code: "",
-          account_name: "",
-        };
-      }),
-    );
-
-    const currentPaymentAccount = accounts.find(
-      (item) => item.id === paymentAccountId,
-    );
-    if (accountMatchesVoucherCurrency(currentPaymentAccount, nextCurrencyId)) {
-      return;
-    }
-
-    const settingsAccount = accounts.find(
-      (item) => item.id === defaultPaymentAccountFromSettings,
-    );
-    if (accountMatchesVoucherCurrency(settingsAccount, nextCurrencyId)) {
-      setPaymentAccountId(defaultPaymentAccountFromSettings);
-    } else {
-      setPaymentAccountId("");
-    }
+    void refreshExchangeRate(nextCurrencyId, voucherDate);
   };
 
   useEffect(() => {
@@ -455,12 +423,13 @@ export function PaymentVoucherForm({
         const defaultCurrencyId =
           typeDefaults.default_currency_id ?? baseCurrency?.id ?? "";
         setCurrencyId(defaultCurrencyId);
-        const defaultCurrency = currenciesData.find(
-          (currency) => currency.id === defaultCurrencyId,
-        );
-        setExchangeRate(
-          defaultCurrency?.is_base ? 1 : defaultCurrency?.exchange_rate ?? 1,
-        );
+        void resolveVoucherExchangeRate({
+          currencyId: defaultCurrencyId,
+          voucherDate: new Date().toISOString().split("T")[0],
+          currencies: currenciesData,
+        }).then((rate) => {
+          if (!cancelled) setExchangeRate(rate);
+        });
 
         if (initialMode !== "edit" || !initialVoucherId) {
           if (settings.auto_number_enabled) {
@@ -588,79 +557,38 @@ export function PaymentVoucherForm({
             <input
               type="date"
               value={voucherDate}
-              onChange={(event) => setVoucherDate(event.target.value)}
+              onChange={(event) => {
+                const nextDate = event.target.value;
+                setVoucherDate(nextDate);
+                if (currencyId && !readOnly) {
+                  void refreshExchangeRate(currencyId, nextDate);
+                }
+              }}
               disabled={readOnly || isSaving}
               className="w-full rounded-md border border-slate-300 px-3 py-2"
             />
           </label>
 
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700">عملة السند</span>
-            <select
-              value={currencyId}
-              onChange={(event) => onCurrencyChange(event.target.value)}
-              disabled={readOnly || isSaving || currencies.length === 0}
-              className="w-full rounded-md border border-slate-300 px-3 py-2"
-            >
-              <option value="">اختر العملة</option>
-              {currencies.map((currency) => (
-                <option key={currency.id} value={currency.id}>
-                  {currency.code} — {currency.name_ar}
-                  {currency.is_base ? " (أساسية)" : ""}
-                </option>
-              ))}
-            </select>
-            {currencies.length === 0 ? (
-              <p className="text-xs text-amber-700">
-                لا توجد عملات نشطة.{" "}
-                <Link href="/currencies" className="underline">
-                  إدارة العملات
-                </Link>
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500">
-                من{" "}
-                <Link href="/currencies" className="text-blue-800 underline">
-                  قسم العملات
-                </Link>
-                {selectedCurrency && (
-                  <>
-                    {" "}
-                    — {selectedCurrency.symbol} ·{" "}
-                    {selectedCurrency.decimal_places} خانات عشرية
-                  </>
-                )}
-              </p>
-            )}
-          </label>
-
-          <label className="space-y-1 text-sm">
-            <span className="font-medium text-slate-700">سعر الصرف</span>
-            <input
-              type="number"
-              min={0}
-              step="0.000001"
-              value={exchangeRate || ""}
-              onChange={(event) => setExchangeRate(Number(event.target.value))}
-              disabled={readOnly || isSaving || isBaseCurrency}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 font-mono disabled:bg-slate-50"
-            />
-            <p className="text-xs text-slate-500">
-              {isBaseCurrency
-                ? "العملة الأساسية — سعر الصرف ثابت = 1"
-                : "يُحمَّل من قسم العملات ويمكن تعديله لهذا السند."}
-            </p>
-          </label>
+          <VoucherCurrencyFields
+            currencies={currencies}
+            currencyId={currencyId}
+            exchangeRate={exchangeRate}
+            readOnly={readOnly}
+            isSaving={isSaving}
+            isLoadingRate={isLoadingRate}
+            onCurrencyChange={onCurrencyChange}
+            onExchangeRateChange={setExchangeRate}
+            onRefreshRate={() => void refreshExchangeRate(currencyId, voucherDate)}
+          />
 
           <div className="md:col-span-2">
             <AccountSearchField
               label="حساب الدفع (دائن — تلقائي)"
               accounts={accounts}
               currencies={currencies}
-              filterCurrencyId={currencyId || undefined}
               value={paymentAccountId}
               onChange={(id) => setPaymentAccountId(id)}
-              disabled={readOnly || isSaving || !currencyId}
+              disabled={readOnly || isSaving}
             />
             <p className="mt-1 text-xs text-slate-500">
               الافتراضي من{" "}
@@ -670,11 +598,6 @@ export function PaymentVoucherForm({
               — يمكن تغييره لهذا السند. يُولَّد سطر دائن مقابل كل سطر مدين
               بنفس المبلغ ومركز الكلفة.
             </p>
-            {paymentAccountCurrencyMismatch && (
-              <p className="mt-1 text-xs text-amber-800">
-                عملة حساب الدفع لا تطابق عملة السند.
-              </p>
-            )}
           </div>
 
           {isInvoiceMode && (

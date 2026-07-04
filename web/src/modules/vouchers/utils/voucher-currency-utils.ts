@@ -1,3 +1,4 @@
+import { currencyApi } from "@/modules/currencies/services/currency-api";
 import { formatCurrencyAmount } from "@/modules/currencies/utils/convert-amount";
 import type { Currency } from "@/modules/currencies/types";
 import type { Account } from "@/modules/vouchers/types";
@@ -7,22 +8,6 @@ export function getCurrencyById(
   currencyId: string,
 ): Currency | undefined {
   return currencies.find((currency) => currency.id === currencyId);
-}
-
-export function filterAccountsForVoucherCurrency(
-  accounts: Account[],
-  currencyId: string,
-): Account[] {
-  if (!currencyId) return accounts;
-  return accounts.filter((account) => account.currency_id === currencyId);
-}
-
-export function accountMatchesVoucherCurrency(
-  account: Account | undefined | null,
-  currencyId: string,
-): boolean {
-  if (!account || !currencyId) return false;
-  return account.currency_id === currencyId;
 }
 
 export function getAmountStep(decimalPlaces: number): string {
@@ -39,6 +24,43 @@ export function formatVoucherAmount(
   return currency?.code ? `${formatted} ${currency.code}` : formatted;
 }
 
+export async function resolveVoucherExchangeRate(params: {
+  currencyId: string;
+  voucherDate: string;
+  currencies: Currency[];
+}): Promise<number> {
+  const { currencyId, voucherDate, currencies } = params;
+  const currency = getCurrencyById(currencies, currencyId);
+  if (!currency || currency.is_base) {
+    return 1;
+  }
+
+  try {
+    return await currencyApi.getExchangeRateAtDate(currencyId, voucherDate);
+  } catch {
+    return currency.exchange_rate > 0 ? currency.exchange_rate : 1;
+  }
+}
+
+export function validateVoucherExchangeRate(params: {
+  currencyId: string;
+  exchangeRate: number;
+  currencies: Currency[];
+}): string | null {
+  const { currencyId, exchangeRate, currencies } = params;
+  const currency = getCurrencyById(currencies, currencyId);
+  if (!currency) {
+    return "عملة السند غير صالحة.";
+  }
+  if (currency.is_base) {
+    return null;
+  }
+  if (!exchangeRate || exchangeRate <= 0) {
+    return "أدخل سعر صرف صالحاً للعملة الأجنبية.";
+  }
+  return null;
+}
+
 export function validateReceiptVoucherAccounts(params: {
   currencyId: string;
   receiptAccountId: string;
@@ -53,8 +75,7 @@ export function validateReceiptVoucherAccounts(params: {
     return "اختر عملة السند.";
   }
 
-  const voucherCurrency = getCurrencyById(currencies, currencyId);
-  if (!voucherCurrency) {
+  if (!getCurrencyById(currencies, currencyId)) {
     return "عملة السند غير صالحة.";
   }
 
@@ -64,33 +85,14 @@ export function validateReceiptVoucherAccounts(params: {
     return "حساب القبض غير معرّف. عيّنه من إعدادات السندات.";
   }
 
-  const receiptAccount = accountById.get(receiptAccountId);
-  if (!receiptAccount) {
+  if (!accountById.get(receiptAccountId)) {
     return "حساب القبض غير موجود أو غير نشط.";
-  }
-
-  if (!accountMatchesVoucherCurrency(receiptAccount, currencyId)) {
-    const accountCurrency = receiptAccount.currency_id
-      ? getCurrencyById(currencies, receiptAccount.currency_id)
-      : undefined;
-    return `حساب القبض (${receiptAccount.code}) بعملة ${
-      accountCurrency?.code ?? "—"
-    } لا يطابق عملة السند (${voucherCurrency.code}). عدّل الإعدادات أو غيّر عملة السند.`;
   }
 
   for (const line of creditLines) {
     if (!line.account_id) continue;
-    const lineAccount = accountById.get(line.account_id);
-    if (!lineAccount) {
+    if (!accountById.get(line.account_id)) {
       return "أحد حسابات الأسطر غير موجود أو غير نشط.";
-    }
-    if (!accountMatchesVoucherCurrency(lineAccount, currencyId)) {
-      const lineCurrency = lineAccount.currency_id
-        ? getCurrencyById(currencies, lineAccount.currency_id)
-        : undefined;
-      return `حساب ${lineAccount.code} بعملة ${
-        lineCurrency?.code ?? "—"
-      } لا يطابق عملة السند (${voucherCurrency.code}).`;
     }
     if (line.account_id === receiptAccountId) {
       return "لا يمكن أن يكون حساب القبض هو نفس حساب سطر الدائن.";
@@ -114,8 +116,7 @@ export function validatePaymentVoucherAccounts(params: {
     return "اختر عملة السند.";
   }
 
-  const voucherCurrency = getCurrencyById(currencies, currencyId);
-  if (!voucherCurrency) {
+  if (!getCurrencyById(currencies, currencyId)) {
     return "عملة السند غير صالحة.";
   }
 
@@ -125,33 +126,14 @@ export function validatePaymentVoucherAccounts(params: {
     return "حساب الدفع غير معرّف. عيّنه من إعدادات السندات.";
   }
 
-  const paymentAccount = accountById.get(paymentAccountId);
-  if (!paymentAccount) {
+  if (!accountById.get(paymentAccountId)) {
     return "حساب الدفع غير موجود أو غير نشط.";
-  }
-
-  if (!accountMatchesVoucherCurrency(paymentAccount, currencyId)) {
-    const accountCurrency = paymentAccount.currency_id
-      ? getCurrencyById(currencies, paymentAccount.currency_id)
-      : undefined;
-    return `حساب الدفع (${paymentAccount.code}) بعملة ${
-      accountCurrency?.code ?? "—"
-    } لا يطابق عملة السند (${voucherCurrency.code}). عدّل الإعدادات أو غيّر عملة السند.`;
   }
 
   for (const line of debitLines) {
     if (!line.account_id) continue;
-    const lineAccount = accountById.get(line.account_id);
-    if (!lineAccount) {
+    if (!accountById.get(line.account_id)) {
       return "أحد حسابات الأسطر غير موجود أو غير نشط.";
-    }
-    if (!accountMatchesVoucherCurrency(lineAccount, currencyId)) {
-      const lineCurrency = lineAccount.currency_id
-        ? getCurrencyById(currencies, lineAccount.currency_id)
-        : undefined;
-      return `حساب ${lineAccount.code} بعملة ${
-        lineCurrency?.code ?? "—"
-      } لا يطابق عملة السند (${voucherCurrency.code}).`;
     }
     if (line.account_id === paymentAccountId) {
       return "لا يمكن أن يكون حساب الدفع هو نفس حساب سطر المدين.";
@@ -175,8 +157,7 @@ export function validateSettlementVoucherAccounts(params: {
     return "اختر عملة السند.";
   }
 
-  const voucherCurrency = getCurrencyById(currencies, currencyId);
-  if (!voucherCurrency) {
+  if (!getCurrencyById(currencies, currencyId)) {
     return "عملة السند غير صالحة.";
   }
 
@@ -186,33 +167,14 @@ export function validateSettlementVoucherAccounts(params: {
     return "الحساب الوسيط غير معرّف. عيّنه من إعدادات السندات.";
   }
 
-  const clearingAccount = accountById.get(clearingAccountId);
-  if (!clearingAccount) {
+  if (!accountById.get(clearingAccountId)) {
     return "الحساب الوسيط غير موجود أو غير نشط.";
-  }
-
-  if (!accountMatchesVoucherCurrency(clearingAccount, currencyId)) {
-    const accountCurrency = clearingAccount.currency_id
-      ? getCurrencyById(currencies, clearingAccount.currency_id)
-      : undefined;
-    return `الحساب الوسيط (${clearingAccount.code}) بعملة ${
-      accountCurrency?.code ?? "—"
-    } لا يطابق عملة السند (${voucherCurrency.code}). عدّل الإعدادات أو غيّر عملة السند.`;
   }
 
   for (const line of userLines) {
     if (!line.account_id) continue;
-    const lineAccount = accountById.get(line.account_id);
-    if (!lineAccount) {
+    if (!accountById.get(line.account_id)) {
       return "أحد حسابات الأسطر غير موجود أو غير نشط.";
-    }
-    if (!accountMatchesVoucherCurrency(lineAccount, currencyId)) {
-      const lineCurrency = lineAccount.currency_id
-        ? getCurrencyById(currencies, lineAccount.currency_id)
-        : undefined;
-      return `حساب ${lineAccount.code} بعملة ${
-        lineCurrency?.code ?? "—"
-      } لا يطابق عملة السند (${voucherCurrency.code}).`;
     }
     if (line.account_id === clearingAccountId) {
       return "لا يمكن أن يكون الحساب الوسيط هو نفس حساب أحد أسطر السند.";

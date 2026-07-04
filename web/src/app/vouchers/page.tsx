@@ -118,6 +118,7 @@ export default function VouchersListPage() {
                 <tr className="text-right text-slate-700">
                   <th className="border border-slate-200 p-2">رقم السند</th>
                   <th className="border border-slate-200 p-2">النوع</th>
+                  <th className="border border-slate-200 p-2">العملة</th>
                   <th className="border border-slate-200 p-2">وضع التسوية</th>
                   <th className="border border-slate-200 p-2">التاريخ</th>
                   <th className="border border-slate-200 p-2">الحالة</th>
@@ -133,6 +134,9 @@ export default function VouchersListPage() {
                     </td>
                     <td className="border border-slate-100 p-2">
                       {getVoucherTypeLabel(item.voucher_type)}
+                    </td>
+                    <td className="border border-slate-100 p-2 font-mono text-xs">
+                      {item.currency_code ?? "—"}
                     </td>
                     <td className="border border-slate-100 p-2">
                       {getSettlementModeLabel(item.settlement_mode)}
@@ -153,7 +157,7 @@ export default function VouchersListPage() {
                 {filteredItems.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="border border-slate-100 p-4 text-center text-slate-500"
                     >
                       لا توجد سندات في هذا التصنيف.

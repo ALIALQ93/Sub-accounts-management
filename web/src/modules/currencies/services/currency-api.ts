@@ -35,6 +35,20 @@ export const currencyApi = {
     return rows.filter((currency) => currency.is_active);
   },
 
+  async getExchangeRateAtDate(
+    currencyId: string,
+    asOfDate: string,
+  ): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("get_currency_rate_at_date", {
+      p_currency_id: currencyId,
+      p_as_of: asOfDate,
+    });
+    throwIfSupabaseError(error);
+    const rate = Number(data ?? 1);
+    return rate > 0 ? rate : 1;
+  },
+
   async updateCurrency(
     id: string,
     payload: Partial<Pick<Currency, "exchange_rate" | "is_active">>,

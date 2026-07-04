@@ -219,7 +219,6 @@ export function SettlementVoucherLinesTable({
                     <AccountSearchField
                       accounts={accounts}
                       currencies={currencies}
-                      filterCurrencyId={voucherCurrencyId || undefined}
                       value={line.account_id ?? ""}
                       hideLabel
                       onChange={(accountId, account) =>
@@ -229,7 +228,7 @@ export function SettlementVoucherLinesTable({
                           account_name: account?.name_ar ?? "",
                         })
                       }
-                      disabled={readOnly || !voucherCurrencyId}
+                      disabled={readOnly}
                     />
                   </td>
                   <td className="border-b border-slate-100 p-2 font-mono">

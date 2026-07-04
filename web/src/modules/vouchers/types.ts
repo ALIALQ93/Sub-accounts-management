@@ -128,6 +128,9 @@ export interface VoucherListItem {
   status: VoucherStatus;
   description: string | null;
   attachment_count: number;
+  currency_id: string | null;
+  currency_code: string | null;
+  exchange_rate: number | null;
 }
 
 export interface OpenMovement {
