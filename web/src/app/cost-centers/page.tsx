@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGate } from "@/components/permission-gate";
+import { useNotifications } from "@/components/notifications";
 import { useAuth } from "@/modules/auth/auth-context";
+import { CostCenterBulkImportModal } from "@/modules/cost-centers/components/cost-center-bulk-import-modal";
 import { CostCenterFormModal } from "@/modules/cost-centers/components/cost-center-form-modal";
 import {
   costCenterApi,
@@ -12,17 +14,17 @@ import type { CostCenter } from "@/modules/vouchers/types";
 
 export default function CostCentersPage() {
   const { hasPermission } = useAuth();
+  const { notifySuccess, notifyError } = useNotifications();
   const canEdit = hasPermission("cost_centers.edit");
   const [centers, setCenters] = useState<CostCenter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [loadError, setLoadError] = useState("");
-  const [formError, setFormError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingCenter, setEditingCenter] = useState<CostCenter | null>(null);
+  const [formError, setFormError] = useState("");
 
   const reload = useCallback(async () => {
     const data = await costCenterApi.listCostCenters();
@@ -39,7 +41,7 @@ export default function CostCentersPage() {
         if (!cancelled) setCenters(data);
       } catch (err) {
         if (!cancelled) {
-          setLoadError(
+          notifyError(
             err instanceof Error ? err.message : "فشل تحميل مراكز الكلفة.",
           );
         }
@@ -83,17 +85,16 @@ export default function CostCentersPage() {
 
     setIsSaving(true);
     setFormError("");
-    setSuccess("");
     try {
       if (modalMode === "create") {
         await costCenterApi.createCostCenter({
           ...values,
           is_active: true,
         });
-        setSuccess("تم إضافة مركز الكلفة.");
+        notifySuccess("تم إضافة مركز الكلفة.");
       } else if (editingCenter) {
         await costCenterApi.updateCostCenter(editingCenter.id, values);
-        setSuccess("تم تحديث مركز الكلفة.");
+        notifySuccess("تم تحديث مركز الكلفة.");
       }
       await reload();
       setIsModalOpen(false);
@@ -108,18 +109,16 @@ export default function CostCentersPage() {
 
   const toggleActive = async (center: CostCenter) => {
     setIsSaving(true);
-    setSuccess("");
-    setLoadError("");
     try {
       await costCenterApi.updateCostCenter(center.id, {
         is_active: !center.is_active,
       });
       await reload();
-      setSuccess(
+      notifySuccess(
         center.is_active ? "تم تعطيل مركز الكلفة." : "تم تفعيل مركز الكلفة.",
       );
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "فشل تحديث الحالة.");
+      notifyError(err instanceof Error ? err.message : "فشل تحديث الحالة.");
     } finally {
       setIsSaving(false);
     }
@@ -135,26 +134,24 @@ export default function CostCentersPage() {
           </p>
         </div>
         <PermissionGate permission="cost_centers.create">
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            + إضافة مركز كلفة
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              + إضافة مركز كلفة
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsBulkImportOpen(true)}
+              className="rounded-md border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-900"
+            >
+              + إضافة دفعة
+            </button>
+          </div>
         </PermissionGate>
       </section>
-
-      {loadError && (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {loadError}
-        </p>
-      )}
-      {success && (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-          {success}
-        </p>
-      )}
 
       <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
         {isLoading && (
@@ -233,7 +230,7 @@ export default function CostCentersPage() {
                       colSpan={6}
                       className="border border-slate-100 p-6 text-center text-slate-500"
                     >
-                      لا توجد مراكز كلفة. اضغط «إضافة مركز كلفة» للبدء.
+                      لا توجد مراكز كلفة. اضغط «إضافة مركز كلفة» أو «إضافة دفعة» للبدء.
                     </td>
                   </tr>
                 )}
@@ -252,6 +249,16 @@ export default function CostCentersPage() {
         error={formError}
         onClose={closeModal}
         onSubmit={onSubmit}
+      />
+
+      <CostCenterBulkImportModal
+        open={isBulkImportOpen}
+        centers={centers}
+        isSaving={isSaving}
+        onClose={() => setIsBulkImportOpen(false)}
+        onImported={async () => {
+          await reload();
+        }}
       />
     </main>
   );

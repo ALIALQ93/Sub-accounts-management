@@ -23,6 +23,12 @@ export interface CostCenterFormValues {
   is_active: boolean;
 }
 
+export interface CostCenterBulkInsertRow {
+  name_ar: string;
+  name_en?: string | null;
+  sub_code?: string | null;
+}
+
 export const costCenterApi = {
   async listCostCenters(): Promise<CostCenter[]> {
     const supabase = getSupabaseClient();
@@ -57,6 +63,46 @@ export const costCenterApi = {
       .single();
     throwIfSupabaseError(error);
     return data as CostCenter;
+  },
+
+  async createCostCentersBulk(
+    rows: CostCenterBulkInsertRow[],
+  ): Promise<CostCenter[]> {
+    if (rows.length === 0) return [];
+
+    const supabase = getSupabaseClient();
+    const existing = await this.listCostCenters();
+    let working = [...existing];
+
+    const inserts = rows.map((row) => {
+      const code = generateCostCenterCode(working);
+      const record = {
+        code,
+        sub_code: normalizeSubCode(row.sub_code ?? undefined),
+        name_ar: row.name_ar.trim(),
+        name_en: row.name_en?.trim() || null,
+        is_active: true,
+      };
+      working = [
+        ...working,
+        {
+          id: code,
+          code,
+          sub_code: record.sub_code,
+          name_ar: record.name_ar,
+          name_en: record.name_en,
+          is_active: true,
+        },
+      ];
+      return record;
+    });
+
+    const { data, error } = await supabase
+      .from("cost_centers")
+      .insert(inserts)
+      .select("*");
+    throwIfSupabaseError(error);
+    return (data ?? []) as CostCenter[];
   },
 
   async updateCostCenter(
