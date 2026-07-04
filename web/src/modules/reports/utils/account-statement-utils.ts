@@ -1,6 +1,88 @@
 import type { AccountStatementLine } from "@/modules/accounts/types";
+import { currencyApi } from "@/modules/currencies/services/currency-api";
 import { convertAmount } from "@/modules/currencies/utils/convert-amount";
 import type { Currency } from "@/modules/currencies/types";
+
+export type ExchangeRateCache = Map<string, number>;
+
+export function rateCacheKey(currencyId: string, asOfDate: string): string {
+  return `${currencyId}:${asOfDate}`;
+}
+
+export async function getCachedExchangeRate(
+  currencyId: string,
+  asOfDate: string,
+  currencies: Currency[],
+  cache: ExchangeRateCache,
+): Promise<number> {
+  const currency = currencies.find((item) => item.id === currencyId);
+  if (!currency || currency.is_base) {
+    return 1;
+  }
+
+  const key = rateCacheKey(currencyId, asOfDate);
+  if (cache.has(key)) {
+    return cache.get(key)!;
+  }
+
+  try {
+    const rate = await currencyApi.getExchangeRateAtDate(currencyId, asOfDate);
+    cache.set(key, rate > 0 ? rate : currency.exchange_rate);
+    return cache.get(key)!;
+  } catch {
+    const fallback = currency.exchange_rate > 0 ? currency.exchange_rate : 1;
+    cache.set(key, fallback);
+    return fallback;
+  }
+}
+
+export async function convertStatementAmountAtDate(
+  amount: number,
+  accountCurrencyId: string | null | undefined,
+  displayCurrency: Currency,
+  currencies: Currency[],
+  asOfDate: string,
+  cache: ExchangeRateCache,
+): Promise<number> {
+  if (!amount) return 0;
+
+  const accountCurrency = accountCurrencyId
+    ? currencies.find((currency) => currency.id === accountCurrencyId)
+    : undefined;
+
+  if (!accountCurrency || accountCurrency.id === displayCurrency.id) {
+    return amount;
+  }
+
+  const [fromRate, toRate] = await Promise.all([
+    getCachedExchangeRate(accountCurrency.id, asOfDate, currencies, cache),
+    displayCurrency.is_base
+      ? Promise.resolve(1)
+      : getCachedExchangeRate(displayCurrency.id, asOfDate, currencies, cache),
+  ]);
+
+  return convertAmount(amount, fromRate, toRate);
+}
+
+export function convertStatementAmount(
+  amount: number,
+  accountCurrencyId: string | null | undefined,
+  displayCurrency: Currency,
+  currencies: Currency[],
+): number {
+  if (!amount) return 0;
+  const accountCurrency = accountCurrencyId
+    ? currencies.find((currency) => currency.id === accountCurrencyId)
+    : undefined;
+  if (!accountCurrency || accountCurrency.id === displayCurrency.id) {
+    return amount;
+  }
+  return convertAmount(
+    amount,
+    accountCurrency.exchange_rate,
+    displayCurrency.exchange_rate,
+  );
+}
 
 export function filterAccountStatementLines(
   lines: AccountStatementLine[],
@@ -14,6 +96,7 @@ export function filterAccountStatementLines(
       line.account_code,
       line.account_name,
       line.account_sub_code,
+      line.account_currency_code,
       line.entry_no,
       line.voucher_no,
       line.line_description,
@@ -72,26 +155,6 @@ export function buildAccountStatementShareParams(params: {
   };
 }
 
-export function convertStatementAmount(
-  amount: number,
-  accountCurrencyId: string | null | undefined,
-  displayCurrency: Currency,
-  currencies: Currency[],
-): number {
-  if (!amount) return 0;
-  const accountCurrency = accountCurrencyId
-    ? currencies.find((currency) => currency.id === accountCurrencyId)
-    : undefined;
-  if (!accountCurrency || accountCurrency.id === displayCurrency.id) {
-    return amount;
-  }
-  return convertAmount(
-    amount,
-    accountCurrency.exchange_rate,
-    displayCurrency.exchange_rate,
-  );
-}
-
 export function resolveDisplayCurrency(
   currencies: Currency[],
   displayCurrencyId: string,
@@ -122,4 +185,13 @@ export function formatStatementNotes(line: {
     parts.push(`سند: ${line.voucher_description.trim()}`);
   }
   return parts.join("\n");
+}
+
+export function statementAmountsConverted(
+  accountCurrencyId: string | null | undefined,
+  displayCurrencyId: string,
+): boolean {
+  return Boolean(
+    accountCurrencyId && accountCurrencyId !== displayCurrencyId,
+  );
 }

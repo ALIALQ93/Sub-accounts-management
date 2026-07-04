@@ -233,9 +233,12 @@ export function AccountStatementSection({
           <p className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-950">
             <span className="font-semibold">عملة العرض:</span>{" "}
             {displayCurrency.code} ({displayCurrency.symbol})
+            <span className="mr-2 block text-xs text-blue-800">
+              المبالغ تُحوَّل من عملة الحساب بسعر الصرف بتاريخ كل حركة.
+            </span>
             {onlyDisplayCurrency && (
               <span className="mr-2 text-xs text-blue-800">
-                — حركات الحسابات بعملة {displayCurrency.code} فقط
+                — تُعرض فقط حسابات عملتها {displayCurrency.code}
               </span>
             )}
           </p>
@@ -385,10 +388,22 @@ export function AccountStatementSection({
                         <StatementNotesCell line={line} />
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
-                        {line.debit > 0 ? fmt(line.debit) : "—"}
+                        <StatementAmountCell
+                          amount={line.debit}
+                          nativeAmount={line.native_debit}
+                          converted={line.amounts_converted}
+                          currencyCode={line.account_currency_code}
+                          fmt={fmt}
+                        />
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
-                        {line.credit > 0 ? fmt(line.credit) : "—"}
+                        <StatementAmountCell
+                          amount={line.credit}
+                          nativeAmount={line.native_credit}
+                          converted={line.amounts_converted}
+                          currencyCode={line.account_currency_code}
+                          fmt={fmt}
+                        />
                       </td>
                       <td
                         className={`${TD} text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}
@@ -453,6 +468,39 @@ export function AccountStatementSection({
         </>
       )}
     </section>
+  );
+}
+
+function StatementAmountCell({
+  amount,
+  nativeAmount,
+  converted,
+  currencyCode,
+  fmt,
+}: {
+  amount: number;
+  nativeAmount: number;
+  converted: boolean;
+  currencyCode: string | null;
+  fmt: (value: number) => string;
+}) {
+  if (amount <= 0) {
+    return <>—</>;
+  }
+
+  return (
+    <div>
+      <span>{fmt(amount)}</span>
+      {converted && nativeAmount > 0 && currencyCode && (
+        <span className="mt-0.5 block text-[10px] font-normal text-slate-500">
+          أصلي: {nativeAmount.toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}{" "}
+          {currencyCode}
+        </span>
+      )}
+    </div>
   );
 }
 

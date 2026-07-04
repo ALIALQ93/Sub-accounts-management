@@ -8,7 +8,10 @@ import type {
   AccountStatementParams,
   AccountStatementResult,
 } from "@/modules/accounts/types";
-import { convertStatementAmount } from "@/modules/reports/utils/account-statement-utils";
+import {
+  convertStatementAmountAtDate,
+  type ExchangeRateCache,
+} from "@/modules/reports/utils/account-statement-utils";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import {
   computeNextSequencePreview,
@@ -406,6 +409,10 @@ export const voucherApi = {
       ]),
     );
 
+    const currencyCodeById = new Map(
+      currencies.map((currency) => [currency.id, currency.code]),
+    );
+
     const scopedAccountIds = accountIds.filter((id) => {
       const account = accountById.get(id);
       if (!account) return false;
@@ -440,10 +447,14 @@ export const voucherApi = {
       openingByAccount.set(accountId, 0);
     }
 
+    const rateCache: ExchangeRateCache = new Map();
+
     if (fromDate) {
       let openingQuery = supabase
         .from("journal_entry_lines")
-        .select("account_id, debit, credit, journal_entries!inner(entry_date, status)")
+        .select(
+          "account_id, debit, credit, journal_entries!inner(entry_date, status)",
+        )
         .in("account_id", scopedAccountIds)
         .eq("journal_entries.status", "posted")
         .lt("journal_entries.entry_date", fromDate);
@@ -458,15 +469,20 @@ export const voucherApi = {
       for (const row of openingRows ?? []) {
         const accountId = (row as { account_id: string }).account_id;
         const account = accountById.get(accountId);
+        const entryDate =
+          (row as { journal_entries?: { entry_date?: string } }).journal_entries
+            ?.entry_date ?? fromDate;
         const debit = Number((row as { debit?: number }).debit ?? 0);
         const credit = Number((row as { credit?: number }).credit ?? 0);
         const delta = debit - credit;
         const converted = displayCurrency
-          ? convertStatementAmount(
+          ? await convertStatementAmountAtDate(
               delta,
               account?.currency_id,
               displayCurrency,
               currencies,
+              entryDate,
+              rateCache,
             )
           : delta;
         openingByAccount.set(
@@ -573,22 +589,32 @@ export const voucherApi = {
       const account = accountById.get(row.account_id);
       if (!journal?.id || !account) continue;
 
+      const entryDate = journal.entry_date ?? "";
       const rawDebit = Number(row.debit ?? 0);
       const rawCredit = Number(row.credit ?? 0);
+      const amountsConverted = Boolean(
+        displayCurrency &&
+          account.currency_id &&
+          account.currency_id !== displayCurrency.id,
+      );
       const debit = displayCurrency
-        ? convertStatementAmount(
+        ? await convertStatementAmountAtDate(
             rawDebit,
             account.currency_id,
             displayCurrency,
             currencies,
+            entryDate,
+            rateCache,
           )
         : rawDebit;
       const credit = displayCurrency
-        ? convertStatementAmount(
+        ? await convertStatementAmountAtDate(
             rawCredit,
             account.currency_id,
             displayCurrency,
             currencies,
+            entryDate,
+            rateCache,
           )
         : rawCredit;
 
@@ -618,9 +644,15 @@ export const voucherApi = {
         account_name: account.name_ar,
         account_sub_code: account.sub_code,
         account_currency_id: account.currency_id,
+        account_currency_code: account.currency_id
+          ? (currencyCodeById.get(account.currency_id) ?? null)
+          : null,
+        native_debit: rawDebit,
+        native_credit: rawCredit,
+        amounts_converted: amountsConverted,
         journal_entry_id: journal.id,
         entry_no: journal.entry_no ?? "—",
-        entry_date: journal.entry_date ?? "",
+        entry_date: entryDate,
         journal_description: journal.description ?? null,
         line_description: row.line_description,
         voucher_description: voucherMeta?.description ?? null,

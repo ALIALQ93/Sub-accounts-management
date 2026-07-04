@@ -37,6 +37,10 @@ export interface AccountStatementLine {
   account_name: string;
   account_sub_code: string | null;
   account_currency_id: string | null;
+  account_currency_code: string | null;
+  native_debit: number;
+  native_credit: number;
+  amounts_converted: boolean;
   journal_entry_id: string;
   entry_no: string;
   entry_date: string;

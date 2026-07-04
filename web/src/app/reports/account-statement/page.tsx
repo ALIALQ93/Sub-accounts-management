@@ -278,7 +278,7 @@ export default function AccountStatementReportPage() {
                   ))}
                 </select>
                 <p className="text-xs text-slate-500">
-                  تُحوَّل المبالغ إلى هذه العملة عند الاختلاف.
+                  تُحوَّل المبالغ إلى هذه العملة بسعر تاريخ كل حركة.
                 </p>
               </label>
 
@@ -293,11 +293,11 @@ export default function AccountStatementReportPage() {
                 />
                 <span>
                   <span className="font-medium text-slate-800">
-                    حركات العملة المحددة فقط
+                    حسابات بعملة العرض فقط
                   </span>
                   <span className="mt-1 block text-xs text-slate-600">
-                    إخفاء حسابات وحركاتها إذا كانت عملة الحساب تختلف عن عملة
-                    العرض.
+                    إخفاء الحسابات التي عملتها في الدليل تختلف عن عملة العرض
+                    المحددة (الحركات تُسجَّل بعملة الحساب).
                   </span>
                 </span>
               </label>
