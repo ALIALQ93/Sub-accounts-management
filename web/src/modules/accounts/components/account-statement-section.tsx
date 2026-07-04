@@ -65,6 +65,12 @@ export function AccountStatementSection({
     [displayCurrency],
   );
 
+  const fmtDebitCredit = useCallback(
+    (value: number) =>
+      formatCurrencyAmount(value, displayCurrency.decimal_places),
+    [displayCurrency],
+  );
+
   const loadStatement = useCallback(async () => {
     if (accountIds.length === 0) {
       setStatement(null);
@@ -399,10 +405,10 @@ export function AccountStatementSection({
                         <StatementNotesCell line={line} />
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
-                        {line.debit > 0 ? fmt(line.debit) : "—"}
+                        {line.debit > 0 ? fmtDebitCredit(line.debit) : "—"}
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
-                        {line.credit > 0 ? fmt(line.credit) : "—"}
+                        {line.credit > 0 ? fmtDebitCredit(line.credit) : "—"}
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums text-slate-700`}>
                         {formatNativeAmount(line.native_debit)}
@@ -453,10 +459,10 @@ export function AccountStatementSection({
                       )}
                     </td>
                     <td className="border border-slate-300 px-3 py-3 text-left font-mono text-xs font-semibold tabular-nums">
-                      {fmt(statement.total_debit)}
+                      {fmtDebitCredit(statement.total_debit)}
                     </td>
                     <td className="border border-slate-300 px-3 py-3 text-left font-mono text-xs font-semibold tabular-nums">
-                      {fmt(statement.total_credit)}
+                      {fmtDebitCredit(statement.total_credit)}
                     </td>
                     <td className="border border-slate-300 px-3 py-3 text-center text-xs text-slate-400">
                       —
