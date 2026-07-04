@@ -44,6 +44,8 @@ drop function if exists public.is_admin() cascade;
 drop function if exists public.customers_vendors_validate_accounts() cascade;
 drop function if exists public.vouchers_validate_parties() cascade;
 drop function if exists public.voucher_lines_validate_account_is_postable() cascade;
+drop function if exists public.delete_voucher_with_journal(uuid) cascade;
+drop function if exists public.is_force_voucher_delete() cascade;
 drop function if exists public.voucher_lines_prevent_delete_when_posted() cascade;
 drop function if exists public.voucher_attachments_validate() cascade;
 drop function if exists public.voucher_allocations_validate() cascade;

@@ -1,6 +1,7 @@
 "use client";
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { deleteVoucherAttachmentFile } from "@/lib/supabase/storage";
 import { notifyAccountsChanged } from "@/lib/reference-data-events";
 import { costCenterApi } from "@/modules/cost-centers/services/cost-center-api";
 import type {
@@ -1501,6 +1502,29 @@ export const voucherApi = {
 
     await this.postVoucher(reversalHeader.id);
     return { reversed_voucher_id: reversalHeader.id };
+  },
+
+  async deleteVoucher(voucherId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data: attachments, error: attachmentsError } = await supabase
+      .from("voucher_attachments")
+      .select("storage_path")
+      .eq("voucher_id", voucherId);
+    throwIfSupabaseError(attachmentsError);
+
+    for (const attachment of attachments ?? []) {
+      if (!attachment.storage_path) continue;
+      try {
+        await deleteVoucherAttachmentFile(attachment.storage_path);
+      } catch {
+        // تجاهل أخطاء تنظيف التخزين — الحذف من قاعدة البيانات يكمل
+      }
+    }
+
+    const { error } = await supabase.rpc("delete_voucher_with_journal", {
+      p_voucher_id: voucherId,
+    });
+    throwIfSupabaseError(error);
   },
 };
 

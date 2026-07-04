@@ -8,7 +8,9 @@ import {
   canEditVoucherFromList,
 } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
+import { formatVoucherError } from "@/modules/vouchers/utils/voucher-feedback-utils";
 import type { VoucherListItem } from "@/modules/vouchers/types";
+import { getVoucherTypeLabel } from "@/modules/vouchers/utils/voucher-type-config";
 
 interface VoucherListActionsProps {
   item: VoucherListItem;
@@ -17,11 +19,14 @@ interface VoucherListActionsProps {
 
 export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps) {
   const { hasPermission, isAdmin, authDisabled } = useAuth();
-  const [busyAction, setBusyAction] = useState<"approve" | "post" | null>(null);
+  const [busyAction, setBusyAction] = useState<"approve" | "post" | "delete" | null>(
+    null,
+  );
   const [actionError, setActionError] = useState("");
 
   const canView = authDisabled || hasPermission("vouchers.view");
   const canEdit = authDisabled || hasPermission("vouchers.edit");
+  const canDelete = authDisabled || hasPermission("vouchers.delete");
   const canPostPermission = authDisabled || hasPermission("vouchers.post");
   const showEdit = canEditVoucherFromList(item.status, isAdmin, canEdit);
   const canApprove = canEdit && item.status === "draft";
@@ -29,6 +34,7 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
     canPostPermission &&
     canEdit &&
     item.status === "approved";
+  const canDeleteVoucher = canDelete && item.status !== "cancelled";
 
   const editHref = `/vouchers/${item.id}`;
   const viewHref = `${editHref}?mode=view`;
@@ -37,7 +43,7 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
     "rounded-md border px-2 py-1 text-xs font-medium hover:bg-slate-50 disabled:opacity-50";
 
   const runAction = async (
-    action: "approve" | "post",
+    action: "approve" | "post" | "delete",
     handler: () => Promise<void>,
   ) => {
     setActionError("");
@@ -46,12 +52,21 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
       await handler();
       await onUpdated?.();
     } catch (error) {
-      setActionError(
-        error instanceof Error ? error.message : "تعذّر تنفيذ الإجراء.",
-      );
+      setActionError(formatVoucherError(error));
     } finally {
       setBusyAction(null);
     }
+  };
+
+  const confirmDelete = (): boolean => {
+    const typeLabel = getVoucherTypeLabel(item.voucher_type);
+    const journalNote =
+      item.status === "posted"
+        ? "\nسيتم حذف القيد المحاسبي المرتبط به أيضاً."
+        : "";
+    return window.confirm(
+      `حذف السند ${item.voucher_no} (${typeLabel})؟${journalNote}\n\nلا يمكن التراجع عن هذا الإجراء.`,
+    );
   };
 
   if (!canView) {
@@ -103,6 +118,24 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
             title="ترحيل السند إلى قيد يومية"
           >
             {busyAction === "post" ? "…" : "ترحيل"}
+          </button>
+        )}
+        {canDeleteVoucher && (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={() => {
+              if (!confirmDelete()) return;
+              void runAction("delete", () => voucherApi.deleteVoucher(item.id));
+            }}
+            className={`${linkClass} border-rose-300 text-rose-800 hover:bg-rose-50`}
+            title={
+              item.status === "posted"
+                ? "حذف السند والقيد المرتبط"
+                : "حذف السند"
+            }
+          >
+            {busyAction === "delete" ? "…" : "حذف"}
           </button>
         )}
         <OpenInNewTabLink

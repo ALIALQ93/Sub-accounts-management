@@ -94,6 +94,7 @@ database/setup_all.sql
 | `patch_voucher_auto_post.sql` | `auto_post_enabled` | مدمج |
 | `patch_journal_line_currency.sql` | عملة وأساس على القيود والسندات | **شغّله على قواعد قديمة — آخر ترقيع للدوال** |
 | `patch_remove_voucher_line_category_seed.sql` | حذف تصنيفات الأسطر الافتراضية | قواعد مُثبتة سابقاً بالبذور الثلاثة |
+| `patch_voucher_delete.sql` | حذف السند مع القيد المرتبط | **شغّله على قواعد قديمة** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

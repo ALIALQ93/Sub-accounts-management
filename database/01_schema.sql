@@ -1262,7 +1262,7 @@ declare
   v_vendor_active boolean;
 begin
   if TG_OP = 'UPDATE' and new.status = 'posted' and old.status = 'posted' then
-    if not public.is_admin() then
+    if not public.is_admin() and not public.is_force_voucher_delete() then
       raise exception 'Posted voucher cannot be modified. Use reversal instead.';
     end if;
   end if;
@@ -1342,7 +1342,7 @@ begin
   from public.vouchers
   where id = old.voucher_id;
 
-  if v_voucher_status = 'posted' and not public.is_admin() then
+  if v_voucher_status = 'posted' and not public.is_admin() and not public.is_force_voucher_delete() then
     raise exception 'Posted voucher lines cannot be deleted.';
   end if;
 
@@ -1363,16 +1363,18 @@ begin
   from public.vouchers
   where id = coalesce(new.voucher_id, old.voucher_id);
 
-  if v_voucher_status = 'posted' and not public.is_admin() then
+  if v_voucher_status = 'posted'
+    and not public.is_admin()
+    and not public.is_force_voucher_delete() then
     raise exception 'Posted voucher allocations cannot be changed.';
-  end if;
-
-  if v_settlement_mode <> 'invoice' then
-    raise exception 'Voucher allocations are allowed only for invoice settlement mode.';
   end if;
 
   if TG_OP = 'DELETE' then
     return old;
+  end if;
+
+  if v_settlement_mode <> 'invoice' then
+    raise exception 'Voucher allocations are allowed only for invoice settlement mode.';
   end if;
 
   return new;
@@ -1391,7 +1393,8 @@ begin
   from public.vouchers
   where id = coalesce(new.voucher_id, old.voucher_id);
 
-  if v_voucher_status in ('posted', 'cancelled') then
+  if v_voucher_status in ('posted', 'cancelled')
+    and not public.is_force_voucher_delete() then
     raise exception 'Voucher attachments cannot be changed for posted or cancelled vouchers.';
   end if;
 
@@ -1417,6 +1420,10 @@ declare
   v_rate numeric(18,6);
 begin
   if old.status = 'posted' then
+    if public.is_force_voucher_delete() then
+      return new;
+    end if;
+
     if not public.is_admin() then
       raise exception 'Posted voucher cannot be modified. Use reversal instead.';
     end if;
@@ -1572,12 +1579,81 @@ begin
 end;
 $$;
 
+create or replace function public.is_force_voucher_delete()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce(current_setting('app.force_voucher_delete', true), '') = 'on';
+$$;
+
+create or replace function public.delete_voucher_with_journal(p_voucher_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_voucher public.vouchers%rowtype;
+  v_journal_id uuid;
+  v_blocking_count int;
+begin
+  if not public.has_permission('vouchers.delete') then
+    raise exception 'Permission denied: vouchers.delete required.';
+  end if;
+
+  select * into v_voucher from public.vouchers where id = p_voucher_id;
+  if not found then
+    raise exception 'Voucher not found.';
+  end if;
+
+  if v_voucher.status = 'cancelled' then
+    raise exception 'Cancelled voucher cannot be deleted.';
+  end if;
+
+  v_journal_id := v_voucher.journal_entry_id;
+
+  if v_journal_id is not null then
+    select count(*) into v_blocking_count
+    from public.voucher_allocations va
+    inner join public.journal_entry_lines jel on jel.id = va.target_journal_line_id
+    where jel.journal_entry_id = v_journal_id
+      and va.voucher_id <> p_voucher_id;
+
+    if v_blocking_count > 0 then
+      raise exception
+        'Cannot delete voucher: journal lines are referenced by other voucher allocations.';
+    end if;
+  end if;
+
+  perform set_config('app.force_voucher_delete', 'on', true);
+
+  delete from public.voucher_allocations where voucher_id = p_voucher_id;
+
+  if v_journal_id is not null then
+    update public.vouchers
+    set journal_entry_id = null, updated_at = now()
+    where id = p_voucher_id;
+
+    delete from public.journal_entries where id = v_journal_id;
+  end if;
+
+  delete from public.vouchers where id = p_voucher_id;
+
+  perform set_config('app.force_voucher_delete', 'off', true);
+exception
+  when others then
+    perform set_config('app.force_voucher_delete', 'off', true);
+    raise;
+end;
+$$;
+
 create or replace function public.vouchers_prevent_delete_when_posted()
 returns trigger
 language plpgsql
 as $$
 begin
-  if old.status = 'posted' then
+  if old.status = 'posted' and not public.is_force_voucher_delete() then
     raise exception 'Posted voucher cannot be deleted.';
   end if;
 
