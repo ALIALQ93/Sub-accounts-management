@@ -59,6 +59,7 @@ export interface VoucherTypeDefaults {
   default_account_id: string | null;
   default_currency_id: string | null;
   default_cost_center_id: string | null;
+  auto_post_enabled: boolean;
 }
 
 export interface VoucherAllocation {

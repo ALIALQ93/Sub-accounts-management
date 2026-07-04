@@ -43,10 +43,15 @@ import {
   resolveVoucherSaveStatus,
 } from "@/modules/vouchers/utils/voucher-save-utils";
 import { validateCostCenterBalance } from "@/modules/vouchers/utils/voucher-cost-center-utils";
+import {
+  approveWithOptionalAutoPost,
+  getApproveButtonLabel,
+} from "@/modules/vouchers/utils/voucher-auto-post-utils";
 
 interface SettlementVoucherFormProps {
   initialMode?: "create" | "edit";
   initialVoucherId?: string;
+  forceViewMode?: boolean;
 }
 
 const EMPTY_LINES: VoucherLine[] = [];
@@ -54,6 +59,7 @@ const EMPTY_LINES: VoucherLine[] = [];
 export function SettlementVoucherForm({
   initialMode = "create",
   initialVoucherId,
+  forceViewMode = false,
 }: SettlementVoucherFormProps) {
   const [voucherId, setVoucherId] = useState(initialVoucherId ?? "");
   const [voucherNo, setVoucherNo] = useState("");
@@ -77,6 +83,7 @@ export function SettlementVoucherForm({
   const [clearingAccountId, setClearingAccountId] = useState("");
   const [defaultClearingAccountFromSettings, setDefaultClearingAccountFromSettings] =
     useState("");
+  const [autoPostEnabled, setAutoPostEnabled] = useState(false);
 
   const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
     useVoucherFeedback();
@@ -97,7 +104,7 @@ export function SettlementVoucherForm({
   const isCreate = initialMode === "create" && !voucherId;
   const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly, canEditPosted } =
     useVoucherFormPermissions(isCreate ? "create" : "edit", status);
-  const readOnly = formReadOnly;
+  const readOnly = formReadOnly || forceViewMode;
   const voucherNoReadOnly =
     readOnly || (autoNumberEnabled && (Boolean(voucherId) || isCreate));
 
@@ -211,7 +218,10 @@ export function SettlementVoucherForm({
     }
   };
 
-  const saveVoucher = async (targetStatus: VoucherStatus) => {
+  const saveVoucher = async (
+    targetStatus: VoucherStatus,
+    options?: { suppressSuccessFeedback?: boolean },
+  ) => {
     if (!beginSave()) return null;
 
     try {
@@ -292,7 +302,9 @@ export function SettlementVoucherForm({
 
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      showSuccess(feedbackMessage);
+      if (!options?.suppressSuccessFeedback) {
+        showSuccess(feedbackMessage);
+      }
 
       if (initialMode === "edit") {
         const details = await voucherApi.getVoucherById(activeId);
@@ -386,6 +398,7 @@ export function SettlementVoucherForm({
         const defaultClearingAccount = typeDefaults.default_account_id ?? "";
         setDefaultClearingAccountFromSettings(defaultClearingAccount);
         setClearingAccountId(defaultClearingAccount);
+        setAutoPostEnabled(typeDefaults.auto_post_enabled ?? false);
 
         const baseCurrency =
           currenciesData.find((currency) => currency.is_base) ??
@@ -459,6 +472,11 @@ export function SettlementVoucherForm({
 
   return (
     <div className="space-y-4">
+      {forceViewMode && (
+        <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          وضع العرض — القراءة فقط.
+        </div>
+      )}
       <div className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <p className="font-semibold">سند تصفية</p>
         <p className="mt-0.5 opacity-90">
@@ -672,16 +690,43 @@ export function SettlementVoucherForm({
                 type="button"
                 onClick={() => {
                   setIsSaving(true);
-                  void saveVoucher("approved").finally(() => setIsSaving(false));
+                  void (async () => {
+                    try {
+                      const result = await approveWithOptionalAutoPost({
+                        autoPostEnabled,
+                        canPost,
+                        canPostPermission,
+                        saveApproved: () =>
+                          saveVoucher("approved", {
+                            suppressSuccessFeedback: autoPostEnabled,
+                          }),
+                        postVoucher: voucherApi.postVoucher,
+                        showError,
+                        postBlockedMessage:
+                          costCenterBalanceError ??
+                          "تعذر الترحيل. تحقق من الحساب الوسيط والأسطر ومراكز الكلفة والعملة.",
+                      });
+                      if (!result) return;
+                      if (result.posted) {
+                        setStatus("posted");
+                        setJournalEntryId(result.journalEntryId ?? "");
+                        showSuccess(
+                          `تم الاعتماد والترحيل. القيد: ${result.journalEntryNo ?? "—"}`,
+                        );
+                      }
+                    } catch (error) {
+                      showFromError(error);
+                    }
+                  })().finally(() => setIsSaving(false));
                 }}
-                disabled={isSaving}
+                disabled={isSaving || (autoPostEnabled && !canPost)}
                 className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-800 disabled:opacity-50"
               >
-                اعتماد
+                {getApproveButtonLabel(autoPostEnabled)}
               </button>
             </>
           )}
-          {canPostPermission && !canEditPosted && (
+          {canPostPermission && !canEditPosted && !autoPostEnabled && (
             <button
               type="button"
               onClick={() => {

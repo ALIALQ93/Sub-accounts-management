@@ -917,7 +917,10 @@ export const voucherApi = {
       return DEFAULT_VOUCHER_TYPE_DEFAULTS;
     }
 
-    return data as VoucherTypeDefaults[];
+    return (data as VoucherTypeDefaults[]).map((row) => ({
+      ...row,
+      auto_post_enabled: row.auto_post_enabled ?? false,
+    }));
   },
 
   async getVoucherTypeDefaults(
@@ -944,6 +947,7 @@ export const voucherApi = {
         default_account_id: payload.default_account_id,
         default_currency_id: payload.default_currency_id,
         default_cost_center_id: payload.default_cost_center_id,
+        auto_post_enabled: payload.auto_post_enabled ?? false,
         updated_at: new Date().toISOString(),
       })
       .select("*")

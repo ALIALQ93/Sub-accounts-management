@@ -223,6 +223,7 @@ create table public.voucher_type_defaults (
   default_account_id uuid null references public.accounts(id) on delete set null,
   default_currency_id uuid null references public.currencies(id) on delete set null,
   default_cost_center_id uuid null references public.cost_centers(id) on delete set null,
+  auto_post_enabled boolean not null default false,
   updated_at timestamptz not null default now()
 );
 

@@ -52,17 +52,20 @@ export const DEFAULT_VOUCHER_TYPE_DEFAULTS: VoucherTypeDefaults[] = [
     default_account_id: null,
     default_currency_id: null,
     default_cost_center_id: null,
+    auto_post_enabled: false,
   },
   {
     voucher_type: "payment",
     default_account_id: null,
     default_currency_id: null,
     default_cost_center_id: null,
+    auto_post_enabled: false,
   },
   {
     voucher_type: "settlement",
     default_account_id: null,
     default_currency_id: null,
     default_cost_center_id: null,
+    auto_post_enabled: false,
   },
 ];

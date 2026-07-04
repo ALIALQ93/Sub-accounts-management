@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { VoucherEditRouter } from "@/modules/vouchers/components/voucher-edit-router";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 
@@ -11,7 +12,15 @@ export default async function VoucherEditPage({ params }: VoucherEditPageProps) 
   return (
     <main className="flex w-full flex-col gap-4">
       <VouchersNav />
-      <VoucherEditRouter voucherId={id} />
+      <Suspense
+        fallback={
+          <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
+            جاري تحميل السند...
+          </div>
+        }
+      >
+        <VoucherEditRouter voucherId={id} />
+      </Suspense>
     </main>
   );
 }

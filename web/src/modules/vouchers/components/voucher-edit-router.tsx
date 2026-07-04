@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PaymentVoucherForm } from "@/modules/vouchers/components/payment-voucher-form";
 import { ReceiptVoucherForm } from "@/modules/vouchers/components/receipt-voucher-form";
 import { SettlementVoucherForm } from "@/modules/vouchers/components/settlement-voucher-form";
@@ -13,6 +14,8 @@ interface VoucherEditRouterProps {
 }
 
 export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
+  const searchParams = useSearchParams();
+  const forceViewMode = searchParams.get("mode") === "view";
   const [voucherType, setVoucherType] = useState<VoucherType | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -56,15 +59,33 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
   }
 
   if (voucherType === "receipt") {
-    return <ReceiptVoucherForm initialMode="edit" initialVoucherId={voucherId} />;
+    return (
+      <ReceiptVoucherForm
+        initialMode="edit"
+        initialVoucherId={voucherId}
+        forceViewMode={forceViewMode}
+      />
+    );
   }
 
   if (voucherType === "payment") {
-    return <PaymentVoucherForm initialMode="edit" initialVoucherId={voucherId} />;
+    return (
+      <PaymentVoucherForm
+        initialMode="edit"
+        initialVoucherId={voucherId}
+        forceViewMode={forceViewMode}
+      />
+    );
   }
 
   if (voucherType === "settlement") {
-    return <SettlementVoucherForm initialMode="edit" initialVoucherId={voucherId} />;
+    return (
+      <SettlementVoucherForm
+        initialMode="edit"
+        initialVoucherId={voucherId}
+        forceViewMode={forceViewMode}
+      />
+    );
   }
 
   return (
@@ -72,6 +93,7 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
       initialMode="edit"
       initialVoucherId={voucherId}
       lockedVoucherType={voucherType}
+      forceViewMode={forceViewMode}
     />
   );
 }

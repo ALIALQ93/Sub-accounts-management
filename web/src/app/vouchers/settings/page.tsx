@@ -118,7 +118,7 @@ export default function VoucherSettingsPage() {
   const updateTypeDefault = (
     type: VoucherType,
     field: keyof Omit<VoucherTypeDefaults, "voucher_type">,
-    value: string | null,
+    value: string | null | boolean,
   ) => {
     setTypeDefaults((current) =>
       current.map((row) =>
@@ -144,6 +144,7 @@ export default function VoucherSettingsPage() {
           default_account_id: row.default_account_id,
           default_currency_id: row.default_currency_id,
           default_cost_center_id: row.default_cost_center_id,
+          auto_post_enabled: row.auto_post_enabled,
         });
       }
       setFeedback("تم حفظ إعدادات السندات.");
@@ -279,6 +280,28 @@ export default function VoucherSettingsPage() {
                     disabled={formDisabled || isSaving}
                   />
                 </div>
+                <label className="mt-3 flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={row.auto_post_enabled}
+                    disabled={formDisabled || isSaving}
+                    onChange={(event) =>
+                      updateTypeDefault(
+                        row.voucher_type,
+                        "auto_post_enabled",
+                        event.target.checked,
+                      )
+                    }
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium text-slate-800">ترحيل تلقائي عند الاعتماد</span>
+                    <span className="mt-0.5 block text-xs text-slate-600">
+                      عند التفعيل، زر «اعتماد» يُرحّل السند مباشرة إلى قيد اليومية (يتطلب صلاحية
+                      الترحيل).
+                    </span>
+                  </span>
+                </label>
               </article>
             ))}
           </section>

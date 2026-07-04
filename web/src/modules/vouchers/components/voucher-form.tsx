@@ -38,6 +38,10 @@ import {
   getVoucherSaveFeedback,
   resolveVoucherSaveStatus,
 } from "@/modules/vouchers/utils/voucher-save-utils";
+import {
+  approveWithOptionalAutoPost,
+  getApproveButtonLabel,
+} from "@/modules/vouchers/utils/voucher-auto-post-utils";
 
 const DEFAULT_LINES: VoucherLine[] = [];
 const DEFAULT_ALLOCATIONS: VoucherAllocation[] = [];
@@ -46,12 +50,14 @@ interface VoucherFormProps {
   initialMode?: "create" | "edit";
   initialVoucherId?: string;
   lockedVoucherType?: VoucherType;
+  forceViewMode?: boolean;
 }
 
 export function VoucherForm({
   initialMode = "create",
   initialVoucherId,
   lockedVoucherType,
+  forceViewMode = false,
 }: VoucherFormProps) {
   const typeConfig = lockedVoucherType
     ? VOUCHER_TYPE_CONFIG[lockedVoucherType]
@@ -97,11 +103,12 @@ export function VoucherForm({
   });
   const [isLoading, setIsLoading] = useState(initialMode === "edit");
   const [isSaving, setIsSaving] = useState(false);
+  const [autoPostEnabled, setAutoPostEnabled] = useState(false);
 
   const isCreate = initialMode === "create" && !voucherId;
   const { canSave, canPost: canPostPermission, canDeleteLine, formReadOnly, canEditPosted } =
     useVoucherFormPermissions(isCreate ? "create" : "edit", status);
-  const readOnly = formReadOnly;
+  const readOnly = formReadOnly || forceViewMode;
   const voucherNoReadOnly =
     readOnly ||
     (autoNumberEnabled && !allowManualOverride && (Boolean(voucherId) || isCreate));
@@ -215,7 +222,10 @@ export function VoucherForm({
     return null;
   };
 
-  const saveVoucher = async (targetStatus: VoucherStatus) => {
+  const saveVoucher = async (
+    targetStatus: VoucherStatus,
+    options?: { suppressSuccessFeedback?: boolean },
+  ) => {
     if (!beginSave()) return null;
 
     try {
@@ -265,7 +275,9 @@ export function VoucherForm({
 
       setVoucherNo(savedHeader.voucher_no);
       setStatus(savedHeader.status);
-      showSuccess(feedbackMessage);
+      if (!options?.suppressSuccessFeedback) {
+        showSuccess(feedbackMessage);
+      }
 
       if (initialMode === "edit") {
         const details = await voucherApi.getVoucherById(activeId);
@@ -303,7 +315,24 @@ export function VoucherForm({
     if (readOnly) return;
     setIsSaving(true);
     try {
-      await saveVoucher("approved");
+      const result = await approveWithOptionalAutoPost({
+        autoPostEnabled,
+        canPost,
+        canPostPermission,
+        saveApproved: () =>
+          saveVoucher("approved", { suppressSuccessFeedback: autoPostEnabled }),
+        postVoucher: voucherApi.postVoucher,
+        showError,
+        postBlockedMessage: "تعذر الترحيل. تحقق من توازن الاسطر والتخصيصات.",
+      });
+      if (!result) return;
+      if (result.posted) {
+        setStatus("posted");
+        setJournalEntryId(result.journalEntryId ?? "");
+        showSuccess(`تم الاعتماد والترحيل. القيد: ${result.journalEntryNo ?? "—"}`);
+      }
+    } catch (error) {
+      showFromError(error);
     } finally {
       setIsSaving(false);
     }
@@ -360,6 +389,16 @@ export function VoucherForm({
       setSettlementMode(VOUCHER_TYPE_CONFIG[voucherType].defaultSettlementMode);
     }
   }, [voucherType, settlementMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void voucherApi.getVoucherTypeDefaults(voucherType).then((defaults) => {
+      if (!cancelled) setAutoPostEnabled(defaults.auto_post_enabled ?? false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [voucherType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,6 +498,11 @@ export function VoucherForm({
 
   return (
     <div className="space-y-4">
+      {forceViewMode && (
+        <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          وضع العرض — القراءة فقط.
+        </div>
+      )}
       {typeConfig && (
         <div
           className={`rounded-lg border px-4 py-3 text-sm ${typeConfig.colorClass}`}
@@ -640,14 +684,14 @@ export function VoucherForm({
               <button
                 type="button"
                 onClick={onApprove}
-                disabled={isSaving}
+                disabled={isSaving || (autoPostEnabled && !canPost)}
                 className="rounded-md border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 disabled:opacity-50"
               >
-                اعتماد
+                {getApproveButtonLabel(autoPostEnabled)}
               </button>
             </>
           )}
-          {canPostPermission && !canEditPosted && (
+          {canPostPermission && !canEditPosted && !autoPostEnabled && (
             <button
               type="button"
               onClick={onPost}

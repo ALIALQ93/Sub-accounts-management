@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PermissionGate } from "@/components/permission-gate";
 import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
+import { VoucherListActions } from "@/modules/vouchers/components/voucher-list-actions";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
@@ -144,7 +145,7 @@ export default function VouchersListPage() {
                       <VoucherAttachmentBadge count={item.attachment_count} />
                     </td>
                     <td className="border border-slate-100 p-2">
-                      <DocumentActionLinks href={`/vouchers/${item.id}`} />
+                      <VoucherListActions item={item} />
                     </td>
                   </tr>
                 ))}
