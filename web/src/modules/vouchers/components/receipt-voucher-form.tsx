@@ -16,7 +16,6 @@ import {
 } from "@/modules/vouchers/components/receipt-voucher-lines-table";
 import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
-import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherViewModeBar } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
@@ -107,8 +106,7 @@ export function ReceiptVoucherForm({
     useState("");
   const [autoPostEnabled, setAutoPostEnabled] = useState(false);
 
-  const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
-    useVoucherFeedback();
+  const { showError, showSuccess, showFromError } = useVoucherFeedback();
   const {
     beginSave,
     endSave,
@@ -547,12 +545,6 @@ export function ReceiptVoucherForm({
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
 
-      <VoucherFormFeedback
-        feedback={feedback}
-        feedbackRef={feedbackRef}
-        onDismiss={clearFeedback}
-      />
-
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-bold text-slate-900">{formTitle}</h1>
@@ -782,7 +774,6 @@ export function ReceiptVoucherForm({
             />
           )}
         </div>
-        <VoucherFormFeedback feedback={feedback} onDismiss={clearFeedback} className="mt-3" />
       </section>
     </div>
   );

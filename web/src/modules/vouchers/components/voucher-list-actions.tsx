@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { OpenInNewTabLink } from "@/components/open-in-new-tab-link";
+import { useNotifications } from "@/components/notifications";
 import { useAuth } from "@/modules/auth/auth-context";
 import {
   canEditVoucherFromList,
@@ -19,10 +20,10 @@ interface VoucherListActionsProps {
 
 export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps) {
   const { hasPermission, isAdmin, authDisabled } = useAuth();
+  const { notifyError } = useNotifications();
   const [busyAction, setBusyAction] = useState<"approve" | "post" | "delete" | null>(
     null,
   );
-  const [actionError, setActionError] = useState("");
 
   const canView = authDisabled || hasPermission("vouchers.view");
   const canEdit = authDisabled || hasPermission("vouchers.edit");
@@ -46,13 +47,12 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
     action: "approve" | "post" | "delete",
     handler: () => Promise<void>,
   ) => {
-    setActionError("");
     setBusyAction(action);
     try {
       await handler();
       await onUpdated?.();
     } catch (error) {
-      setActionError(formatVoucherError(error));
+      notifyError(formatVoucherError(error));
     } finally {
       setBusyAction(null);
     }
@@ -146,9 +146,6 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
           ↗
         </OpenInNewTabLink>
       </div>
-      {actionError && (
-        <p className="text-[10px] leading-snug text-rose-700">{actionError}</p>
-      )}
     </div>
   );
 }

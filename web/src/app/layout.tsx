@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic, JetBrains_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { NotificationProvider } from "@/components/notifications";
 import { APP_BRANDING } from "@/config/app-branding";
 import { AuthProvider } from "@/modules/auth/auth-context";
 import "./globals.css";
@@ -37,7 +38,9 @@ export default function RootLayout({
     >
       <body className="h-full overflow-hidden">
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          <NotificationProvider>
+            <AppShell>{children}</AppShell>
+          </NotificationProvider>
         </AuthProvider>
       </body>
     </html>

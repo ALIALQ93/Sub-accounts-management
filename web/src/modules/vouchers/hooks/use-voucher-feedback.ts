@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { VoucherFeedback } from "@/modules/vouchers/utils/voucher-feedback-utils";
+import { useCallback } from "react";
+import { useNotifications } from "@/components/notifications";
 import {
+  formatVoucherError,
   voucherError,
   voucherErrorFromUnknown,
   voucherInfo,
@@ -11,46 +12,61 @@ import {
 } from "@/modules/vouchers/utils/voucher-feedback-utils";
 
 export function useVoucherFeedback() {
-  const [feedback, setFeedback] = useState<VoucherFeedback | null>(null);
-  const feedbackRef = useRef<HTMLDivElement>(null);
+  const {
+    notify,
+    notifySuccess,
+    notifyError,
+    notifyWarning,
+    notifyInfo,
+    dismissAlert,
+  } = useNotifications();
 
-  const showError = useCallback((message: string) => {
-    setFeedback(voucherError(message));
-  }, []);
+  const showError = useCallback(
+    (message: string) => {
+      notify(voucherError(message));
+    },
+    [notify],
+  );
 
-  const showSuccess = useCallback((message: string) => {
-    setFeedback(voucherSuccess(message));
-  }, []);
+  const showSuccess = useCallback(
+    (message: string) => {
+      notify(voucherSuccess(message));
+    },
+    [notify],
+  );
 
-  const showWarning = useCallback((message: string) => {
-    setFeedback(voucherWarning(message));
-  }, []);
+  const showWarning = useCallback(
+    (message: string) => {
+      notify(voucherWarning(message));
+    },
+    [notify],
+  );
 
-  const showInfo = useCallback((message: string) => {
-    setFeedback(voucherInfo(message));
-  }, []);
+  const showInfo = useCallback(
+    (message: string) => {
+      notify(voucherInfo(message));
+    },
+    [notify],
+  );
 
-  const showFromError = useCallback((error: unknown) => {
-    setFeedback(voucherErrorFromUnknown(error));
-  }, []);
+  const showFromError = useCallback(
+    (error: unknown) => {
+      notify(voucherErrorFromUnknown(error));
+    },
+    [notify],
+  );
 
   const clearFeedback = useCallback(() => {
-    setFeedback(null);
-  }, []);
-
-  useEffect(() => {
-    if (!feedback || feedback.type === "success") return;
-    feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [feedback]);
+    dismissAlert();
+  }, [dismissAlert]);
 
   return {
-    feedback,
-    feedbackRef,
     showError,
     showSuccess,
     showWarning,
     showInfo,
     showFromError,
     clearFeedback,
+    formatError: formatVoucherError,
   };
 }

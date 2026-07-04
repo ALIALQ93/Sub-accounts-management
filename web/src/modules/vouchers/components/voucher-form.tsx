@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
-import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherViewModeBar } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
@@ -90,8 +89,7 @@ export function VoucherForm({
   const { accounts, isLoadingAccounts } = useVoucherAccounts();
   const [openMovements, setOpenMovements] = useState<OpenMovement[]>([]);
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
-  const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
-    useVoucherFeedback();
+  const { showError, showSuccess, showFromError } = useVoucherFeedback();
   const {
     beginSave,
     endSave,
@@ -513,12 +511,6 @@ export function VoucherForm({
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
 
-      <VoucherFormFeedback
-        feedback={feedback}
-        feedbackRef={feedbackRef}
-        onDismiss={clearFeedback}
-      />
-
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-900">{pageTitle}</h1>
@@ -725,7 +717,6 @@ export function VoucherForm({
             </Link>
           )}
         </div>
-        <VoucherFormFeedback feedback={feedback} onDismiss={clearFeedback} className="mt-3" />
       </section>
     </div>
   );

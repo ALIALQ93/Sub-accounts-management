@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { AppUpdateBanner } from "@/components/app-update-banner";
+import { AppUpdateModal } from "@/components/app-update-modal";
 import { CompanyLogo } from "@/components/company-logo";
 import { AppBrandFooter } from "@/components/app-brand-footer";
 import { APP_BRANDING } from "@/config/app-branding";
@@ -181,7 +181,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <AppUpdateBanner />
+          <AppUpdateModal />
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">{children}</div>
         </div>
