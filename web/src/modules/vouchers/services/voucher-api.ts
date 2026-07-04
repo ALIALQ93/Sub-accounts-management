@@ -8,10 +8,7 @@ import type {
   AccountStatementParams,
   AccountStatementResult,
 } from "@/modules/accounts/types";
-import {
-  convertStatementAmountAtDate,
-  type ExchangeRateCache,
-} from "@/modules/reports/utils/account-statement-utils";
+import { resolveStatementLineAmounts } from "@/modules/reports/utils/account-statement-utils";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import {
   computeNextSequencePreview,
@@ -447,13 +444,11 @@ export const voucherApi = {
       openingByAccount.set(accountId, 0);
     }
 
-    const rateCache: ExchangeRateCache = new Map();
-
     if (fromDate) {
       let openingQuery = supabase
         .from("journal_entry_lines")
         .select(
-          "account_id, debit, credit, journal_entries!inner(entry_date, status)",
+          "account_id, debit, credit, debit_base, credit_base, currency_id, exchange_rate, journal_entries!inner(entry_date, status)",
         )
         .in("account_id", scopedAccountIds)
         .eq("journal_entries.status", "posted")
@@ -469,25 +464,41 @@ export const voucherApi = {
       for (const row of openingRows ?? []) {
         const accountId = (row as { account_id: string }).account_id;
         const account = accountById.get(accountId);
-        const entryDate =
-          (row as { journal_entries?: { entry_date?: string } }).journal_entries
-            ?.entry_date ?? fromDate;
         const debit = Number((row as { debit?: number }).debit ?? 0);
         const credit = Number((row as { credit?: number }).credit ?? 0);
-        const delta = debit - credit;
-        const converted = displayCurrency
-          ? await convertStatementAmountAtDate(
-              delta,
-              account?.currency_id,
+        const debitBase = Number((row as { debit_base?: number }).debit_base ?? 0);
+        const creditBase = Number((row as { credit_base?: number }).credit_base ?? 0);
+        const lineCurrencyId =
+          (row as { currency_id?: string | null }).currency_id ?? null;
+        const lineExchangeRate =
+          (row as { exchange_rate?: number | null }).exchange_rate ?? null;
+
+        const resolved = displayCurrency
+          ? resolveStatementLineAmounts({
+              debit,
+              credit,
+              debitBase,
+              creditBase,
+              lineCurrencyId,
+              lineExchangeRate,
+              accountCurrencyId: account?.currency_id ?? null,
               displayCurrency,
               currencies,
-              entryDate,
-              rateCache,
-            )
-          : delta;
+            })
+          : {
+              debit,
+              credit,
+              nativeDebit: debit,
+              nativeCredit: credit,
+              nativeCurrencyCode: null,
+              lineExchangeRate: null,
+              amountsConverted: false,
+            };
+
+        const delta = resolved.debit - resolved.credit;
         openingByAccount.set(
           accountId,
-          (openingByAccount.get(accountId) ?? 0) + converted,
+          (openingByAccount.get(accountId) ?? 0) + delta,
         );
       }
     }
@@ -495,7 +506,7 @@ export const voucherApi = {
     let query = supabase
       .from("journal_entry_lines")
       .select(
-        "id, account_id, debit, credit, line_description, cost_center_id, cost_centers(code, name_ar), journal_entries!inner(id, entry_no, entry_date, description, status, source_type, source_id)",
+        "id, account_id, debit, credit, debit_base, credit_base, currency_id, exchange_rate, line_description, cost_center_id, cost_centers(code, name_ar), journal_entries!inner(id, entry_no, entry_date, description, status, source_type, source_id)",
       )
       .in("account_id", scopedAccountIds)
       .eq("journal_entries.status", "posted")
@@ -519,6 +530,10 @@ export const voucherApi = {
       account_id: string;
       debit?: number;
       credit?: number;
+      debit_base?: number;
+      credit_base?: number;
+      currency_id?: string | null;
+      exchange_rate?: number | null;
       line_description: string | null;
       cost_center_id?: string | null;
       cost_centers?: { code?: string; name_ar?: string } | null;
@@ -592,31 +607,35 @@ export const voucherApi = {
       const entryDate = journal.entry_date ?? "";
       const rawDebit = Number(row.debit ?? 0);
       const rawCredit = Number(row.credit ?? 0);
-      const amountsConverted = Boolean(
-        displayCurrency &&
-          account.currency_id &&
-          account.currency_id !== displayCurrency.id,
-      );
-      const debit = displayCurrency
-        ? await convertStatementAmountAtDate(
-            rawDebit,
-            account.currency_id,
+      const rawDebitBase = Number(row.debit_base ?? 0);
+      const rawCreditBase = Number(row.credit_base ?? 0);
+      const lineCurrencyId = row.currency_id ?? null;
+      const lineExchangeRate = row.exchange_rate ?? null;
+
+      const resolved = displayCurrency
+        ? resolveStatementLineAmounts({
+            debit: rawDebit,
+            credit: rawCredit,
+            debitBase: rawDebitBase,
+            creditBase: rawCreditBase,
+            lineCurrencyId,
+            lineExchangeRate,
+            accountCurrencyId: account.currency_id,
             displayCurrency,
             currencies,
-            entryDate,
-            rateCache,
-          )
-        : rawDebit;
-      const credit = displayCurrency
-        ? await convertStatementAmountAtDate(
-            rawCredit,
-            account.currency_id,
-            displayCurrency,
-            currencies,
-            entryDate,
-            rateCache,
-          )
-        : rawCredit;
+          })
+        : {
+            debit: rawDebit,
+            credit: rawCredit,
+            nativeDebit: rawDebit,
+            nativeCredit: rawCredit,
+            nativeCurrencyCode: null,
+            lineExchangeRate: null,
+            amountsConverted: false,
+          };
+
+      const debit = resolved.debit;
+      const credit = resolved.credit;
 
       const accountTotals = totalsByAccount.get(row.account_id) ?? {
         debit: 0,
@@ -647,9 +666,14 @@ export const voucherApi = {
         account_currency_code: account.currency_id
           ? (currencyCodeById.get(account.currency_id) ?? null)
           : null,
-        native_debit: rawDebit,
-        native_credit: rawCredit,
-        amounts_converted: amountsConverted,
+        line_currency_id: lineCurrencyId,
+        line_currency_code: lineCurrencyId
+          ? (currencyCodeById.get(lineCurrencyId) ?? null)
+          : null,
+        line_exchange_rate: resolved.lineExchangeRate,
+        native_debit: resolved.nativeDebit,
+        native_credit: resolved.nativeCredit,
+        amounts_converted: resolved.amountsConverted,
         journal_entry_id: journal.id,
         entry_no: journal.entry_no ?? "—",
         entry_date: entryDate,

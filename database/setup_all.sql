@@ -171,6 +171,10 @@ create table public.journal_entry_lines (
   account_id uuid not null references public.accounts(id) on delete restrict,
   debit numeric(18, 2) not null default 0 check (debit >= 0),
   credit numeric(18, 2) not null default 0 check (credit >= 0),
+  currency_id uuid null references public.currencies(id) on delete restrict,
+  exchange_rate numeric(18, 6) null check (exchange_rate is null or exchange_rate > 0),
+  debit_base numeric(18, 2) not null default 0 check (debit_base >= 0),
+  credit_base numeric(18, 2) not null default 0 check (credit_base >= 0),
   line_description text null,
   cost_center_id uuid null references public.cost_centers(id) on delete restrict,
   created_at timestamptz not null default now(),
@@ -178,6 +182,8 @@ create table public.journal_entry_lines (
     (debit > 0 and credit = 0) or (credit > 0 and debit = 0)
   )
 );
+
+create index idx_journal_lines_currency_id on public.journal_entry_lines(currency_id);
 
 create index idx_journal_lines_cost_center_id on public.journal_entry_lines(cost_center_id);
 
@@ -362,6 +368,7 @@ create table public.voucher_lines (
   account_id uuid not null references public.accounts(id) on delete restrict,
   side varchar(10) not null check (side in ('debit', 'credit')),
   amount numeric(18, 2) not null check (amount > 0),
+  amount_base numeric(18, 2) null check (amount_base is null or amount_base >= 0),
   line_description text null,
   cost_center_id uuid null references public.cost_centers(id) on delete restrict,
   line_category_id uuid null references public.voucher_line_categories(id) on delete restrict,
@@ -420,6 +427,34 @@ group by jel.account_id;
 -- ---------------------------------------------------------------------------
 -- دوال مساعدة
 -- ---------------------------------------------------------------------------
+
+create or replace function public.to_base_amount(
+  p_amount numeric,
+  p_exchange_rate numeric
+)
+returns numeric
+language sql
+immutable
+as $$
+  select round((p_amount * coalesce(nullif(p_exchange_rate, 0), 1))::numeric, 2);
+$$;
+
+create or replace function public.voucher_lines_apply_amount_base()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_rate numeric(18, 6);
+begin
+  select coalesce(nullif(v.exchange_rate, 0), 1)
+  into v_rate
+  from public.vouchers v
+  where v.id = new.voucher_id;
+
+  new.amount_base := public.to_base_amount(new.amount, v_rate);
+  return new;
+end;
+$$;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -1124,6 +1159,7 @@ declare
   v_debit numeric(18,2);
   v_credit numeric(18,2);
   v_unbalanced_cc int;
+  v_rate numeric(18,6);
 begin
   if not public.is_admin() then
     raise exception 'Only administrators can sync posted voucher journals.';
@@ -1145,6 +1181,8 @@ begin
   if v_voucher.journal_entry_id is null then
     raise exception 'Posted voucher has no linked journal entry.';
   end if;
+
+  v_rate := coalesce(nullif(v_voucher.exchange_rate, 0), 1);
 
   select
     coalesce(sum(case when side = 'debit' then amount else 0 end), 0),
@@ -1201,7 +1239,11 @@ begin
     debit,
     credit,
     line_description,
-    cost_center_id
+    cost_center_id,
+    currency_id,
+    exchange_rate,
+    debit_base,
+    credit_base
   )
   select
     v_voucher.journal_entry_id,
@@ -1223,7 +1265,11 @@ begin
         else null
       end
     )),
-    vl.cost_center_id
+    vl.cost_center_id,
+    v_voucher.currency_id,
+    v_rate,
+    case when vl.side = 'debit' then public.to_base_amount(vl.amount, v_rate) else 0 end,
+    case when vl.side = 'credit' then public.to_base_amount(vl.amount, v_rate) else 0 end
   from public.voucher_lines vl
   left join public.voucher_line_categories vlc on vlc.id = vl.line_category_id
   where vl.voucher_id = p_voucher_id;
@@ -1440,6 +1486,7 @@ declare
   v_entry_no varchar(40);
   v_allocation_count int;
   v_unbalanced_cc int;
+  v_rate numeric(18,6);
 begin
   if old.status = 'posted' then
     if not public.is_admin() then
@@ -1466,6 +1513,8 @@ begin
   end if;
 
   if new.status = 'posted' and old.status <> 'posted' then
+    v_rate := coalesce(nullif(new.exchange_rate, 0), 1);
+
     select
       coalesce(sum(case when side = 'debit' then amount else 0 end), 0),
       coalesce(sum(case when side = 'credit' then amount else 0 end), 0)
@@ -1553,7 +1602,11 @@ begin
       debit,
       credit,
       line_description,
-      cost_center_id
+      cost_center_id,
+      currency_id,
+      exchange_rate,
+      debit_base,
+      credit_base
     )
     select
       v_je_id,
@@ -1575,7 +1628,11 @@ begin
           else null
         end
       )),
-      vl.cost_center_id
+      vl.cost_center_id,
+      new.currency_id,
+      v_rate,
+      case when vl.side = 'debit' then public.to_base_amount(vl.amount, v_rate) else 0 end,
+      case when vl.side = 'credit' then public.to_base_amount(vl.amount, v_rate) else 0 end
     from public.voucher_lines vl
     left join public.voucher_line_categories vlc on vlc.id = vl.line_category_id
     where vl.voucher_id = new.id;
@@ -1699,6 +1756,10 @@ for each row execute function public.vouchers_prevent_delete_when_posted();
 create trigger trg_voucher_lines_validate_account
 before insert or update on public.voucher_lines
 for each row execute function public.voucher_lines_validate_account_is_postable();
+
+create trigger trg_voucher_lines_amount_base
+before insert or update of amount, voucher_id on public.voucher_lines
+for each row execute function public.voucher_lines_apply_amount_base();
 
 create trigger trg_voucher_lines_prevent_delete_when_posted
 before delete on public.voucher_lines

@@ -77,6 +77,9 @@ database/setup_all.sql
 | `patch_company_logo.sql` | إضافة حقل `logo_url` في `company_settings` |
 | `patch_voucher_attachments.sql` | جدول `voucher_attachments` + محفزات |
 | `patch_admin_edit_posted_vouchers.sql` | تعديل السندات المرحّلة لمدير النظام |
+| `patch_voucher_lines_delete_rls.sql` | سياسة حذف أسطر السند |
+| `patch_voucher_auto_post.sql` | ترحيل تلقائي عند حفظ السند |
+| `patch_journal_line_currency.sql` | عملة وسعر صرف وقيمة أساسية على أسطر القيود والسندات |
 | `06_storage.sql` | إنشاء buckets Storage + سياسات RLS للملفات |
 
 ## إعادة توليد setup_all.sql

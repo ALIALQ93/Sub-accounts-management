@@ -234,7 +234,8 @@ export function AccountStatementSection({
             <span className="font-semibold">عملة العرض:</span>{" "}
             {displayCurrency.code} ({displayCurrency.symbol})
             <span className="mr-2 block text-xs text-blue-800">
-              المبالغ تُحوَّل من عملة الحساب بسعر الصرف بتاريخ كل حركة.
+              حركات السندات تُعرض بسعر الصرف المحفوظ على السند؛ القيم بالعملة
+              الأساسية من القيد المرحّل.
             </span>
             {onlyDisplayCurrency && (
               <span className="mr-2 text-xs text-blue-800">
@@ -392,7 +393,9 @@ export function AccountStatementSection({
                           amount={line.debit}
                           nativeAmount={line.native_debit}
                           converted={line.amounts_converted}
-                          currencyCode={line.account_currency_code}
+                          currencyCode={
+                            line.line_currency_code ?? line.account_currency_code
+                          }
                           fmt={fmt}
                         />
                       </td>
@@ -401,7 +404,9 @@ export function AccountStatementSection({
                           amount={line.credit}
                           nativeAmount={line.native_credit}
                           converted={line.amounts_converted}
-                          currencyCode={line.account_currency_code}
+                          currencyCode={
+                            line.line_currency_code ?? line.account_currency_code
+                          }
                           fmt={fmt}
                         />
                       </td>
@@ -512,6 +517,8 @@ function StatementNotesCell({
     line_description: string | null;
     voucher_description: string | null;
     journal_description: string | null;
+    line_exchange_rate?: number | null;
+    line_currency_code?: string | null;
   };
 }) {
   const notes = formatStatementNotes(line);
@@ -527,6 +534,14 @@ function StatementNotesCell({
           <span className="font-mono">{line.account_sub_code.trim()}</span>
         </p>
       )}
+      {line.line_currency_code && line.line_exchange_rate ? (
+        <p>
+          <span className="font-medium text-slate-600">سعر السند:</span>{" "}
+          <span className="font-mono">
+            {line.line_exchange_rate} ({line.line_currency_code})
+          </span>
+        </p>
+      ) : null}
       {line.line_description?.trim() && (
         <p>
           <span className="font-medium text-slate-600">سطر:</span>{" "}

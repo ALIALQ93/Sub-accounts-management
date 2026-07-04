@@ -1,87 +1,170 @@
 import type { AccountStatementLine } from "@/modules/accounts/types";
-import { currencyApi } from "@/modules/currencies/services/currency-api";
 import { convertAmount } from "@/modules/currencies/utils/convert-amount";
 import type { Currency } from "@/modules/currencies/types";
 
-export type ExchangeRateCache = Map<string, number>;
-
-export function rateCacheKey(currencyId: string, asOfDate: string): string {
-  return `${currencyId}:${asOfDate}`;
+export function effectiveBaseAmounts(params: {
+  debit: number;
+  credit: number;
+  debitBase: number;
+  creditBase: number;
+  exchangeRate: number | null;
+}): { debitBase: number; creditBase: number } {
+  if (params.debitBase > 0 || params.creditBase > 0) {
+    return { debitBase: params.debitBase, creditBase: params.creditBase };
+  }
+  const rate = params.exchangeRate && params.exchangeRate > 0 ? params.exchangeRate : 1;
+  return {
+    debitBase: params.debit * rate,
+    creditBase: params.credit * rate,
+  };
 }
 
-export async function getCachedExchangeRate(
-  currencyId: string,
-  asOfDate: string,
-  currencies: Currency[],
-  cache: ExchangeRateCache,
-): Promise<number> {
-  const currency = currencies.find((item) => item.id === currencyId);
-  if (!currency || currency.is_base) {
-    return 1;
-  }
-
-  const key = rateCacheKey(currencyId, asOfDate);
-  if (cache.has(key)) {
-    return cache.get(key)!;
-  }
-
-  try {
-    const rate = await currencyApi.getExchangeRateAtDate(currencyId, asOfDate);
-    cache.set(key, rate > 0 ? rate : currency.exchange_rate);
-    return cache.get(key)!;
-  } catch {
-    const fallback = currency.exchange_rate > 0 ? currency.exchange_rate : 1;
-    cache.set(key, fallback);
-    return fallback;
-  }
-}
-
-export async function convertStatementAmountAtDate(
-  amount: number,
-  accountCurrencyId: string | null | undefined,
-  displayCurrency: Currency,
-  currencies: Currency[],
-  asOfDate: string,
-  cache: ExchangeRateCache,
-): Promise<number> {
-  if (!amount) return 0;
-
-  const accountCurrency = accountCurrencyId
-    ? currencies.find((currency) => currency.id === accountCurrencyId)
+export function resolveStatementLineAmounts(params: {
+  debit: number;
+  credit: number;
+  debitBase: number;
+  creditBase: number;
+  lineCurrencyId: string | null;
+  lineExchangeRate: number | null;
+  accountCurrencyId: string | null;
+  displayCurrency: Currency;
+  currencies: Currency[];
+}): {
+  debit: number;
+  credit: number;
+  nativeDebit: number;
+  nativeCredit: number;
+  nativeCurrencyCode: string | null;
+  lineExchangeRate: number | null;
+  amountsConverted: boolean;
+} {
+  const baseCurrency = params.currencies.find((currency) => currency.is_base);
+  const lineCurrency = params.lineCurrencyId
+    ? params.currencies.find((currency) => currency.id === params.lineCurrencyId)
+    : undefined;
+  const accountCurrency = params.accountCurrencyId
+    ? params.currencies.find((currency) => currency.id === params.accountCurrencyId)
     : undefined;
 
-  if (!accountCurrency || accountCurrency.id === displayCurrency.id) {
-    return amount;
+  const nativeDebit = params.debit;
+  const nativeCredit = params.credit;
+  const nativeCurrencyCode =
+    lineCurrency?.code ?? accountCurrency?.code ?? null;
+  const { debitBase, creditBase } = effectiveBaseAmounts({
+    debit: params.debit,
+    credit: params.credit,
+    debitBase: params.debitBase,
+    creditBase: params.creditBase,
+    exchangeRate: params.lineExchangeRate,
+  });
+
+  if (params.lineCurrencyId) {
+    if (params.displayCurrency.id === params.lineCurrencyId) {
+      return {
+        debit: nativeDebit,
+        credit: nativeCredit,
+        nativeDebit,
+        nativeCredit,
+        nativeCurrencyCode,
+        lineExchangeRate: params.lineExchangeRate,
+        amountsConverted: false,
+      };
+    }
+
+    if (
+      params.displayCurrency.is_base ||
+      params.displayCurrency.id === baseCurrency?.id
+    ) {
+      return {
+        debit: debitBase,
+        credit: creditBase,
+        nativeDebit,
+        nativeCredit,
+        nativeCurrencyCode,
+        lineExchangeRate: params.lineExchangeRate,
+        amountsConverted: true,
+      };
+    }
+
+    return {
+      debit:
+        debitBase > 0
+          ? convertAmount(debitBase, 1, params.displayCurrency.exchange_rate)
+          : 0,
+      credit:
+        creditBase > 0
+          ? convertAmount(creditBase, 1, params.displayCurrency.exchange_rate)
+          : 0,
+      nativeDebit,
+      nativeCredit,
+      nativeCurrencyCode,
+      lineExchangeRate: params.lineExchangeRate,
+      amountsConverted: true,
+    };
   }
 
-  const [fromRate, toRate] = await Promise.all([
-    getCachedExchangeRate(accountCurrency.id, asOfDate, currencies, cache),
-    displayCurrency.is_base
-      ? Promise.resolve(1)
-      : getCachedExchangeRate(displayCurrency.id, asOfDate, currencies, cache),
-  ]);
-
-  return convertAmount(amount, fromRate, toRate);
-}
-
-export function convertStatementAmount(
-  amount: number,
-  accountCurrencyId: string | null | undefined,
-  displayCurrency: Currency,
-  currencies: Currency[],
-): number {
-  if (!amount) return 0;
-  const accountCurrency = accountCurrencyId
-    ? currencies.find((currency) => currency.id === accountCurrencyId)
-    : undefined;
-  if (!accountCurrency || accountCurrency.id === displayCurrency.id) {
-    return amount;
+  if (
+    params.accountCurrencyId &&
+    params.displayCurrency.id === params.accountCurrencyId
+  ) {
+    return {
+      debit: nativeDebit,
+      credit: nativeCredit,
+      nativeDebit,
+      nativeCredit,
+      nativeCurrencyCode,
+      lineExchangeRate: null,
+      amountsConverted: false,
+    };
   }
-  return convertAmount(
-    amount,
-    accountCurrency.exchange_rate,
-    displayCurrency.exchange_rate,
-  );
+
+  if (
+    params.displayCurrency.is_base ||
+    params.displayCurrency.id === baseCurrency?.id
+  ) {
+    return {
+      debit: debitBase || nativeDebit,
+      credit: creditBase || nativeCredit,
+      nativeDebit,
+      nativeCredit,
+      nativeCurrencyCode,
+      lineExchangeRate: null,
+      amountsConverted: Boolean(
+        params.accountCurrencyId &&
+          params.accountCurrencyId !== baseCurrency?.id,
+      ),
+    };
+  }
+
+  if (accountCurrency) {
+    return {
+      debit: convertAmount(
+        nativeDebit,
+        accountCurrency.exchange_rate,
+        params.displayCurrency.exchange_rate,
+      ),
+      credit: convertAmount(
+        nativeCredit,
+        accountCurrency.exchange_rate,
+        params.displayCurrency.exchange_rate,
+      ),
+      nativeDebit,
+      nativeCredit,
+      nativeCurrencyCode,
+      lineExchangeRate: null,
+      amountsConverted: true,
+    };
+  }
+
+  return {
+    debit: nativeDebit,
+    credit: nativeCredit,
+    nativeDebit,
+    nativeCredit,
+    nativeCurrencyCode,
+    lineExchangeRate: params.lineExchangeRate,
+    amountsConverted: false,
+  };
 }
 
 export function filterAccountStatementLines(
@@ -97,6 +180,7 @@ export function filterAccountStatementLines(
       line.account_name,
       line.account_sub_code,
       line.account_currency_code,
+      line.line_currency_code,
       line.entry_no,
       line.voucher_no,
       line.line_description,
@@ -104,6 +188,7 @@ export function filterAccountStatementLines(
       line.journal_description,
       line.cost_center_code,
       line.cost_center_name,
+      line.line_exchange_rate?.toString(),
     ]
       .filter(Boolean)
       .join(" ")
@@ -173,10 +258,17 @@ export function formatStatementNotes(line: {
   account_sub_code?: string | null;
   line_description?: string | null;
   voucher_description?: string | null;
+  line_exchange_rate?: number | null;
+  line_currency_code?: string | null;
 }): string {
   const parts: string[] = [];
   if (line.account_sub_code?.trim()) {
     parts.push(`كود فرعي: ${line.account_sub_code.trim()}`);
+  }
+  if (line.line_currency_code && line.line_exchange_rate) {
+    parts.push(
+      `سعر السند: ${line.line_exchange_rate} (${line.line_currency_code})`,
+    );
   }
   if (line.line_description?.trim()) {
     parts.push(`سطر: ${line.line_description.trim()}`);
@@ -187,11 +279,9 @@ export function formatStatementNotes(line: {
   return parts.join("\n");
 }
 
-export function statementAmountsConverted(
+export function accountMatchesDisplayCurrency(
   accountCurrencyId: string | null | undefined,
   displayCurrencyId: string,
 ): boolean {
-  return Boolean(
-    accountCurrencyId && accountCurrencyId !== displayCurrencyId,
-  );
+  return Boolean(accountCurrencyId && accountCurrencyId === displayCurrencyId);
 }
