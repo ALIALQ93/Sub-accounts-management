@@ -193,41 +193,21 @@ export function ReceiptVoucherForm({
       creditLines,
     );
 
-    const details = await voucherApi.getVoucherById(id);
-    for (const existingLine of details.lines) {
-      await voucherApi.deleteVoucherLine(id, existingLine.id);
-    }
-
-    for (const line of linesToSave) {
-      if (!line.account_id || Number(line.amount || 0) <= 0) continue;
-      await voucherApi.addVoucherLine(id, {
+    await voucherApi.replaceVoucherLines(
+      id,
+      linesToSave.map((line) => ({
         account_id: line.account_id,
         side: line.side,
         amount: Number(line.amount),
         line_description: line.line_description?.trim() || null,
         cost_center_id: line.cost_center_id || null,
         ...lineCategoryPayload(line),
-      });
-    }
+      })),
+    );
   };
 
   const syncVoucherAllocations = async (id: string) => {
-    const details = await voucherApi.getVoucherById(id);
-    for (const existingAllocation of details.allocations) {
-      await voucherApi.deleteAllocation(id, existingAllocation.id);
-    }
-
-    for (const allocation of allocations) {
-      const targetId =
-        allocation.target_journal_line_id || allocation.target_reference || "";
-      const amount = Number(allocation.applied_amount || 0);
-      if (!targetId || amount <= 0) continue;
-      await voucherApi.addAllocation(id, {
-        target_journal_line_id: targetId,
-        applied_amount: amount,
-        note: allocation.note?.trim() || null,
-      });
-    }
+    await voucherApi.replaceVoucherAllocations(id, allocations);
   };
 
   const saveVoucher = async (

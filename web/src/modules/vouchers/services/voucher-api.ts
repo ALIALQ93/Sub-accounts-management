@@ -1036,6 +1036,29 @@ export const voucherApi = {
     throwIfSupabaseError(error);
   },
 
+  async deleteAllVoucherLines(voucherId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from("voucher_lines")
+      .delete()
+      .eq("voucher_id", voucherId);
+    throwIfSupabaseError(error);
+  },
+
+  async replaceVoucherLines(
+    voucherId: string,
+    lines: Partial<VoucherLine>[],
+  ): Promise<VoucherLine[]> {
+    await this.deleteAllVoucherLines(voucherId);
+
+    const inserted: VoucherLine[] = [];
+    for (const line of lines) {
+      if (!line.account_id || Number(line.amount || 0) <= 0) continue;
+      inserted.push(await this.addVoucherLine(voucherId, line));
+    }
+    return inserted;
+  },
+
   async addAllocation(
     id: string,
     payload: Partial<VoucherAllocation>,
@@ -1076,6 +1099,38 @@ export const voucherApi = {
       .eq("id", allocationId)
       .eq("voucher_id", id);
     throwIfSupabaseError(error);
+  },
+
+  async deleteAllVoucherAllocations(voucherId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from("voucher_allocations")
+      .delete()
+      .eq("voucher_id", voucherId);
+    throwIfSupabaseError(error);
+  },
+
+  async replaceVoucherAllocations(
+    voucherId: string,
+    allocations: Partial<VoucherAllocation>[],
+  ): Promise<VoucherAllocation[]> {
+    await this.deleteAllVoucherAllocations(voucherId);
+
+    const inserted: VoucherAllocation[] = [];
+    for (const allocation of allocations) {
+      const targetId =
+        allocation.target_journal_line_id || allocation.target_reference || "";
+      const amount = Number(allocation.applied_amount || 0);
+      if (!targetId || amount <= 0) continue;
+      inserted.push(
+        await this.addAllocation(voucherId, {
+          target_journal_line_id: targetId,
+          applied_amount: amount,
+          note: allocation.note?.trim() || null,
+        }),
+      );
+    }
+    return inserted;
   },
 
   async postVoucher(id: string): Promise<PostVoucherResponse> {

@@ -176,34 +176,33 @@ export function VoucherForm({
   });
 
   const syncVoucherLines = async (id: string) => {
-    const details = await voucherApi.getVoucherById(id);
-    for (const existingLine of details.lines) {
-      await voucherApi.deleteVoucherLine(id, existingLine.id);
-    }
+    const payloads = lines
+      .map((line) => normalizeLine(line))
+      .filter(
+        (payload) =>
+          payload.account_id && Number(payload.amount || 0) > 0,
+      );
 
-    for (const line of lines) {
-      const payload = normalizeLine(line);
-      if (!payload.account_id || Number(payload.amount || 0) <= 0) continue;
-      await voucherApi.addVoucherLine(id, payload);
-    }
+    await voucherApi.replaceVoucherLines(id, payloads);
   };
 
   const syncVoucherAllocations = async (id: string) => {
-    const details = await voucherApi.getVoucherById(id);
-    for (const existingAllocation of details.allocations) {
-      await voucherApi.deleteAllocation(id, existingAllocation.id);
-    }
+    const payloads = allocations
+      .map((allocation) => normalizeAllocation(allocation))
+      .filter(
+        (payload) =>
+          payload.target_journal_line_id &&
+          Number(payload.applied_amount || 0) > 0,
+      );
 
-    for (const allocation of allocations) {
-      const payload = normalizeAllocation(allocation);
-      if (
-        !payload.target_journal_line_id ||
-        Number(payload.applied_amount || 0) <= 0
-      ) {
-        continue;
-      }
-      await voucherApi.addAllocation(id, payload);
-    }
+    await voucherApi.replaceVoucherAllocations(
+      id,
+      payloads.map((payload) => ({
+        target_journal_line_id: payload.target_journal_line_id!,
+        applied_amount: payload.applied_amount!,
+        note: payload.note ?? null,
+      })),
+    );
   };
 
   const resolveVoucherNo = async (): Promise<string | null> => {

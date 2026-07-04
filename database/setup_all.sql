@@ -2076,6 +2076,9 @@ create policy "voucher_lines_insert_all" on public.voucher_lines
 drop policy if exists "voucher_lines_update_all" on public.voucher_lines;
 create policy "voucher_lines_update_all" on public.voucher_lines
   for update to anon, authenticated using (true) with check (true);
+drop policy if exists "voucher_lines_delete_all" on public.voucher_lines;
+create policy "voucher_lines_delete_all" on public.voucher_lines
+  for delete to anon, authenticated using (true);
 
 -- voucher_allocations
 drop policy if exists "voucher_allocations_select_all" on public.voucher_allocations;
@@ -2087,6 +2090,9 @@ create policy "voucher_allocations_insert_all" on public.voucher_allocations
 drop policy if exists "voucher_allocations_update_all" on public.voucher_allocations;
 create policy "voucher_allocations_update_all" on public.voucher_allocations
   for update to anon, authenticated using (true) with check (true);
+drop policy if exists "voucher_allocations_delete_all" on public.voucher_allocations;
+create policy "voucher_allocations_delete_all" on public.voucher_allocations
+  for delete to anon, authenticated using (true);
 
 -- voucher_attachments
 drop policy if exists "voucher_attachments_select_all" on public.voucher_attachments;

@@ -10,8 +10,12 @@ import {
 } from "@/modules/vouchers/components/voucher-line-category-fields";
 import {
   buildSettlementVoucherLinesForSave,
+  isValidSettlementUserLine,
   SettlementVoucherLinesTable,
+  settlementLineHasBothSides,
   splitSettlementVoucherLines,
+  toCostCenterBalanceLines,
+  type SettlementUserLine,
 } from "@/modules/vouchers/components/settlement-voucher-lines-table";
 import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
@@ -23,7 +27,6 @@ import type {
   Account,
   CostCenter,
   VoucherHeader,
-  VoucherLine,
   VoucherLineCategory,
   VoucherStatus,
 } from "@/modules/vouchers/types";
@@ -54,7 +57,7 @@ interface SettlementVoucherFormProps {
   forceViewMode?: boolean;
 }
 
-const EMPTY_LINES: VoucherLine[] = [];
+const EMPTY_LINES: SettlementUserLine[] = [];
 
 export function SettlementVoucherForm({
   initialMode = "create",
@@ -73,7 +76,7 @@ export function SettlementVoucherForm({
   const [journalEntryId, setJournalEntryId] = useState("");
   const [status, setStatus] = useState<VoucherStatus>("draft");
   const [description, setDescription] = useState("");
-  const [userLines, setUserLines] = useState<VoucherLine[]>(EMPTY_LINES);
+  const [userLines, setUserLines] = useState<SettlementUserLine[]>(EMPTY_LINES);
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
@@ -119,40 +122,35 @@ export function SettlementVoucherForm({
 
   const totalUserDebit = useMemo(
     () =>
-      userLines
-        .filter((line) => line.side === "debit")
-        .reduce((sum, line) => sum + Number(line.amount || 0), 0),
+      userLines.reduce((sum, line) => sum + Number(line.debit_amount || 0), 0),
     [userLines],
   );
 
   const totalUserCredit = useMemo(
     () =>
-      userLines
-        .filter((line) => line.side === "credit")
-        .reduce((sum, line) => sum + Number(line.amount || 0), 0),
+      userLines.reduce((sum, line) => sum + Number(line.credit_amount || 0), 0),
     [userLines],
   );
 
   const validUserLines = useMemo(
-    () =>
-      userLines.filter(
-        (line) =>
-          line.account_id &&
-          line.cost_center_id &&
-          Number(line.amount || 0) > 0,
-      ),
+    () => userLines.filter(isValidSettlementUserLine),
+    [userLines],
+  );
+
+  const hasDualSideRows = useMemo(
+    () => userLines.some((line) => settlementLineHasBothSides(line)),
     [userLines],
   );
 
   const costCenterBalanceError = useMemo(
     () =>
       validateCostCenterBalance({
-        lines: validUserLines,
+        lines: toCostCenterBalanceLines(userLines),
         costCenters,
         requireCostCenter: true,
         excludeNullCostCenter: true,
       }),
-    [validUserLines, costCenters],
+    [userLines, costCenters],
   );
 
   const canPost =
@@ -200,22 +198,17 @@ export function SettlementVoucherForm({
       userLines,
     );
 
-    const details = await voucherApi.getVoucherById(id);
-    for (const existingLine of details.lines) {
-      await voucherApi.deleteVoucherLine(id, existingLine.id);
-    }
-
-    for (const line of linesToSave) {
-      if (!line.account_id || Number(line.amount || 0) <= 0) continue;
-      await voucherApi.addVoucherLine(id, {
+    await voucherApi.replaceVoucherLines(
+      id,
+      linesToSave.map((line) => ({
         account_id: line.account_id,
         side: line.side,
         amount: Number(line.amount),
         line_description: line.line_description?.trim() || null,
         cost_center_id: line.cost_center_id || null,
         ...lineCategoryPayload(line),
-      });
-    }
+      })),
+    );
   };
 
   const saveVoucher = async (
@@ -234,7 +227,11 @@ export function SettlementVoucherForm({
         return null;
       }
       if (validUserLines.length === 0) {
-        showError("أضف سطراً واحداً على الأقل (مدين أو دائن).");
+        showError("أضف سطراً واحداً على الأقل بمبلغ في المدين أو الدائن.");
+        return null;
+      }
+      if (hasDualSideRows) {
+        showError("لا يمكن تعبئة المدين والدائن في نفس السطر.");
         return null;
       }
 
@@ -250,19 +247,35 @@ export function SettlementVoucherForm({
         return null;
       }
 
-      const costCenterError = validateCostCenterBalance({
-        lines: validUserLines,
-        costCenters,
-        requireCostCenter: true,
-        excludeNullCostCenter: true,
-      });
+    const costCenterError = validateCostCenterBalance({
+      lines: toCostCenterBalanceLines(validUserLines),
+      costCenters,
+      requireCostCenter: true,
+      excludeNullCostCenter: true,
+    });
       if (costCenterError) {
         showError(costCenterError);
         return null;
       }
 
       for (const line of validUserLines) {
-        const categoryError = validateLineCategory(line, lineCategories);
+        const categoryError = validateLineCategory(
+          {
+            id: line.id,
+            voucher_id: line.voucher_id,
+            account_id: line.account_id,
+            side: Number(line.debit_amount || 0) > 0 ? "debit" : "credit",
+            amount:
+              Number(line.debit_amount || 0) > 0
+                ? Number(line.debit_amount)
+                : Number(line.credit_amount),
+            line_description: line.line_description,
+            cost_center_id: line.cost_center_id,
+            line_category_id: line.line_category_id,
+            category_quantity: line.category_quantity,
+          },
+          lineCategories,
+        );
         if (categoryError) {
           showError(categoryError);
           return null;
@@ -480,8 +493,8 @@ export function SettlementVoucherForm({
       <div className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <p className="font-semibold">سند تصفية</p>
         <p className="mt-0.5 opacity-90">
-          تسوية بين حسابات عبر حساب وسيط — كل سطر له مقابل على الوسيط، مع
-          توازن المدين والدائن لكل مركز كلفة
+          تسوية بين حسابات عبر حساب وسيط — أدخل المبلغ في عمود المدين أو الدائن
+          لكل سطر، مع توازن مراكز الكلفة
         </p>
       </div>
 
