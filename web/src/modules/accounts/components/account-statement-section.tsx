@@ -158,7 +158,7 @@ export function AccountStatementSection({
     ? "max-h-[min(70vh,720px)]"
     : "max-h-[min(52vh,520px)]";
   const hasSearchFilter = search.trim().length > 0;
-  const colSpan = showAccountColumn ? 9 : 8;
+  const colSpan = showAccountColumn ? 12 : 11;
 
   return (
     <section className="grid gap-4">
@@ -289,7 +289,7 @@ export function AccountStatementSection({
             <div
               className={`${tableMaxHeight} overflow-auto rounded-xl border-2 border-slate-300`}
             >
-              <table className="w-full min-w-[1100px] border-collapse text-sm">
+              <table className="w-full min-w-[1280px] border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr className="text-right text-xs font-semibold text-slate-700">
                     {showAccountColumn && <th className={TH}>الحساب</th>}
@@ -300,6 +300,9 @@ export function AccountStatementSection({
                     <th className={TH}>ملاحظات</th>
                     <th className={`${TH} bg-blue-100/70`}>مدين</th>
                     <th className={`${TH} bg-blue-100/70`}>دائن</th>
+                    <th className={`${TH} bg-slate-200/80`}>مدين أصلي</th>
+                    <th className={`${TH} bg-slate-200/80`}>دائن أصلي</th>
+                    <th className={`${TH} bg-slate-200/80`}>عملة أصلية</th>
                     <th className={`${TH} bg-emerald-100/70`}>الرصيد</th>
                   </tr>
                 </thead>
@@ -318,6 +321,13 @@ export function AccountStatementSection({
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
                         —
                       </td>
+                      <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
+                        —
+                      </td>
+                      <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
+                        —
+                      </td>
+                      <td className={TD}>—</td>
                       <td
                         className={`${TD} text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}
                       >
@@ -389,26 +399,19 @@ export function AccountStatementSection({
                         <StatementNotesCell line={line} />
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
-                        <StatementAmountCell
-                          amount={line.debit}
-                          nativeAmount={line.native_debit}
-                          converted={line.amounts_converted}
-                          currencyCode={
-                            line.line_currency_code ?? line.account_currency_code
-                          }
-                          fmt={fmt}
-                        />
+                        {line.debit > 0 ? fmt(line.debit) : "—"}
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
-                        <StatementAmountCell
-                          amount={line.credit}
-                          nativeAmount={line.native_credit}
-                          converted={line.amounts_converted}
-                          currencyCode={
-                            line.line_currency_code ?? line.account_currency_code
-                          }
-                          fmt={fmt}
-                        />
+                        {line.credit > 0 ? fmt(line.credit) : "—"}
+                      </td>
+                      <td className={`${TD} text-left font-mono text-xs tabular-nums text-slate-700`}>
+                        {formatNativeAmount(line.native_debit)}
+                      </td>
+                      <td className={`${TD} text-left font-mono text-xs tabular-nums text-slate-700`}>
+                        {formatNativeAmount(line.native_credit)}
+                      </td>
+                      <td className={`${TD} font-mono text-xs text-slate-700`}>
+                        <StatementNativeCurrencyCell line={line} />
                       </td>
                       <td
                         className={`${TD} text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}
@@ -455,6 +458,15 @@ export function AccountStatementSection({
                     <td className="border border-slate-300 px-3 py-3 text-left font-mono text-xs font-semibold tabular-nums">
                       {fmt(statement.total_credit)}
                     </td>
+                    <td className="border border-slate-300 px-3 py-3 text-center text-xs text-slate-400">
+                      —
+                    </td>
+                    <td className="border border-slate-300 px-3 py-3 text-center text-xs text-slate-400">
+                      —
+                    </td>
+                    <td className="border border-slate-300 px-3 py-3 text-center text-xs text-slate-400">
+                      —
+                    </td>
                     <td className="border border-slate-300 px-3 py-3 text-left font-mono text-sm font-bold tabular-nums text-blue-900">
                       {fmt(statement.closing_balance)}
                     </td>
@@ -476,37 +488,30 @@ export function AccountStatementSection({
   );
 }
 
-function StatementAmountCell({
-  amount,
-  nativeAmount,
-  converted,
-  currencyCode,
-  fmt,
+function formatNativeAmount(value: number): string {
+  if (value <= 0) return "—";
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function StatementNativeCurrencyCell({
+  line,
 }: {
-  amount: number;
-  nativeAmount: number;
-  converted: boolean;
-  currencyCode: string | null;
-  fmt: (value: number) => string;
+  line: {
+    native_debit: number;
+    native_credit: number;
+    line_currency_code?: string | null;
+    account_currency_code?: string | null;
+  };
 }) {
-  if (amount <= 0) {
+  if (line.native_debit <= 0 && line.native_credit <= 0) {
     return <>—</>;
   }
 
-  return (
-    <div>
-      <span>{fmt(amount)}</span>
-      {converted && nativeAmount > 0 && currencyCode && (
-        <span className="mt-0.5 block text-[10px] font-normal text-slate-500">
-          أصلي: {nativeAmount.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}{" "}
-          {currencyCode}
-        </span>
-      )}
-    </div>
-  );
+  const code = line.line_currency_code ?? line.account_currency_code;
+  return <>{code ?? "—"}</>;
 }
 
 function StatementNotesCell({
