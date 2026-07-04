@@ -253,9 +253,12 @@ export function AccountCardModal({
 
       {activeTab === "statement" && canShowStatement && (
         <AccountStatementSection
-          accountId={account.id}
-          decimalPlaces={balance.decimal_places}
-          currencySymbol={balance.currency_symbol}
+          accountIds={[account.id]}
+          displayCurrency={
+            currencies.find((currency) => currency.code === balance.currency_code) ??
+            currencies.find((currency) => currency.id === account.currency_id) ??
+            currencies[0]
+          }
         />
       )}
     </Modal>

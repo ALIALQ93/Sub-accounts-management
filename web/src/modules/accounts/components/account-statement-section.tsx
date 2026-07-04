@@ -5,15 +5,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { OpenInNewTabLink } from "@/components/open-in-new-tab-link";
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import type { AccountStatementResult } from "@/modules/accounts/types";
-import { filterAccountStatementLines } from "@/modules/reports/utils/account-statement-utils";
+import {
+  filterAccountStatementLines,
+  formatStatementNotes,
+} from "@/modules/reports/utils/account-statement-utils";
+import type { Currency } from "@/modules/currencies/types";
 import { formatCurrencyAmount } from "@/modules/currencies/utils/convert-amount";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { CostCenter } from "@/modules/vouchers/types";
 
 interface AccountStatementSectionProps {
-  accountId: string;
-  decimalPlaces: number;
-  currencySymbol: string;
+  accountIds: string[];
+  displayCurrency: Currency;
+  onlyDisplayCurrency?: boolean;
   initialFromDate?: string;
   initialToDate?: string;
   initialCostCenterId?: string;
@@ -27,9 +31,9 @@ interface AccountStatementSectionProps {
 }
 
 export function AccountStatementSection({
-  accountId,
-  decimalPlaces,
-  currencySymbol,
+  accountIds,
+  displayCurrency,
+  onlyDisplayCurrency = false,
   initialFromDate = "",
   initialToDate = "",
   initialCostCenterId = "",
@@ -49,20 +53,35 @@ export function AccountStatementSection({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const showAccountColumn = accountIds.length > 1;
+
   const fmt = useCallback(
-    (value: number) => formatCurrencyAmount(value, decimalPlaces, currencySymbol),
-    [decimalPlaces, currencySymbol],
+    (value: number) =>
+      formatCurrencyAmount(
+        value,
+        displayCurrency.decimal_places,
+        displayCurrency.symbol,
+      ),
+    [displayCurrency],
   );
 
   const loadStatement = useCallback(async () => {
+    if (accountIds.length === 0) {
+      setStatement(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError("");
     try {
       const data = await voucherApi.listAccountStatement({
-        accountId,
+        accountIds,
         fromDate: fromDate || undefined,
         toDate: toDate || undefined,
         costCenterId: costCenterId || undefined,
+        displayCurrencyId: displayCurrency.id,
+        onlyDisplayCurrency,
       });
       setStatement(data);
     } catch (err) {
@@ -73,7 +92,14 @@ export function AccountStatementSection({
     } finally {
       setIsLoading(false);
     }
-  }, [accountId, fromDate, toDate, costCenterId]);
+  }, [
+    accountIds,
+    fromDate,
+    toDate,
+    costCenterId,
+    displayCurrency.id,
+    onlyDisplayCurrency,
+  ]);
 
   useEffect(() => {
     void loadStatement();
@@ -126,14 +152,13 @@ export function AccountStatementSection({
     [statement?.lines, search],
   );
 
-  const showOpeningRow = Boolean(fromDate);
+  const showOpeningRow = Boolean(fromDate) && !showAccountColumn;
   const showTable = Boolean(statement);
-
   const tableMaxHeight = fullHeight
     ? "max-h-[min(70vh,720px)]"
     : "max-h-[min(52vh,520px)]";
-
   const hasSearchFilter = search.trim().length > 0;
+  const colSpan = showAccountColumn ? 9 : 8;
 
   return (
     <section className="grid gap-4">
@@ -188,7 +213,7 @@ export function AccountStatementSection({
         <input
           value={search}
           onChange={(event) => updateSearch(event.target.value)}
-          placeholder="بيان، رقم قيد، سند، مركز كلفة..."
+          placeholder="كود فرعي، بيان، رقم قيد، سند، مركز كلفة..."
           className="rounded-md border border-slate-300 px-3 py-2 text-sm"
         />
       </label>
@@ -205,7 +230,38 @@ export function AccountStatementSection({
 
       {!isLoading && !error && statement && (
         <>
-          {fromDate && (
+          <p className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-2 text-sm text-blue-950">
+            <span className="font-semibold">عملة العرض:</span>{" "}
+            {displayCurrency.code} ({displayCurrency.symbol})
+            {onlyDisplayCurrency && (
+              <span className="mr-2 text-xs text-blue-800">
+                — حركات الحسابات بعملة {displayCurrency.code} فقط
+              </span>
+            )}
+          </p>
+
+          {showAccountColumn && statement.account_summaries.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {statement.account_summaries.map((summary) => (
+                <article
+                  key={summary.account_id}
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                >
+                  <p className="font-mono text-xs text-slate-600">
+                    {summary.account_code}
+                  </p>
+                  <p className="font-medium text-slate-900">
+                    {summary.account_name}
+                  </p>
+                  <p className="mt-1 font-mono text-xs text-blue-900">
+                    ختامي: {fmt(summary.closing_balance)}
+                  </p>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {fromDate && !showAccountColumn && (
             <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700">
               <span className="font-semibold">رصيد افتتاحي:</span>{" "}
               <span className="font-mono">{fmt(statement.opening_balance)}</span>
@@ -219,20 +275,25 @@ export function AccountStatementSection({
 
           {!showOpeningRow && statement.lines.length === 0 && (
             <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-600">
-              لا توجد حركات مرحّلة في الفترة المحددة.
+              {onlyDisplayCurrency
+                ? "لا توجد حركات للحسابات المحددة بعملة العرض في الفترة."
+                : "لا توجد حركات مرحّلة في الفترة المحددة."}
             </p>
           )}
 
           {showTable && (
-            <div className={`${tableMaxHeight} overflow-auto rounded-xl border-2 border-slate-300`}>
-              <table className="w-full border-collapse text-sm">
+            <div
+              className={`${tableMaxHeight} overflow-auto rounded-xl border-2 border-slate-300`}
+            >
+              <table className="w-full min-w-[1100px] border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr className="text-right text-xs font-semibold text-slate-700">
+                    {showAccountColumn && <th className={TH}>الحساب</th>}
                     <th className={TH}>التاريخ</th>
                     <th className={TH}>رقم القيد</th>
                     <th className={TH}>المصدر</th>
                     <th className={TH}>مركز الكلفة</th>
-                    <th className={TH}>البيان</th>
+                    <th className={TH}>ملاحظات</th>
                     <th className={`${TH} bg-blue-100/70`}>مدين</th>
                     <th className={`${TH} bg-blue-100/70`}>دائن</th>
                     <th className={`${TH} bg-emerald-100/70`}>الرصيد</th>
@@ -241,6 +302,7 @@ export function AccountStatementSection({
                 <tbody>
                   {showOpeningRow && (
                     <tr className="bg-amber-50/80 font-medium text-amber-950">
+                      {showAccountColumn && <td className={TD}>—</td>}
                       <td className={TD}>{fromDate}</td>
                       <td className={TD}>—</td>
                       <td className={TD}>—</td>
@@ -252,7 +314,9 @@ export function AccountStatementSection({
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
                         —
                       </td>
-                      <td className={`${TD} text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}>
+                      <td
+                        className={`${TD} text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}
+                      >
                         {fmt(statement.opening_balance)}
                       </td>
                     </tr>
@@ -260,9 +324,19 @@ export function AccountStatementSection({
 
                   {filteredLines.map((line) => (
                     <tr
-                      key={line.id}
+                      key={`${line.account_id}-${line.id}`}
                       className="odd:bg-white even:bg-slate-50/50"
                     >
+                      {showAccountColumn && (
+                        <td className={TD}>
+                          <p className="font-mono text-xs text-slate-600">
+                            {line.account_code}
+                          </p>
+                          <p className="text-xs text-slate-800">
+                            {line.account_name}
+                          </p>
+                        </td>
+                      )}
                       <td className={TD}>{line.entry_date}</td>
                       <td className={TD}>
                         <span className="inline-flex flex-wrap items-center gap-1">
@@ -308,11 +382,7 @@ export function AccountStatementSection({
                           : "—"}
                       </td>
                       <td className={TD}>
-                        <p className="whitespace-normal break-words text-sm text-slate-800">
-                          {line.line_description ||
-                            line.journal_description ||
-                            "—"}
-                        </p>
+                        <StatementNotesCell line={line} />
                       </td>
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
                         {line.debit > 0 ? fmt(line.debit) : "—"}
@@ -320,7 +390,9 @@ export function AccountStatementSection({
                       <td className={`${TD} text-left font-mono text-xs tabular-nums`}>
                         {line.credit > 0 ? fmt(line.credit) : "—"}
                       </td>
-                      <td className={`${TD} text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}>
+                      <td
+                        className={`${TD} text-left font-mono text-xs font-semibold tabular-nums text-blue-900`}
+                      >
                         {fmt(line.running_balance)}
                       </td>
                     </tr>
@@ -328,7 +400,7 @@ export function AccountStatementSection({
 
                   {filteredLines.length === 0 && !showOpeningRow && (
                     <tr>
-                      <td colSpan={8} className={`${TD} text-center text-slate-500`}>
+                      <td colSpan={colSpan} className={`${TD} text-center text-slate-500`}>
                         {hasSearchFilter
                           ? "لا نتائج مطابقة للبحث."
                           : "لا توجد حركات في الفترة."}
@@ -338,7 +410,7 @@ export function AccountStatementSection({
 
                   {filteredLines.length === 0 && showOpeningRow && (
                     <tr>
-                      <td colSpan={8} className={`${TD} text-center text-slate-500`}>
+                      <td colSpan={colSpan} className={`${TD} text-center text-slate-500`}>
                         لا حركات في الفترة — الرصيد الختامي = الافتتاحي.
                       </td>
                     </tr>
@@ -347,7 +419,7 @@ export function AccountStatementSection({
                 <tfoot className="bg-slate-100/90">
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={showAccountColumn ? 6 : 5}
                       className="border border-slate-300 px-3 py-3 text-sm font-semibold text-slate-800"
                     >
                       الإجمالي
@@ -375,14 +447,65 @@ export function AccountStatementSection({
           {(statement.lines.length > 0 || showOpeningRow) && (
             <p className="text-xs text-slate-500">
               {statement.lines.length} حركة — القيود المرحّلة فقط
-              {hasSearchFilter &&
-                ` — عرض ${filteredLines.length} بعد البحث`}
-              .
+              {hasSearchFilter && ` — عرض ${filteredLines.length} بعد البحث`}.
             </p>
           )}
         </>
       )}
     </section>
+  );
+}
+
+function StatementNotesCell({
+  line,
+}: {
+  line: {
+    account_sub_code: string | null;
+    line_description: string | null;
+    voucher_description: string | null;
+    journal_description: string | null;
+  };
+}) {
+  const notes = formatStatementNotes(line);
+  if (!notes && !line.journal_description?.trim()) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  return (
+    <div className="space-y-1 text-xs text-slate-800">
+      {line.account_sub_code?.trim() && (
+        <p>
+          <span className="font-medium text-slate-600">كود فرعي:</span>{" "}
+          <span className="font-mono">{line.account_sub_code.trim()}</span>
+        </p>
+      )}
+      {line.line_description?.trim() && (
+        <p>
+          <span className="font-medium text-slate-600">سطر:</span>{" "}
+          <span className="whitespace-normal break-words">
+            {line.line_description.trim()}
+          </span>
+        </p>
+      )}
+      {line.voucher_description?.trim() && (
+        <p>
+          <span className="font-medium text-slate-600">سند:</span>{" "}
+          <span className="whitespace-normal break-words">
+            {line.voucher_description.trim()}
+          </span>
+        </p>
+      )}
+      {!line.line_description?.trim() &&
+        !line.voucher_description?.trim() &&
+        line.journal_description?.trim() && (
+          <p>
+            <span className="font-medium text-slate-600">قيد:</span>{" "}
+            <span className="whitespace-normal break-words">
+              {line.journal_description.trim()}
+            </span>
+          </p>
+        )}
+    </div>
   );
 }
 

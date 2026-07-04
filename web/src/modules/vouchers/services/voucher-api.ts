@@ -3,10 +3,13 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { costCenterApi } from "@/modules/cost-centers/services/cost-center-api";
 import type {
+  AccountStatementAccountSummary,
   AccountStatementLine,
   AccountStatementParams,
   AccountStatementResult,
 } from "@/modules/accounts/types";
+import { convertStatementAmount } from "@/modules/reports/utils/account-statement-utils";
+import { currencyApi } from "@/modules/currencies/services/currency-api";
 import {
   computeNextSequencePreview,
   formatVoucherNo,
@@ -298,7 +301,7 @@ export const voucherApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("accounts")
-      .select("id, code, name_ar, name_en, currency_id, is_postable, is_active, parent_id, level")
+      .select("id, code, name_ar, name_en, sub_code, currency_id, is_postable, is_active, parent_id, level")
       .eq("is_active", true)
       .eq("is_postable", true)
       .order("code", { ascending: true });
@@ -310,7 +313,7 @@ export const voucherApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("accounts")
-      .select("id, code, name_ar, name_en, currency_id, is_postable, is_active, parent_id, level")
+      .select("id, code, name_ar, name_en, sub_code, currency_id, is_postable, is_active, parent_id, level")
       .order("code", { ascending: true });
     throwIfSupabaseError(error);
     return (data ?? []) as Account[];
@@ -353,15 +356,95 @@ export const voucherApi = {
           }
         : params;
 
-    const { accountId, fromDate, toDate, costCenterId } = resolved;
-    const supabase = getSupabaseClient();
+    const accountIds = [
+      ...new Set(
+        (resolved.accountIds?.length
+          ? resolved.accountIds
+          : resolved.accountId
+            ? [resolved.accountId]
+            : []
+        ).filter(Boolean),
+      ),
+    ];
 
-    let openingBalance = 0;
+    if (accountIds.length === 0) {
+      return {
+        opening_balance: 0,
+        lines: [],
+        total_debit: 0,
+        total_credit: 0,
+        closing_balance: 0,
+        account_summaries: [],
+      };
+    }
+
+    const { fromDate, toDate, costCenterId, displayCurrencyId, onlyDisplayCurrency } =
+      resolved;
+    const supabase = getSupabaseClient();
+    const currencies = await currencyApi.listActiveCurrencies();
+    const displayCurrency =
+      currencies.find((currency) => currency.id === displayCurrencyId) ??
+      currencies.find((currency) => currency.is_base) ??
+      currencies[0];
+
+    const { data: accountRows, error: accountError } = await supabase
+      .from("accounts")
+      .select("id, code, name_ar, sub_code, currency_id")
+      .in("id", accountIds);
+    throwIfSupabaseError(accountError);
+
+    const accountById = new Map(
+      (accountRows ?? []).map((row) => [
+        (row as { id: string }).id,
+        row as {
+          id: string;
+          code: string;
+          name_ar: string;
+          sub_code: string | null;
+          currency_id: string | null;
+        },
+      ]),
+    );
+
+    const scopedAccountIds = accountIds.filter((id) => {
+      const account = accountById.get(id);
+      if (!account) return false;
+      if (!onlyDisplayCurrency || !displayCurrency) return true;
+      return account.currency_id === displayCurrency.id;
+    });
+
+    if (scopedAccountIds.length === 0) {
+      return {
+        opening_balance: 0,
+        lines: [],
+        total_debit: 0,
+        total_credit: 0,
+        closing_balance: 0,
+        account_summaries: accountIds.map((id) => {
+          const account = accountById.get(id);
+          return {
+            account_id: id,
+            account_code: account?.code ?? "—",
+            account_name: account?.name_ar ?? "—",
+            opening_balance: 0,
+            total_debit: 0,
+            total_credit: 0,
+            closing_balance: 0,
+          };
+        }),
+      };
+    }
+
+    const openingByAccount = new Map<string, number>();
+    for (const accountId of scopedAccountIds) {
+      openingByAccount.set(accountId, 0);
+    }
+
     if (fromDate) {
       let openingQuery = supabase
         .from("journal_entry_lines")
-        .select("debit, credit, journal_entries!inner(entry_date, status)")
-        .eq("account_id", accountId)
+        .select("account_id, debit, credit, journal_entries!inner(entry_date, status)")
+        .in("account_id", scopedAccountIds)
         .eq("journal_entries.status", "posted")
         .lt("journal_entries.entry_date", fromDate);
 
@@ -373,25 +456,38 @@ export const voucherApi = {
       throwIfSupabaseError(openingError);
 
       for (const row of openingRows ?? []) {
-        openingBalance +=
-          Number((row as { debit?: number }).debit ?? 0) -
-          Number((row as { credit?: number }).credit ?? 0);
+        const accountId = (row as { account_id: string }).account_id;
+        const account = accountById.get(accountId);
+        const debit = Number((row as { debit?: number }).debit ?? 0);
+        const credit = Number((row as { credit?: number }).credit ?? 0);
+        const delta = debit - credit;
+        const converted = displayCurrency
+          ? convertStatementAmount(
+              delta,
+              account?.currency_id,
+              displayCurrency,
+              currencies,
+            )
+          : delta;
+        openingByAccount.set(
+          accountId,
+          (openingByAccount.get(accountId) ?? 0) + converted,
+        );
       }
     }
 
     let query = supabase
       .from("journal_entry_lines")
       .select(
-        "id, debit, credit, line_description, cost_center_id, cost_centers(code, name_ar), journal_entries!inner(id, entry_no, entry_date, description, status, source_type, source_id)",
+        "id, account_id, debit, credit, line_description, cost_center_id, cost_centers(code, name_ar), journal_entries!inner(id, entry_no, entry_date, description, status, source_type, source_id)",
       )
-      .eq("account_id", accountId)
+      .in("account_id", scopedAccountIds)
       .eq("journal_entries.status", "posted")
-      .limit(1000);
+      .limit(5000);
 
     if (costCenterId) {
       query = query.eq("cost_center_id", costCenterId);
     }
-
     if (fromDate) {
       query = query.gte("journal_entries.entry_date", fromDate);
     }
@@ -404,6 +500,7 @@ export const voucherApi = {
 
     type RawRow = {
       id: string;
+      account_id: string;
       debit?: number;
       credit?: number;
       line_description: string | null;
@@ -427,7 +524,10 @@ export const voucherApi = {
       if (dateA !== dateB) return dateA.localeCompare(dateB);
       const noA = a.journal_entries?.entry_no ?? "";
       const noB = b.journal_entries?.entry_no ?? "";
-      return noA.localeCompare(noB);
+      if (noA !== noB) return noA.localeCompare(noB);
+      const codeA = accountById.get(a.account_id)?.code ?? "";
+      const codeB = accountById.get(b.account_id)?.code ?? "";
+      return codeA.localeCompare(codeB);
     });
 
     const voucherIds = [
@@ -439,69 +539,139 @@ export const voucherApi = {
       ),
     ];
 
-    const voucherNoById = new Map<string, string>();
+    const voucherMetaById = new Map<
+      string,
+      { voucher_no: string; description: string | null }
+    >();
     if (voucherIds.length > 0) {
       const { data: vouchers, error: voucherError } = await supabase
         .from("vouchers")
-        .select("id, voucher_no")
+        .select("id, voucher_no, description")
         .in("id", voucherIds);
       throwIfSupabaseError(voucherError);
 
       for (const voucher of vouchers ?? []) {
-        voucherNoById.set(
-          (voucher as { id: string }).id,
-          (voucher as { voucher_no: string }).voucher_no,
-        );
+        voucherMetaById.set((voucher as { id: string }).id, {
+          voucher_no: (voucher as { voucher_no: string }).voucher_no,
+          description: (voucher as { description: string | null }).description,
+        });
       }
     }
 
-    let runningBalance = openingBalance;
-    let totalDebit = 0;
-    let totalCredit = 0;
+    const runningByAccount = new Map<string, number>(
+      scopedAccountIds.map((id) => [id, openingByAccount.get(id) ?? 0]),
+    );
+    const totalsByAccount = new Map<
+      string,
+      { debit: number; credit: number }
+    >(scopedAccountIds.map((id) => [id, { debit: 0, credit: 0 }]));
+
     const lines: AccountStatementLine[] = [];
 
     for (const row of rawLines) {
       const journal = row.journal_entries;
-      if (!journal?.id) continue;
+      const account = accountById.get(row.account_id);
+      if (!journal?.id || !account) continue;
 
-      const debit = Number(row.debit ?? 0);
-      const credit = Number(row.credit ?? 0);
-      totalDebit += debit;
-      totalCredit += credit;
-      runningBalance += debit - credit;
+      const rawDebit = Number(row.debit ?? 0);
+      const rawCredit = Number(row.credit ?? 0);
+      const debit = displayCurrency
+        ? convertStatementAmount(
+            rawDebit,
+            account.currency_id,
+            displayCurrency,
+            currencies,
+          )
+        : rawDebit;
+      const credit = displayCurrency
+        ? convertStatementAmount(
+            rawCredit,
+            account.currency_id,
+            displayCurrency,
+            currencies,
+          )
+        : rawCredit;
+
+      const accountTotals = totalsByAccount.get(row.account_id) ?? {
+        debit: 0,
+        credit: 0,
+      };
+      accountTotals.debit += debit;
+      accountTotals.credit += credit;
+      totalsByAccount.set(row.account_id, accountTotals);
+
+      const running = (runningByAccount.get(row.account_id) ?? 0) + debit - credit;
+      runningByAccount.set(row.account_id, running);
 
       const sourceType = journal.source_type ?? null;
       const sourceId = journal.source_id ?? null;
       const costCenter = row.cost_centers;
+      const voucherMeta =
+        sourceType === "voucher" && sourceId
+          ? voucherMetaById.get(sourceId)
+          : undefined;
 
       lines.push({
         id: row.id,
+        account_id: account.id,
+        account_code: account.code,
+        account_name: account.name_ar,
+        account_sub_code: account.sub_code,
+        account_currency_id: account.currency_id,
         journal_entry_id: journal.id,
         entry_no: journal.entry_no ?? "—",
         entry_date: journal.entry_date ?? "",
         journal_description: journal.description ?? null,
         line_description: row.line_description,
+        voucher_description: voucherMeta?.description ?? null,
         debit,
         credit,
-        running_balance: runningBalance,
+        running_balance: running,
         source_type: sourceType,
         source_id: sourceId,
-        voucher_no:
-          sourceType === "voucher" && sourceId
-            ? (voucherNoById.get(sourceId) ?? null)
-            : null,
+        voucher_no: voucherMeta?.voucher_no ?? null,
         cost_center_id: row.cost_center_id ?? null,
         cost_center_code: costCenter?.code ?? null,
         cost_center_name: costCenter?.name_ar ?? null,
       });
     }
 
+    const account_summaries: AccountStatementAccountSummary[] =
+      scopedAccountIds.map((accountId) => {
+        const account = accountById.get(accountId);
+        const opening = openingByAccount.get(accountId) ?? 0;
+        const totals = totalsByAccount.get(accountId) ?? { debit: 0, credit: 0 };
+        return {
+          account_id: accountId,
+          account_code: account?.code ?? "—",
+          account_name: account?.name_ar ?? "—",
+          opening_balance: opening,
+          total_debit: totals.debit,
+          total_credit: totals.credit,
+          closing_balance: opening + totals.debit - totals.credit,
+        };
+      });
+
+    const total_debit = account_summaries.reduce(
+      (sum, item) => sum + item.total_debit,
+      0,
+    );
+    const total_credit = account_summaries.reduce(
+      (sum, item) => sum + item.total_credit,
+      0,
+    );
+    const opening_balance = account_summaries.reduce(
+      (sum, item) => sum + item.opening_balance,
+      0,
+    );
+
     return {
-      opening_balance: openingBalance,
+      opening_balance,
       lines,
-      total_debit: totalDebit,
-      total_credit: totalCredit,
-      closing_balance: openingBalance + totalDebit - totalCredit,
+      total_debit,
+      total_credit,
+      closing_balance: opening_balance + total_debit - total_credit,
+      account_summaries,
     };
   },
 

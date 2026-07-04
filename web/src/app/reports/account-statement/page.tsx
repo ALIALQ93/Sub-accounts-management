@@ -6,13 +6,14 @@ import {
   buildUrlWithQuery,
   OpenInNewTabLink,
 } from "@/components/open-in-new-tab-link";
+import { AccountMultiSelectField } from "@/modules/accounts/components/account-multi-select-field";
 import { AccountStatementSection } from "@/modules/accounts/components/account-statement-section";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   buildAccountStatementShareParams,
   parseAccountStatementShareParams,
+  resolveDisplayCurrency,
 } from "@/modules/reports/utils/account-statement-utils";
-import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import type { Currency } from "@/modules/currencies/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
@@ -32,7 +33,13 @@ export default function AccountStatementReportPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
-  const [accountId, setAccountId] = useState(initial.accountId);
+  const [accountIds, setAccountIds] = useState<string[]>(initial.accountIds);
+  const [displayCurrencyId, setDisplayCurrencyId] = useState(
+    initial.displayCurrencyId,
+  );
+  const [onlyDisplayCurrency, setOnlyDisplayCurrency] = useState(
+    initial.onlyDisplayCurrency,
+  );
   const [fromDate, setFromDate] = useState(initial.from);
   const [toDate, setToDate] = useState(initial.to);
   const [costCenterId, setCostCenterId] = useState(initial.costCenterId);
@@ -42,22 +49,38 @@ export default function AccountStatementReportPage() {
 
   const syncUrl = useCallback(
     (
-      overrides?: Partial<
-        ReturnType<typeof buildAccountStatementShareParams>
-      >,
+      overrides?: Partial<{
+        accountIds: string[];
+        fromDate: string;
+        toDate: string;
+        costCenterId: string;
+        search: string;
+        displayCurrencyId: string;
+        onlyDisplayCurrency: boolean;
+      }>,
     ) => {
       const params = buildAccountStatementShareParams({
-        accountId,
+        accountIds,
         fromDate,
         toDate,
         costCenterId,
         search,
+        displayCurrencyId,
+        onlyDisplayCurrency,
         ...overrides,
       });
       const nextUrl = buildUrlWithQuery("/reports/account-statement", params);
       window.history.replaceState(null, "", nextUrl);
     },
-    [accountId, fromDate, toDate, costCenterId, search],
+    [
+      accountIds,
+      fromDate,
+      toDate,
+      costCenterId,
+      search,
+      displayCurrencyId,
+      onlyDisplayCurrency,
+    ],
   );
 
   useEffect(() => {
@@ -75,6 +98,13 @@ export default function AccountStatementReportPage() {
         setAccounts(accountsData);
         setCurrencies(currenciesData);
         setCostCenters(costCentersData);
+
+        if (!initial.displayCurrencyId) {
+          const base =
+            currenciesData.find((currency) => currency.is_base) ??
+            currenciesData[0];
+          if (base) setDisplayCurrencyId(base.id);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "تعذّر تحميل البيانات.");
@@ -95,26 +125,44 @@ export default function AccountStatementReportPage() {
     [accounts],
   );
 
-  const selectedAccount = useMemo(
-    () => postableAccounts.find((account) => account.id === accountId) ?? null,
-    [postableAccounts, accountId],
+  const selectedAccounts = useMemo(
+    () =>
+      accountIds
+        .map((id) => postableAccounts.find((account) => account.id === id))
+        .filter((account): account is Account => Boolean(account)),
+    [postableAccounts, accountIds],
   );
 
-  const selectedCurrency = useMemo(() => {
-    if (!selectedAccount?.currency_id) return undefined;
-    return currencies.find((currency) => currency.id === selectedAccount.currency_id);
-  }, [currencies, selectedAccount]);
+  const displayCurrency = useMemo(
+    () =>
+      resolveDisplayCurrency(
+        currencies,
+        displayCurrencyId,
+        selectedAccounts[0]?.currency_id,
+      ),
+    [currencies, displayCurrencyId, selectedAccounts],
+  );
 
   const shareParams = useMemo(
     () =>
       buildAccountStatementShareParams({
-        accountId,
+        accountIds,
         fromDate,
         toDate,
         costCenterId,
         search,
+        displayCurrencyId,
+        onlyDisplayCurrency,
       }),
-    [accountId, fromDate, toDate, costCenterId, search],
+    [
+      accountIds,
+      fromDate,
+      toDate,
+      costCenterId,
+      search,
+      displayCurrencyId,
+      onlyDisplayCurrency,
+    ],
   );
 
   const shareHref = useMemo(
@@ -125,17 +173,28 @@ export default function AccountStatementReportPage() {
   const trialBalanceHref = useMemo(
     () =>
       buildUrlWithQuery("/reports/trial-balance", {
-        accountId: accountId || undefined,
+        accountId: accountIds[0] || undefined,
         from: fromDate || undefined,
         to: toDate || undefined,
         costCenterId: costCenterId || undefined,
+        currency: displayCurrencyId || undefined,
       }),
-    [accountId, fromDate, toDate, costCenterId],
+    [accountIds, fromDate, toDate, costCenterId, displayCurrencyId],
   );
 
-  const onAccountChange = (id: string) => {
-    setAccountId(id);
-    syncUrl({ accountId: id });
+  const onAccountsChange = (ids: string[]) => {
+    setAccountIds(ids);
+    syncUrl({ accountIds: ids });
+  };
+
+  const onDisplayCurrencyChange = (id: string) => {
+    setDisplayCurrencyId(id);
+    syncUrl({ displayCurrencyId: id });
+  };
+
+  const onOnlyDisplayCurrencyChange = (checked: boolean) => {
+    setOnlyDisplayCurrency(checked);
+    syncUrl({ onlyDisplayCurrency: checked });
   };
 
   const onPeriodChange = (from: string, to: string) => {
@@ -160,11 +219,11 @@ export default function AccountStatementReportPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">كشف حساب</h1>
           <p className="mt-1 text-sm text-slate-600">
-            اختر حساباً مرحّلاً لعرض حركاته — بدون المرور بدليل الحسابات.
+            اختر حساباً أو أكثر، وحدّد عملة العرض وفلاتر الفترة.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {accountId && (
+          {accountIds.length > 0 && (
             <Link
               href={trialBalanceHref}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -172,7 +231,7 @@ export default function AccountStatementReportPage() {
               ميزان المراجعة
             </Link>
           )}
-          {accountId && (
+          {accountIds.length > 0 && (
             <OpenInNewTabLink
               href={shareHref}
               className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -187,34 +246,73 @@ export default function AccountStatementReportPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         {isLoading && (
-          <p className="text-sm text-slate-600">جاري تحميل الحسابات...</p>
+          <p className="text-sm text-slate-600">جاري تحميل البيانات...</p>
         )}
         {!isLoading && error && (
           <p className="text-sm text-rose-700">{error}</p>
         )}
 
         {!isLoading && !error && (
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_auto] md:items-end">
-            <AccountSearchField
-              label="الحساب"
+          <div className="grid gap-4">
+            <AccountMultiSelectField
               accounts={postableAccounts}
               currencies={currencies}
-              value={accountId}
-              onChange={(id) => onAccountChange(id)}
+              selectedIds={accountIds}
+              onChange={onAccountsChange}
               placeholder="ابحث بالكود أو الاسم — حسابات مرحّلة فقط"
-              required
             />
-            {selectedAccount && selectedCurrency && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-                <p className="font-mono text-xs text-slate-500">
-                  {selectedAccount.code}
+
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700">عملة العرض</span>
+                <select
+                  value={displayCurrencyId}
+                  onChange={(event) => onDisplayCurrencyChange(event.target.value)}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2"
+                >
+                  {currencies.map((currency) => (
+                    <option key={currency.id} value={currency.id}>
+                      {currency.code} — {currency.name_ar}
+                      {currency.is_base ? " (أساسية)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  تُحوَّل المبالغ إلى هذه العملة عند الاختلاف.
                 </p>
-                <p className="font-semibold text-slate-900">
-                  {selectedAccount.name_ar}
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  {selectedCurrency.code} · {selectedCurrency.symbol}
-                </p>
+              </label>
+
+              <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm md:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={onlyDisplayCurrency}
+                  onChange={(event) =>
+                    onOnlyDisplayCurrencyChange(event.target.checked)
+                  }
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium text-slate-800">
+                    حركات العملة المحددة فقط
+                  </span>
+                  <span className="mt-1 block text-xs text-slate-600">
+                    إخفاء حسابات وحركاتها إذا كانت عملة الحساب تختلف عن عملة
+                    العرض.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {selectedAccounts.length > 0 && displayCurrency && (
+              <div className="flex flex-wrap gap-2">
+                {selectedAccounts.map((account) => (
+                  <span
+                    key={account.id}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700"
+                  >
+                    {account.code} — {account.name_ar}
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -230,18 +328,18 @@ export default function AccountStatementReportPage() {
         )}
       </section>
 
-      {!accountId && !isLoading && (
+      {!accountIds.length && !isLoading && (
         <section className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-600">
-          اختر حساباً من القائمة أعلاه لعرض كشف الحركات.
+          اختر حساباً واحداً على الأقل لعرض كشف الحركات.
         </section>
       )}
 
-      {selectedAccount && selectedCurrency && (
+      {accountIds.length > 0 && displayCurrency && (
         <section className="rounded-lg border border-slate-200 bg-white p-4">
           <AccountStatementSection
-            accountId={selectedAccount.id}
-            decimalPlaces={selectedCurrency.decimal_places}
-            currencySymbol={selectedCurrency.symbol}
+            accountIds={accountIds}
+            displayCurrency={displayCurrency}
+            onlyDisplayCurrency={onlyDisplayCurrency}
             initialFromDate={fromDate}
             initialToDate={toDate}
             initialCostCenterId={costCenterId}
@@ -256,10 +354,10 @@ export default function AccountStatementReportPage() {
         </section>
       )}
 
-      {accountId && !selectedAccount && !isLoading && (
+      {accountIds.length > 0 && selectedAccounts.length === 0 && !isLoading && (
         <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          الحساب المحدد في الرابط غير متاح (قد يكون غير مرحّل أو غير نشط).
-          اختر حساباً آخر.
+          الحسابات المحددة في الرابط غير متاحة (قد تكون غير مرحّلة أو غير نشطة).
+          اختر حسابات أخرى.
         </section>
       )}
     </main>

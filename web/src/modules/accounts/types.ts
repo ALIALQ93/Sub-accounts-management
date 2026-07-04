@@ -32,11 +32,17 @@ export interface AccountStats {
 
 export interface AccountStatementLine {
   id: string;
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  account_sub_code: string | null;
+  account_currency_id: string | null;
   journal_entry_id: string;
   entry_no: string;
   entry_date: string;
   journal_description: string | null;
   line_description: string | null;
+  voucher_description: string | null;
   debit: number;
   credit: number;
   running_balance: number;
@@ -49,10 +55,23 @@ export interface AccountStatementLine {
 }
 
 export interface AccountStatementParams {
-  accountId: string;
+  accountId?: string;
+  accountIds?: string[];
   fromDate?: string;
   toDate?: string;
   costCenterId?: string;
+  displayCurrencyId?: string;
+  onlyDisplayCurrency?: boolean;
+}
+
+export interface AccountStatementAccountSummary {
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  opening_balance: number;
+  total_debit: number;
+  total_credit: number;
+  closing_balance: number;
 }
 
 export interface AccountStatementResult {
@@ -61,4 +80,5 @@ export interface AccountStatementResult {
   total_debit: number;
   total_credit: number;
   closing_balance: number;
+  account_summaries: AccountStatementAccountSummary[];
 }
