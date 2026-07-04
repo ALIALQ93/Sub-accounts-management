@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PermissionGate } from "@/components/permission-gate";
-import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { VoucherListActions } from "@/modules/vouchers/components/voucher-list-actions";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
@@ -22,27 +21,21 @@ export default function VouchersListPage() {
   const [error, setError] = useState("");
   const [typeFilter, setTypeFilter] = useState<VoucherType | "all">("all");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const data = await voucherApi.listVouchers();
-        if (!cancelled) setItems(data);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "فشل تحميل السندات.");
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
+  const loadVouchers = useCallback(async () => {
+    setError("");
+    try {
+      const data = await voucherApi.listVouchers();
+      setItems(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "فشل تحميل السندات.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadVouchers();
+  }, [loadVouchers]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -113,12 +106,13 @@ export default function VouchersListPage() {
 
         {!isLoading && !error && (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[900px] border-collapse text-sm">
+            <table className="w-full min-w-[1040px] border-collapse text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-right text-slate-700">
                   <th className="border border-slate-200 p-2">رقم السند</th>
                   <th className="border border-slate-200 p-2">النوع</th>
                   <th className="border border-slate-200 p-2">العملة</th>
+                  <th className="border border-slate-200 p-2">قيمة السند</th>
                   <th className="border border-slate-200 p-2">وضع التسوية</th>
                   <th className="border border-slate-200 p-2">التاريخ</th>
                   <th className="border border-slate-200 p-2">الحالة</th>
@@ -139,6 +133,9 @@ export default function VouchersListPage() {
                       {item.currency_code ?? "—"}
                     </td>
                     <td className="border border-slate-100 p-2">
+                      <VoucherAmountCell item={item} />
+                    </td>
+                    <td className="border border-slate-100 p-2">
                       {getSettlementModeLabel(item.settlement_mode)}
                     </td>
                     <td className="border border-slate-100 p-2">{item.voucher_date}</td>
@@ -149,7 +146,10 @@ export default function VouchersListPage() {
                       <VoucherAttachmentBadge count={item.attachment_count} />
                     </td>
                     <td className="border border-slate-100 p-2">
-                      <VoucherListActions item={item} />
+                      <VoucherListActions
+                        item={item}
+                        onUpdated={loadVouchers}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -157,7 +157,7 @@ export default function VouchersListPage() {
                 {filteredItems.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="border border-slate-100 p-4 text-center text-slate-500"
                     >
                       لا توجد سندات في هذا التصنيف.
@@ -170,6 +170,38 @@ export default function VouchersListPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function VoucherAmountCell({ item }: { item: VoucherListItem }) {
+  if (item.total_amount <= 0) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  const formatted = item.total_amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return (
+    <div className="font-mono text-xs tabular-nums">
+      <span className="font-medium text-slate-900">
+        {formatted}
+        {item.currency_code ? ` ${item.currency_code}` : ""}
+      </span>
+      {item.total_amount_base > 0 &&
+        item.currency_code &&
+        item.exchange_rate &&
+        item.exchange_rate !== 1 && (
+          <span className="mt-0.5 block text-[10px] text-slate-500">
+            أساسي:{" "}
+            {item.total_amount_base.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </span>
+        )}
+    </div>
   );
 }
 

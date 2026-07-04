@@ -131,6 +131,8 @@ export interface VoucherListItem {
   currency_id: string | null;
   currency_code: string | null;
   exchange_rate: number | null;
+  total_amount: number;
+  total_amount_base: number;
 }
 
 export interface OpenMovement {

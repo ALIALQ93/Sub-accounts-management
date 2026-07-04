@@ -260,7 +260,7 @@ export const voucherApi = {
     const { data, error } = await supabase
       .from("vouchers")
       .select(
-        "id, voucher_no, voucher_type, settlement_mode, voucher_date, status, description, currency_id, exchange_rate, currencies(code), voucher_attachments(count)",
+        "id, voucher_no, voucher_type, settlement_mode, voucher_date, status, description, currency_id, exchange_rate, currencies(code), voucher_attachments(count), voucher_lines(amount, side, amount_base)",
       )
       .order("voucher_date", { ascending: false });
     throwIfSupabaseError(error);
@@ -279,6 +279,28 @@ export const voucherApi = {
       const currencyCode = Array.isArray(currency)
         ? currency[0]?.code ?? null
         : currency?.code ?? null;
+      const lines =
+        (
+          row as {
+            voucher_lines?: {
+              amount?: number;
+              side?: string;
+              amount_base?: number | null;
+            }[];
+          }
+        ).voucher_lines ?? [];
+      const exchangeRate =
+        row.exchange_rate == null ? null : Number(row.exchange_rate);
+      const totalAmount = lines
+        .filter((line) => line.side === "debit")
+        .reduce((sum, line) => sum + Number(line.amount ?? 0), 0);
+      let totalAmountBase = lines
+        .filter((line) => line.side === "debit")
+        .reduce((sum, line) => sum + Number(line.amount_base ?? 0), 0);
+      if (totalAmountBase <= 0 && totalAmount > 0) {
+        const rate = exchangeRate && exchangeRate > 0 ? exchangeRate : 1;
+        totalAmountBase = Math.round(totalAmount * rate * 100) / 100;
+      }
 
       return {
         id: row.id as string,
@@ -291,8 +313,9 @@ export const voucherApi = {
         attachment_count: attachments?.[0]?.count ?? 0,
         currency_id: (row.currency_id as string | null) ?? null,
         currency_code: currencyCode,
-        exchange_rate:
-          row.exchange_rate == null ? null : Number(row.exchange_rate),
+        exchange_rate: exchangeRate,
+        total_amount: totalAmount,
+        total_amount_base: totalAmountBase,
       };
     });
   },
@@ -1369,6 +1392,25 @@ export const voucherApi = {
       );
     }
     return inserted;
+  },
+
+  async approveVoucher(id: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("vouchers")
+      .update({ status: "approved" })
+      .eq("id", id)
+      .eq("status", "draft")
+      .select("id")
+      .maybeSingle();
+    throwIfSupabaseError(error);
+
+    if (!data?.id) {
+      throw new ApiError({
+        code: "APPROVE_NOT_ALLOWED",
+        message: "لا يمكن اعتماد هذا السند. تأكد أنه مسودة.",
+      });
+    }
   },
 
   async postVoucher(id: string): Promise<PostVoucherResponse> {
