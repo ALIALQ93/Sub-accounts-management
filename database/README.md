@@ -2,6 +2,8 @@
 
 ملفات SQL منظّمة لإعادة تثبيت المخطط المحاسبي من الصفر على Supabase.
 
+> **للتجربة الأولى:** ابدأ من [`TRIAL_SETUP.md`](TRIAL_SETUP.md) — دليل مختصر مع التحقق والتحذيرات.
+
 ## ⚠️ تحذير
 
 تشغيل **`setup_all.sql`** أو **`00_reset.sql`** يحذف **جميع** البيانات المحاسبية (حسابات، سندات، قيود، عملاء، مستخدمين، …).  
@@ -15,10 +17,10 @@
 database/setup_all.sql
 ```
 
-ملف واحد يشغّل بالترتيب: **حذف → مخطط → RLS → مزامنة مستخدمي Auth**.
+ملف واحد يشغّل بالترتيب: **حذف → مخطط → RLS → Storage**.
 
-> `setup_all.sql` يُولَّد من الملفات `00_reset.sql` + `01_schema.sql` + `02_rls.sql`.  
-> بعد تعديل أي منها، أعد توليده بنفس الأمر في PowerShell (انظر أسفل الملف).
+> `setup_all.sql` يجمع: `00_reset.sql` + `01_schema.sql` + `02_rls.sql` + **`06_storage.sql`**.  
+> بعد تعديل أي ملف مصدر، أعد توليد `setup_all.sql` يدوياً أو بالأمر في أسفل هذا الملف.
 
 ## الطريقة المرحلية
 
@@ -27,25 +29,36 @@ database/setup_all.sql
 | 1 | `00_reset.sql` | حذف الجداول والدوال والمحفزات |
 | 2 | `01_schema.sql` | إنشاء المخطط الكامل + البيانات الأولية |
 | 3 | `02_rls.sql` | سياسات Row Level Security + مزامنة Auth |
-| 4 | `03_test_cases.sql` | *(اختياري)* سيناريوهات اختبار |
+| 4 | `06_storage.sql` | buckets Storage للشعار ومرفقات السندات |
+| 5 | `03_test_cases.sql` | *(اختياري)* سيناريوهات اختبار |
 
 ### ترقية قاعدة موجودة (بدون حذف البيانات)
 
 | الملف | متى |
 |-------|-----|
 | `04_auth.sql` | قاعدة قديمة بدون `profiles` / مصادقة |
-| `05_permissions.sql` | بعد `04_auth.sql` — إضافة `user_permissions` و `has_permission` |
-| `06_storage.sql` | بعد `05_permissions.sql` — buckets للشعار ومرفقات السندات |
+| `05_permissions.sql` | بعد `04_auth.sql` — `user_permissions` و `has_permission` |
+| `06_storage.sql` | buckets Storage غير مُنشأة بعد |
+| `patch_*.sql` | ميزة محددة ناقصة — راجع الجدول أدناه |
+
+**ترتيب آمن للترقيعات الوظيفية (على قاعدة قديمة):**
+
+1. ترقيعات الأعمدة/الجداول فقط (`patch_sub_code`, `patch_company_logo`, …)
+2. `patch_admin_edit_posted_vouchers.sql` *(إن لم يكن مدمجاً)*
+3. **`patch_journal_line_currency.sql` أخيراً** — يحدّث دوال الترحيل بالعملة والأساس
+
+**لا تُعاد تشغيل** `patch_voucher_line_categories.sql` أو `patch_journal_cost_centers.sql` **لاستبدال دوال الترحيل** بعد المخطط الحالي.
 
 ## ما يشمله المخطط الحالي
 
 - **العملات** — IQD أساسية + USD/EUR/SYP/AED + سجل أسعار تاريخي
 - **دليل الحسابات** — 7 حسابات جذر + قواعد التسلسل الهرمي + `sub_code`
 - **مراكز الكلفة** — جدول فارغ؛ يُضاف من صفحة «مراكز الكلفة» عند الحاجة
-- **السندات** — قبض / صرف / تصفية + عملة + سعر صرف + مركز كلفة
-- **تصنيفات أسطر السند** — PAY-FOOD، PAY-NUTR، PAY-CONST
+- **السندات** — قبض / صرف / تصفية + عملة + سعر صرف + `amount_base` على الأسطر
+- **القيود** — `currency_id`, `exchange_rate`, `debit_base`, `credit_base` على أسطر القيود من السندات
+- **تصنيفات أسطر السند** — جدول فارغ؛ يُعرَّف من `/vouchers/settings/line-categories`
 - **ترقيم السندات** — RCP / PAY / SET مع `peek_voucher_no` و `reserve_voucher_no`
-- **إعدادات افتراضية** — حساب / عملة / مركز كلفة لكل نوع سند
+- **إعدادات افتراضية** — حساب / عملة / مركز كلفة + `auto_post_enabled`
 - **إعدادات العملاء/الموردين** — `party_settings` (حساب أب افتراضي للذمم)
 - **الترحيل التلقائي** — من السند إلى قيد يومية عند `status = posted`
 - **عرض** `account_direct_balances` — `security_invoker = true`
@@ -68,25 +81,26 @@ database/setup_all.sql
 
 ## ترقيعات جزئية (بدون إعادة تثبيت)
 
-| الملف | الغرض |
-|-------|--------|
-| `patch_view_security_invoker.sql` | إصلاح تحذير Security Definer على العرض |
-| `patch_sub_code.sql` | إضافة حقل `sub_code` |
-| `patch_voucher_line_categories.sql` | إضافة جدول تصنيفات الأسطر |
-| `patch_journal_cost_centers.sql` | مراكز كلفة على القيود |
-| `patch_company_logo.sql` | إضافة حقل `logo_url` في `company_settings` |
-| `patch_voucher_attachments.sql` | جدول `voucher_attachments` + محفزات |
-| `patch_admin_edit_posted_vouchers.sql` | تعديل السندات المرحّلة لمدير النظام |
-| `patch_voucher_lines_delete_rls.sql` | سياسة حذف أسطر السند |
-| `patch_voucher_auto_post.sql` | ترحيل تلقائي عند حفظ السند |
-| `patch_journal_line_currency.sql` | عملة وسعر صرف وقيمة أساسية على أسطر القيود والسندات |
-| `06_storage.sql` | إنشاء buckets Storage + سياسات RLS للملفات |
+| الملف | الغرض | ملاحظة |
+|-------|--------|--------|
+| `patch_view_security_invoker.sql` | إصلاح تحذير Security Definer على العرض | مدمج في `01_schema` |
+| `patch_sub_code.sql` | حقل `sub_code` | مدمج |
+| `patch_voucher_line_categories.sql` | جدول تصنيفات الأسطر | مدمج — لا تُعد تشغيل دوال الترحيل |
+| `patch_journal_cost_centers.sql` | مراكز كلفة على القيود | مدمج — لا تُعد تشغيل دوال الترحيل |
+| `patch_company_logo.sql` | `logo_url` في `company_settings` | مدمج |
+| `patch_voucher_attachments.sql` | `voucher_attachments` | مدمج |
+| `patch_admin_edit_posted_vouchers.sql` | تعديل السندات المرحّلة لمدير النظام | مدمج — يُستبدل بـ journal_line_currency |
+| `patch_voucher_lines_delete_rls.sql` | حذف أسطر السند | مدمج |
+| `patch_voucher_auto_post.sql` | `auto_post_enabled` | مدمج |
+| `patch_journal_line_currency.sql` | عملة وأساس على القيود والسندات | **شغّله على قواعد قديمة — آخر ترقيع للدوال** |
+| `patch_remove_voucher_line_category_seed.sql` | حذف تصنيفات الأسطر الافتراضية | قواعد مُثبتة سابقاً بالبذور الثلاثة |
+| `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql
 
 ```powershell
 cd database
-# (نفس أمر التوليد في المستودع — أو عدّل الملفات المصدرية يدوياً)
+Get-Content 00_reset.sql, 01_schema.sql, 02_rls.sql, 06_storage.sql | Set-Content setup_all.sql -Encoding UTF8
 ```
 
 ## البيانات الأولية
@@ -97,7 +111,7 @@ cd database
 | حسابات | 1–7 (موجودات، التزامات، …) |
 | مراكز كلفة | *(لا بيانات افتراضية)* |
 | ترقيم | RCP-YYYY-0001، PAY-YYYY-0001، SET-YYYY-0001 |
-| تصنيفات صرف | اطعام، تغذية، انشائية |
+| تصنيفات أسطر السند | *(لا بيانات افتراضية)* |
 
 ## الملفات القديمة (محذوفة)
 

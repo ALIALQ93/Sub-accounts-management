@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { APP_BRANDING } from "@/config/app-branding";
+import { formatDisplayVersion } from "@/config/app-release";
 
 interface AppBrandFooterProps {
   compact?: boolean;
@@ -34,7 +35,7 @@ export function AppBrandFooter({
       <p className="mt-1.5">
         <span className={isDark ? "text-white/40" : "text-slate-400"}>الإصدار </span>
         <span className={`font-mono ${isDark ? "text-white/70" : "text-slate-600"}`}>
-          v{APP_BRANDING.version}
+          {formatDisplayVersion()}
         </span>
         <span className={`mx-1 ${isDark ? "text-white/25" : "text-slate-300"}`}>·</span>
         <span className={isDark ? "text-white/40" : "text-slate-400"}>© {year}</span>

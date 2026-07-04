@@ -1,3 +1,5 @@
+import { APP_RELEASE } from "@/config/app-release";
+
 export const APP_BRANDING = {
   /** اسم المنتج الافتراضي (يُستبدل باسم الشركة من الإعدادات عند التحميل) */
   productNameAr: "نظام إدارة الحسابات الفرعية",
@@ -7,7 +9,7 @@ export const APP_BRANDING = {
   developerTaglineEn: "Integrated Business Systems & Smart Software",
   developerTaglineAr: "أنظمة أعمال متكاملة وبرمجيات ذكية",
 
-  version: "0.1.0",
+  version: APP_RELEASE.version,
 
   logos: {
     full: "/branding/rosemary-logo-full.png",
