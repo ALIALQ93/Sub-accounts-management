@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
+import { VoucherViewModeBar } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
 import { VoucherLinesTable } from "@/modules/vouchers/components/voucher-lines-table";
@@ -13,6 +14,7 @@ import {
   lineCategoryPayload,
 } from "@/modules/vouchers/components/voucher-line-category-fields";
 import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line-category-api";
+import { useVoucherAccounts } from "@/modules/vouchers/hooks/use-voucher-accounts";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
   Account,
@@ -85,7 +87,7 @@ export function VoucherForm({
   const [lines, setLines] = useState<VoucherLine[]>(DEFAULT_LINES);
   const [allocations, setAllocations] =
     useState<VoucherAllocation[]>(DEFAULT_ALLOCATIONS);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const { accounts, isLoadingAccounts } = useVoucherAccounts();
   const [openMovements, setOpenMovements] = useState<OpenMovement[]>([]);
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const { feedback, feedbackRef, showError, showSuccess, showFromError, clearFeedback } =
@@ -101,7 +103,7 @@ export function VoucherForm({
     voucherId,
     showSuccess,
   });
-  const [isLoading, setIsLoading] = useState(initialMode === "edit");
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [autoPostEnabled, setAutoPostEnabled] = useState(false);
 
@@ -414,13 +416,11 @@ export function VoucherForm({
 
     const loadVoucher = async () => {
       try {
-        const [accountsData, openMovementsData, settings] = await Promise.all([
-          voucherApi.listAccounts(),
+        const [openMovementsData, settings] = await Promise.all([
           voucherApi.listOpenMovements(),
           voucherApi.getVoucherSettings(),
         ]);
         if (!cancelled) {
-          setAccounts(accountsData);
           setOpenMovements(openMovementsData);
           setAutoNumberEnabled(settings.auto_number_enabled);
           setAllowManualOverride(settings.allow_manual_override);
@@ -484,7 +484,7 @@ export function VoucherForm({
     };
   }, [voucherType, initialMode, voucherId, autoNumberEnabled]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingAccounts) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
         جاري تحميل السند...
@@ -497,11 +497,11 @@ export function VoucherForm({
 
   return (
     <div className="space-y-4">
-      {forceViewMode && (
-        <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          وضع العرض — القراءة فقط.
-        </div>
-      )}
+      <VoucherViewModeBar
+        forceViewMode={forceViewMode}
+        voucherId={voucherId || initialVoucherId || ""}
+        status={status}
+      />
       {typeConfig && (
         <div
           className={`rounded-lg border px-4 py-3 text-sm ${typeConfig.colorClass}`}

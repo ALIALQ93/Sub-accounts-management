@@ -21,6 +21,7 @@ interface SearchSelectFieldProps {
   hideLabel?: boolean;
   modalTitle?: string;
   emptyMessage?: string;
+  fallbackLabel?: string;
 }
 
 export function SearchSelectField({
@@ -34,6 +35,7 @@ export function SearchSelectField({
   hideLabel,
   modalTitle = "اختر من القائمة",
   emptyMessage = "لا توجد نتائج",
+  fallbackLabel,
 }: SearchSelectFieldProps) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -46,10 +48,12 @@ export function SearchSelectField({
   useEffect(() => {
     if (selected) {
       setQuery(selected.label);
+    } else if (value && fallbackLabel) {
+      setQuery(fallbackLabel);
     } else if (!value) {
       setQuery("");
     }
-  }, [selected, value]);
+  }, [selected, value, fallbackLabel]);
 
   useEffect(() => {
     const onDocClick = (event: MouseEvent) => {

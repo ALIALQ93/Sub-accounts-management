@@ -18,9 +18,11 @@ import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
+import { VoucherViewModeBar } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
 import { VoucherCurrencyFields } from "@/modules/vouchers/components/voucher-currency-fields";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
+import { useVoucherAccounts } from "@/modules/vouchers/hooks/use-voucher-accounts";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
   Account,
@@ -89,7 +91,7 @@ export function ReceiptVoucherForm({
   const [allocations, setAllocations] =
     useState<VoucherAllocation[]>(EMPTY_ALLOCATIONS);
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const { accounts, isLoadingAccounts } = useVoucherAccounts();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
@@ -116,7 +118,7 @@ export function ReceiptVoucherForm({
     voucherId,
     showSuccess,
   });
-  const [isLoading, setIsLoading] = useState(initialMode === "edit");
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const isCreate = initialMode === "create" && !voucherId;
@@ -128,6 +130,11 @@ export function ReceiptVoucherForm({
   const isInvoiceMode = settlementMode === "invoice";
 
   const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
+  const receiptAccountFallbackLabel = useMemo(() => {
+    const account = accounts.find((item) => item.id === receiptAccountId);
+    if (!account) return undefined;
+    return `${account.code} — ${account.name_ar}`;
+  }, [accounts, receiptAccountId]);
   const amountStep = getAmountStep(selectedCurrency?.decimal_places ?? 2);
 
   const totalCredit = useMemo(
@@ -383,7 +390,6 @@ export function ReceiptVoucherForm({
     const load = async () => {
       try {
         const [
-          accountsData,
           customersData,
           costCentersData,
           currenciesData,
@@ -392,7 +398,6 @@ export function ReceiptVoucherForm({
           typeDefaults,
           categoriesData,
         ] = await Promise.all([
-          voucherApi.listAccounts(),
           voucherApi.listCustomers(),
           voucherApi.listCostCenters(),
           currencyApi.listActiveCurrencies(),
@@ -404,7 +409,6 @@ export function ReceiptVoucherForm({
 
         if (cancelled) return;
 
-        setAccounts(accountsData);
         setCustomers(customersData);
         setCostCenters(costCentersData);
         setLineCategories(categoriesData);
@@ -485,7 +489,7 @@ export function ReceiptVoucherForm({
     };
   }, [initialMode, initialVoucherId]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingAccounts) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
         جاري تحميل سند القبض...
@@ -495,11 +499,11 @@ export function ReceiptVoucherForm({
 
   return (
     <div className="space-y-4">
-      {forceViewMode && (
-        <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          وضع العرض — القراءة فقط.
-        </div>
-      )}
+      <VoucherViewModeBar
+        forceViewMode={forceViewMode}
+        voucherId={voucherId || initialVoucherId || ""}
+        status={status}
+      />
       <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
         <p className="font-semibold">سند قبض</p>
         <p className="mt-0.5 opacity-90">
@@ -587,6 +591,7 @@ export function ReceiptVoucherForm({
               accounts={accounts}
               currencies={currencies}
               value={receiptAccountId}
+              fallbackLabel={receiptAccountFallbackLabel}
               onChange={(id) => setReceiptAccountId(id)}
               disabled={readOnly || isSaving}
             />

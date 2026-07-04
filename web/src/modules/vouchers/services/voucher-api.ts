@@ -1,6 +1,7 @@
 "use client";
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { notifyAccountsChanged } from "@/lib/reference-data-events";
 import { costCenterApi } from "@/modules/cost-centers/services/cost-center-api";
 import type {
   AccountStatementAccountSummary,
@@ -350,6 +351,7 @@ export const voucherApi = {
       .select("*")
       .single();
     throwIfSupabaseError(error);
+    notifyAccountsChanged();
     return data as Account;
   },
 
@@ -362,6 +364,7 @@ export const voucherApi = {
       .select("*")
       .single();
     throwIfSupabaseError(error);
+    notifyAccountsChanged();
     return data as Account;
   },
 

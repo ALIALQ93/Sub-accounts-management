@@ -4,19 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { OpenInNewTabLink } from "@/components/open-in-new-tab-link";
 import { useAuth } from "@/modules/auth/auth-context";
+import {
+  canEditVoucherFromList,
+} from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { VoucherListItem } from "@/modules/vouchers/types";
-
-function canEditVoucher(
-  item: VoucherListItem,
-  isAdmin: boolean,
-  canEdit: boolean,
-): boolean {
-  if (!canEdit) return false;
-  if (item.status === "cancelled") return false;
-  if (item.status === "posted") return isAdmin;
-  return item.status === "draft" || item.status === "approved";
-}
 
 interface VoucherListActionsProps {
   item: VoucherListItem;
@@ -31,7 +23,7 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
   const canView = authDisabled || hasPermission("vouchers.view");
   const canEdit = authDisabled || hasPermission("vouchers.edit");
   const canPostPermission = authDisabled || hasPermission("vouchers.post");
-  const showEdit = canEditVoucher(item, isAdmin, canEdit);
+  const showEdit = canEditVoucherFromList(item.status, isAdmin, canEdit);
   const canApprove = canEdit && item.status === "draft";
   const canPost =
     canPostPermission &&
@@ -69,13 +61,6 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
   return (
     <div className="grid gap-1">
       <div className="flex flex-wrap items-center gap-1">
-        <Link
-          href={viewHref}
-          className={`${linkClass} border-slate-300 text-slate-700`}
-          title="عرض السند للقراءة فقط"
-        >
-          عرض
-        </Link>
         {showEdit && (
           <Link
             href={editHref}
@@ -85,6 +70,13 @@ export function VoucherListActions({ item, onUpdated }: VoucherListActionsProps)
             تعديل
           </Link>
         )}
+        <Link
+          href={viewHref}
+          className={`${linkClass} border-slate-300 text-slate-700`}
+          title="عرض السند للقراءة فقط"
+        >
+          عرض
+        </Link>
         {canApprove && (
           <button
             type="button"

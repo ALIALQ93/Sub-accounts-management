@@ -18,9 +18,11 @@ import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
+import { VoucherViewModeBar } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
 import { VoucherCurrencyFields } from "@/modules/vouchers/components/voucher-currency-fields";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
+import { useVoucherAccounts } from "@/modules/vouchers/hooks/use-voucher-accounts";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
   Account,
@@ -89,7 +91,7 @@ export function PaymentVoucherForm({
   const [allocations, setAllocations] =
     useState<VoucherAllocation[]>(EMPTY_ALLOCATIONS);
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const { accounts, isLoadingAccounts } = useVoucherAccounts();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
@@ -116,7 +118,7 @@ export function PaymentVoucherForm({
     voucherId,
     showSuccess,
   });
-  const [isLoading, setIsLoading] = useState(initialMode === "edit");
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const isCreate = initialMode === "create" && !voucherId;
@@ -128,6 +130,11 @@ export function PaymentVoucherForm({
   const isInvoiceMode = settlementMode === "invoice";
 
   const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
+  const paymentAccountFallbackLabel = useMemo(() => {
+    const account = accounts.find((item) => item.id === paymentAccountId);
+    if (!account) return undefined;
+    return `${account.code} — ${account.name_ar}`;
+  }, [accounts, paymentAccountId]);
   const amountStep = getAmountStep(selectedCurrency?.decimal_places ?? 2);
 
   const totalDebit = useMemo(
@@ -383,7 +390,6 @@ export function PaymentVoucherForm({
     const load = async () => {
       try {
         const [
-          accountsData,
           vendorsData,
           costCentersData,
           currenciesData,
@@ -392,7 +398,6 @@ export function PaymentVoucherForm({
           typeDefaults,
           categoriesData,
         ] = await Promise.all([
-          voucherApi.listAccounts(),
           voucherApi.listVendors(),
           voucherApi.listCostCenters(),
           currencyApi.listActiveCurrencies(),
@@ -404,7 +409,6 @@ export function PaymentVoucherForm({
 
         if (cancelled) return;
 
-        setAccounts(accountsData);
         setVendors(vendorsData);
         setCostCenters(costCentersData);
         setLineCategories(categoriesData);
@@ -485,7 +489,7 @@ export function PaymentVoucherForm({
     };
   }, [initialMode, initialVoucherId]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingAccounts) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
         جاري تحميل سند الدفع...
@@ -495,11 +499,11 @@ export function PaymentVoucherForm({
 
   return (
     <div className="space-y-4">
-      {forceViewMode && (
-        <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          وضع العرض — القراءة فقط.
-        </div>
-      )}
+      <VoucherViewModeBar
+        forceViewMode={forceViewMode}
+        voucherId={voucherId || initialVoucherId || ""}
+        status={status}
+      />
       <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900">
         <p className="font-semibold">سند دفع</p>
         <p className="mt-0.5 opacity-90">
@@ -587,6 +591,7 @@ export function PaymentVoucherForm({
               accounts={accounts}
               currencies={currencies}
               value={paymentAccountId}
+              fallbackLabel={paymentAccountFallbackLabel}
               onChange={(id) => setPaymentAccountId(id)}
               disabled={readOnly || isSaving}
             />

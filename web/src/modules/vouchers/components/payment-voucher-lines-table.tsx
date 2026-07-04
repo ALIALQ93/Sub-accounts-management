@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import type { Account, CostCenter, VoucherLine, VoucherLineCategory } from "@/modules/vouchers/types";
 import type { Currency } from "@/modules/currencies/types";
-import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
+import { AccountSearchField, accountLineFallbackLabel } from "@/modules/vouchers/components/account-search-field";
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import { VoucherLineCategoryFields } from "@/modules/vouchers/components/voucher-line-category-fields";
 import { formatVoucherAmount } from "@/modules/vouchers/utils/voucher-currency-utils";
@@ -116,6 +116,7 @@ export function PaymentVoucherLinesTable({
                     accounts={accounts}
                     currencies={currencies}
                     value={line.account_id ?? ""}
+                    fallbackLabel={accountLineFallbackLabel(line)}
                     hideLabel
                     onChange={(accountId, account) =>
                       updateLine(line.id, {

@@ -17,6 +17,17 @@ interface AccountSearchFieldProps {
   hideLabel?: boolean;
   placeholder?: string;
   currencies?: Array<{ id: string; code: string }>;
+  fallbackLabel?: string;
+}
+
+export function accountLineFallbackLabel(line: {
+  account_code?: string | null;
+  account_name?: string | null;
+}): string | undefined {
+  const code = line.account_code?.trim();
+  if (!code) return undefined;
+  const name = line.account_name?.trim();
+  return name ? `${code} — ${name}` : code;
 }
 
 export function accountToSearchOption(
@@ -41,6 +52,7 @@ export function AccountSearchField({
   hideLabel,
   placeholder = "ابحث بالكود أو الاسم...",
   currencies,
+  fallbackLabel,
 }: AccountSearchFieldProps) {
   const currencyById = useMemo(
     () => new Map((currencies ?? []).map((currency) => [currency.id, currency.code])),
@@ -79,6 +91,7 @@ export function AccountSearchField({
       hideLabel={hideLabel}
       modalTitle="اختر حساباً"
       emptyMessage="لا يوجد حساب مطابق"
+      fallbackLabel={fallbackLabel}
     />
   );
 }

@@ -7,7 +7,7 @@ import type {
   VoucherLineCategory,
   VoucherLineSide,
 } from "@/modules/vouchers/types";
-import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
+import { AccountSearchField, accountLineFallbackLabel } from "@/modules/vouchers/components/account-search-field";
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
 import { VoucherLineCategoryFields } from "@/modules/vouchers/components/voucher-line-category-fields";
 
@@ -107,6 +107,7 @@ export function VoucherLinesTable({
                   <AccountSearchField
                     accounts={accounts}
                     value={line.account_id ?? ""}
+                    fallbackLabel={accountLineFallbackLabel(line)}
                     hideLabel
                     onChange={(accountId, account) =>
                       updateLine(line.id, {

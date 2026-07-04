@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { PermissionGate } from "@/components/permission-gate";
+import { useAuth } from "@/modules/auth/auth-context";
 import { VoucherListActions } from "@/modules/vouchers/components/voucher-list-actions";
+import { canEditVoucherFromList } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
@@ -16,6 +18,7 @@ import {
 } from "@/modules/vouchers/utils/voucher-type-config";
 
 export default function VouchersListPage() {
+  const { hasPermission, isAdmin, authDisabled } = useAuth();
   const [items, setItems] = useState<VoucherListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -121,10 +124,28 @@ export default function VouchersListPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredItems.map((item) => (
+                {filteredItems.map((item) => {
+                  const canEdit =
+                    authDisabled || hasPermission("vouchers.edit");
+                  const showEdit = canEditVoucherFromList(
+                    item.status,
+                    isAdmin,
+                    canEdit,
+                  );
+                  const voucherHref = showEdit
+                    ? `/vouchers/${item.id}`
+                    : `/vouchers/${item.id}?mode=view`;
+
+                  return (
                   <tr key={item.id} className="odd:bg-white even:bg-slate-50/60">
                     <td className="border border-slate-100 p-2 font-mono">
-                      {item.voucher_no}
+                      <Link
+                        href={voucherHref}
+                        className="font-medium text-blue-900 hover:underline"
+                        title={showEdit ? "تعديل السند" : "عرض السند"}
+                      >
+                        {item.voucher_no}
+                      </Link>
                     </td>
                     <td className="border border-slate-100 p-2">
                       {getVoucherTypeLabel(item.voucher_type)}
@@ -152,7 +173,8 @@ export default function VouchersListPage() {
                       />
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
 
                 {filteredItems.length === 0 && (
                   <tr>

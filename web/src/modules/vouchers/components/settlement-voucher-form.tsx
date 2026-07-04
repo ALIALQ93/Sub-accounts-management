@@ -21,8 +21,10 @@ import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherFormFeedback } from "@/modules/vouchers/components/voucher-form-feedback";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
+import { VoucherViewModeBar } from "@/modules/vouchers/components/voucher-view-mode-bar";
 import { VoucherCurrencyFields } from "@/modules/vouchers/components/voucher-currency-fields";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
+import { useVoucherAccounts } from "@/modules/vouchers/hooks/use-voucher-accounts";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
   Account,
@@ -81,7 +83,7 @@ export function SettlementVoucherForm({
   const [description, setDescription] = useState("");
   const [userLines, setUserLines] = useState<SettlementUserLine[]>(EMPTY_LINES);
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const { accounts, isLoadingAccounts } = useVoucherAccounts();
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -104,7 +106,7 @@ export function SettlementVoucherForm({
     voucherId,
     showSuccess,
   });
-  const [isLoading, setIsLoading] = useState(initialMode === "edit");
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const isCreate = initialMode === "create" && !voucherId;
@@ -115,6 +117,11 @@ export function SettlementVoucherForm({
     readOnly || (autoNumberEnabled && (Boolean(voucherId) || isCreate));
 
   const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
+  const clearingAccountFallbackLabel = useMemo(() => {
+    const account = accounts.find((item) => item.id === clearingAccountId);
+    if (!account) return undefined;
+    return `${account.code} — ${account.name_ar}`;
+  }, [accounts, clearingAccountId]);
   const amountStep = getAmountStep(selectedCurrency?.decimal_places ?? 2);
 
   const totalUserDebit = useMemo(
@@ -370,14 +377,12 @@ export function SettlementVoucherForm({
     const load = async () => {
       try {
         const [
-          accountsData,
           costCentersData,
           currenciesData,
           settings,
           typeDefaults,
           categoriesData,
         ] = await Promise.all([
-          voucherApi.listAccounts(),
           voucherApi.listCostCenters(),
           currencyApi.listActiveCurrencies(),
           voucherApi.getVoucherSettings(),
@@ -387,7 +392,6 @@ export function SettlementVoucherForm({
 
         if (cancelled) return;
 
-        setAccounts(accountsData);
         setCostCenters(costCentersData);
         setLineCategories(categoriesData);
         setCurrencies(currenciesData);
@@ -461,7 +465,7 @@ export function SettlementVoucherForm({
     };
   }, [initialMode, initialVoucherId]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingAccounts) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
         جاري تحميل سند التصفية...
@@ -471,11 +475,11 @@ export function SettlementVoucherForm({
 
   return (
     <div className="space-y-4">
-      {forceViewMode && (
-        <div className="rounded-lg border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          وضع العرض — القراءة فقط.
-        </div>
-      )}
+      <VoucherViewModeBar
+        forceViewMode={forceViewMode}
+        voucherId={voucherId || initialVoucherId || ""}
+        status={status}
+      />
       <div className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900">
         <p className="font-semibold">سند تصفية</p>
         <p className="mt-0.5 opacity-90">
@@ -546,6 +550,7 @@ export function SettlementVoucherForm({
               accounts={accounts}
               currencies={currencies}
               value={clearingAccountId}
+              fallbackLabel={clearingAccountFallbackLabel}
               onChange={(id) => setClearingAccountId(id)}
               disabled={readOnly || isSaving}
             />
