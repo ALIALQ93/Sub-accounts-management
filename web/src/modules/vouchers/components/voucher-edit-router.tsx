@@ -7,7 +7,7 @@ import { ReceiptVoucherForm } from "@/modules/vouchers/components/receipt-vouche
 import { SettlementVoucherForm } from "@/modules/vouchers/components/settlement-voucher-form";
 import { VoucherForm } from "@/modules/vouchers/components/voucher-form";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
-import type { VoucherType } from "@/modules/vouchers/types";
+import type { SettlementMode, VoucherType } from "@/modules/vouchers/types";
 
 interface VoucherEditRouterProps {
   voucherId: string;
@@ -17,6 +17,7 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
   const searchParams = useSearchParams();
   const forceViewMode = searchParams.get("mode") === "view";
   const [voucherType, setVoucherType] = useState<VoucherType | null>(null);
+  const [settlementMode, setSettlementMode] = useState<SettlementMode | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -26,7 +27,10 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
     const load = async () => {
       try {
         const details = await voucherApi.getVoucherById(voucherId);
-        if (!cancelled) setVoucherType(details.header.voucher_type);
+        if (!cancelled) {
+          setVoucherType(details.header.voucher_type);
+          setSettlementMode(details.header.settlement_mode);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "تعذّر تحميل السند.");
@@ -50,7 +54,7 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
     );
   }
 
-  if (error || !voucherType) {
+  if (error || !voucherType || !settlementMode) {
     return (
       <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800">
         {error || "تعذّر تحديد نوع السند."}
@@ -64,6 +68,9 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
         initialMode="edit"
         initialVoucherId={voucherId}
         forceViewMode={forceViewMode}
+        lockedSettlementMode={
+          settlementMode === "invoice" ? "invoice" : undefined
+        }
       />
     );
   }
@@ -74,6 +81,9 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
         initialMode="edit"
         initialVoucherId={voucherId}
         forceViewMode={forceViewMode}
+        lockedSettlementMode={
+          settlementMode === "invoice" ? "invoice" : undefined
+        }
       />
     );
   }

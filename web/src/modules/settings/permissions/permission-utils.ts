@@ -44,6 +44,8 @@ const ROUTE_PERMISSIONS: Array<{ prefix: string; permission: PermissionKey }> = 
   { prefix: "/settings/company", permission: "settings.company.view" },
   { prefix: "/settings", permission: "settings.company.view" },
   { prefix: "/vouchers/settings", permission: "vouchers.settings" },
+  { prefix: "/vouchers/receipt/close-movements/new", permission: "vouchers.create" },
+  { prefix: "/vouchers/payment/close-movements/new", permission: "vouchers.create" },
   { prefix: "/vouchers/receipt/new", permission: "vouchers.create" },
   { prefix: "/vouchers/payment/new", permission: "vouchers.create" },
   { prefix: "/vouchers/settlement/new", permission: "vouchers.create" },

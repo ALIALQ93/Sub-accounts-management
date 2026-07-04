@@ -21,11 +21,7 @@ export function VoucherAllocations({
   onChange,
 }: VoucherAllocationsProps) {
   if (!visible) {
-    return (
-      <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-        تبويب التخصيصات يظهر فقط في وضع اغلاق الحركات `invoice` لسندات القبض/الدفع.
-      </section>
-    );
+    return null;
   }
 
   const addAllocation = () => {

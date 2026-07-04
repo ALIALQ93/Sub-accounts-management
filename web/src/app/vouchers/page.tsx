@@ -11,18 +11,22 @@ import { VouchersNav } from "@/modules/vouchers/components/vouchers-nav";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { VoucherListItem, VoucherType } from "@/modules/vouchers/types";
 import {
+  CLOSE_MOVEMENTS_VOUCHER_CONFIG,
+  CLOSE_MOVEMENTS_VOUCHER_TYPES,
   getSettlementModeLabel,
   getVoucherTypeLabel,
   VOUCHER_TYPE_CONFIG,
   VOUCHER_TYPES,
 } from "@/modules/vouchers/utils/voucher-type-config";
 
+type ListFilter = VoucherType | "all" | "close-movements";
+
 export default function VouchersListPage() {
   const { hasPermission, isAdmin, authDisabled } = useAuth();
   const [items, setItems] = useState<VoucherListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [typeFilter, setTypeFilter] = useState<VoucherType | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<ListFilter>("all");
 
   const loadVouchers = useCallback(async () => {
     setError("");
@@ -43,15 +47,32 @@ export default function VouchersListPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const type = params.get("type");
+    const settlement = params.get("settlement");
+    if (settlement === "invoice") {
+      setTypeFilter("close-movements");
+      return;
+    }
     if (type === "receipt" || type === "payment" || type === "settlement") {
       setTypeFilter(type);
     }
   }, []);
 
+  const closeMovementsCount = items.filter(
+    (item) =>
+      item.settlement_mode === "invoice" &&
+      (item.voucher_type === "receipt" || item.voucher_type === "payment"),
+  ).length;
+
   const filteredItems =
     typeFilter === "all"
       ? items
-      : items.filter((item) => item.voucher_type === typeFilter);
+      : typeFilter === "close-movements"
+        ? items.filter(
+            (item) =>
+              item.settlement_mode === "invoice" &&
+              (item.voucher_type === "receipt" || item.voucher_type === "payment"),
+          )
+        : items.filter((item) => item.voucher_type === typeFilter);
 
   return (
     <main className="flex w-full flex-col gap-4">
@@ -84,6 +105,27 @@ export default function VouchersListPage() {
         })}
       </section>
 
+      <section>
+        <h2 className="mb-2 text-sm font-semibold text-slate-800">إغلاق الحركات</h2>
+        <div className="grid gap-3 md:grid-cols-2">
+          {CLOSE_MOVEMENTS_VOUCHER_TYPES.map((type) => {
+            const config = CLOSE_MOVEMENTS_VOUCHER_CONFIG[type];
+            return (
+              <PermissionGate key={type} permission="vouchers.create">
+                <Link
+                  href={config.newRoute}
+                  className={`block rounded-xl border p-4 transition hover:shadow-md ${config.colorClass}`}
+                >
+                  <p className="font-semibold">{config.labelAr}</p>
+                  <p className="mt-1 text-xs opacity-90">{config.descriptionAr}</p>
+                  <p className="mt-3 text-sm font-medium">+ إنشاء جديد</p>
+                </Link>
+              </PermissionGate>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
         <div className="mb-3 flex flex-wrap gap-2">
           <FilterButton
@@ -102,6 +144,12 @@ export default function VouchersListPage() {
               {items.filter((item) => item.voucher_type === type).length})
             </FilterButton>
           ))}
+          <FilterButton
+            active={typeFilter === "close-movements"}
+            onClick={() => setTypeFilter("close-movements")}
+          >
+            إغلاق حركات ({closeMovementsCount})
+          </FilterButton>
         </div>
 
         {isLoading && <p className="text-sm text-slate-600">جاري تحميل السندات...</p>}

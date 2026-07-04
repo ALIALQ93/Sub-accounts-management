@@ -35,7 +35,6 @@ import type {
   VoucherLineCategory,
   VoucherStatus,
 } from "@/modules/vouchers/types";
-import { getSettlementModeLabel } from "@/modules/vouchers/utils/voucher-type-config";
 import type { Currency } from "@/modules/currencies/types";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import {
@@ -62,6 +61,8 @@ interface ReceiptVoucherFormProps {
   initialMode?: "create" | "edit";
   initialVoucherId?: string;
   forceViewMode?: boolean;
+  /** عند "invoice" يُستخدم نموذج إغلاق الحركات المنفصل */
+  lockedSettlementMode?: SettlementMode;
 }
 
 const EMPTY_LINES: VoucherLine[] = [];
@@ -71,12 +72,13 @@ export function ReceiptVoucherForm({
   initialMode = "create",
   initialVoucherId,
   forceViewMode = false,
+  lockedSettlementMode,
 }: ReceiptVoucherFormProps) {
   const [voucherId, setVoucherId] = useState(initialVoucherId ?? "");
   const [voucherNo, setVoucherNo] = useState("");
   const [nextNumberPreview, setNextNumberPreview] = useState("");
   const [autoNumberEnabled, setAutoNumberEnabled] = useState(true);
-  const [settlementMode, setSettlementMode] = useState<SettlementMode>("account");
+  const isCloseMovementsForm = lockedSettlementMode === "invoice";
   const [voucherDate, setVoucherDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -127,7 +129,7 @@ export function ReceiptVoucherForm({
   const readOnly = formReadOnly || forceViewMode;
   const voucherNoReadOnly =
     readOnly || (autoNumberEnabled && (Boolean(voucherId) || isCreate));
-  const isInvoiceMode = settlementMode === "invoice";
+  const isInvoiceMode = isCloseMovementsForm;
 
   const selectedCurrency = currencies.find((currency) => currency.id === currencyId);
   const receiptAccountFallbackLabel = useMemo(() => {
@@ -166,7 +168,7 @@ export function ReceiptVoucherForm({
   ): Partial<VoucherHeader> => ({
     voucher_no: resolvedVoucherNo.trim(),
     voucher_type: "receipt",
-    settlement_mode: settlementMode,
+    settlement_mode: isCloseMovementsForm ? "invoice" : "account",
     voucher_date: voucherDate,
     description: description.trim() || null,
     status: targetStatus,
@@ -378,34 +380,34 @@ export function ReceiptVoucherForm({
   };
 
   useEffect(() => {
-    if (!isInvoiceMode) {
-      setCustomerId("");
-      setAllocations(EMPTY_ALLOCATIONS);
-    }
-  }, [isInvoiceMode]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       try {
+        const baseRequests = [
+          voucherApi.listCustomers(),
+          voucherApi.listCostCenters(),
+          currencyApi.listActiveCurrencies(),
+          voucherApi.getVoucherSettings(),
+          voucherApi.getVoucherTypeDefaults("receipt"),
+          voucherLineCategoryApi.listCategories("receipt", true),
+        ] as const;
+
         const [
           customersData,
           costCentersData,
           currenciesData,
-          openMovementsData,
           settings,
           typeDefaults,
           categoriesData,
-        ] = await Promise.all([
-          voucherApi.listCustomers(),
-          voucherApi.listCostCenters(),
-          currencyApi.listActiveCurrencies(),
-          voucherApi.listOpenMovements(),
-          voucherApi.getVoucherSettings(),
-          voucherApi.getVoucherTypeDefaults("receipt"),
-          voucherLineCategoryApi.listCategories("receipt", true),
-        ]);
+        ] = await Promise.all(baseRequests);
+
+        let openMovementsData: Awaited<
+          ReturnType<typeof voucherApi.listOpenMovements>
+        > = [];
+        if (isCloseMovementsForm) {
+          openMovementsData = await voucherApi.listOpenMovements();
+        }
 
         if (cancelled) return;
 
@@ -447,13 +449,24 @@ export function ReceiptVoucherForm({
         const details = await voucherApi.getVoucherById(initialVoucherId);
         if (cancelled) return;
 
+        const loadedMode = details.header.settlement_mode;
+        const expectsInvoice = isCloseMovementsForm;
+        if ((expectsInvoice && loadedMode !== "invoice") || (!expectsInvoice && loadedMode === "invoice")) {
+          showError(
+            expectsInvoice
+              ? "هذا السند ليس من نوع إغلاق الحركات."
+              : "سند إغلاق الحركات يُفتح من نموذج إغلاق الحركات.",
+          );
+          setIsLoading(false);
+          return;
+        }
+
         const { receiptAccountId: loadedReceiptAccount, creditLines: loadedCredits } =
           splitReceiptVoucherLines(details.lines, defaultReceiptAccount);
 
         setVoucherId(details.header.id);
         setVoucherNo(details.header.voucher_no);
         setNextNumberPreview(details.header.voucher_no);
-        setSettlementMode(details.header.settlement_mode);
         setVoucherDate(details.header.voucher_date);
         setCurrencyId(
           details.header.currency_id ?? defaultCurrencyId,
@@ -487,15 +500,26 @@ export function ReceiptVoucherForm({
     return () => {
       cancelled = true;
     };
-  }, [initialMode, initialVoucherId]);
+  }, [initialMode, initialVoucherId, isCloseMovementsForm]);
 
   if (isLoading || isLoadingAccounts) {
     return (
       <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
-        جاري تحميل سند القبض...
+        {isCloseMovementsForm
+          ? "جاري تحميل إغلاق حركات القبض..."
+          : "جاري تحميل سند القبض..."}
       </div>
     );
   }
+
+  const formTitle =
+    initialMode === "create"
+      ? isCloseMovementsForm
+        ? "إغلاق حركات قبض جديد"
+        : "سند قبض جديد"
+      : isCloseMovementsForm
+        ? "تعديل إغلاق حركات قبض"
+        : "تعديل سند قبض";
 
   return (
     <div className="space-y-4">
@@ -504,10 +528,20 @@ export function ReceiptVoucherForm({
         voucherId={voucherId || initialVoucherId || ""}
         status={status}
       />
-      <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-        <p className="font-semibold">سند قبض</p>
+      <div
+        className={`rounded-lg border px-4 py-3 text-sm ${
+          isCloseMovementsForm
+            ? "border-violet-300 bg-violet-50 text-violet-900"
+            : "border-emerald-300 bg-emerald-50 text-emerald-900"
+        }`}
+      >
+        <p className="font-semibold">
+          {isCloseMovementsForm ? "إغلاق حركات — قبض" : "سند قبض"}
+        </p>
         <p className="mt-0.5 opacity-90">
-          استلام مبلغ — مدين حساب القبض تلقائياً، دائن حسابات مقابلة
+          {isCloseMovementsForm
+            ? "تحصيل مرتبط بتخصيص حركات مفتوحة للعميل"
+            : "استلام مبلغ — مدين حساب القبض تلقائياً، دائن حسابات مقابلة"}
         </p>
       </div>
 
@@ -521,28 +555,8 @@ export function ReceiptVoucherForm({
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-bold text-slate-900">
-            {initialMode === "create" ? "سند قبض جديد" : "تعديل سند قبض"}
-          </h1>
+          <h1 className="text-xl font-bold text-slate-900">{formTitle}</h1>
           <StatusChip status={status} />
-        </div>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          {(["account", "invoice"] as SettlementMode[]).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              disabled={readOnly || isSaving}
-              onClick={() => setSettlementMode(mode)}
-              className={`rounded-full px-4 py-2 text-sm font-medium ${
-                settlementMode === mode
-                  ? "bg-emerald-800 text-white"
-                  : "border border-slate-300 text-slate-700"
-              }`}
-            >
-              {getSettlementModeLabel(mode)}
-            </button>
-          ))}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
