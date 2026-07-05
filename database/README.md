@@ -47,6 +47,17 @@ database/setup_all.sql
 2. `patch_admin_edit_posted_vouchers.sql` *(إن لم يكن مدمجاً)*
 3. **`patch_journal_line_currency.sql` أخيراً** — يحدّث دوال الترحيل بالعملة والأساس
 
+**ترتيب ترقيعات الفواتير (#27) على قاعدة موجودة:**
+
+1. `patch_branches.sql`
+2. `patch_materials_minimal.sql`
+3. `patch_company_inventory.sql`
+4. `patch_journal_dimensions.sql`
+5. `patch_invoices.sql`
+6. `patch_invoice_seeds.sql`
+7. `patch_settlement_foundation.sql`
+8. `patch_post_invoice.sql`
+
 **لا تُعاد تشغيل** `patch_voucher_line_categories.sql` أو `patch_journal_cost_centers.sql` **لاستبدال دوال الترحيل** بعد المخطط الحالي.
 
 ## ما يشمله المخطط الحالي
@@ -95,6 +106,14 @@ database/setup_all.sql
 | `patch_journal_line_currency.sql` | عملة وأساس على القيود والسندات | **شغّله على قواعد قديمة — آخر ترقيع للدوال** |
 | `patch_remove_voucher_line_category_seed.sql` | حذف تصنيفات الأسطر الافتراضية | قواعد مُثبتة سابقاً بالبذور الثلاثة |
 | `patch_voucher_delete.sql` | حذف السند مع القيد المرتبط | **شغّله على قواعد قديمة** |
+| `patch_branches.sql` | `branches` + `company_settlement_accounts` + توسيع `cost_centers` | **أول patch الفواتير (#27)** |
+| `patch_materials_minimal.sql` | `material_categories`, `warehouses`, `materials`, **`material_units`** + تحويل | بعد `patch_branches` |
+| `patch_company_inventory.sql` | `company_inventory_settings` + قفل + `get_company_inventory_settings()` | بعد `patch_materials_minimal` |
+| `patch_journal_dimensions.sql` | أبعاد `journal_entry_lines` + `open_items_view` + `get_open_items()` | بعد `patch_company_inventory` |
+| `patch_invoices.sql` | أنماط + فواتير + مناقلة + `inventory_movements` + ترقيم | بعد `patch_journal_dimensions` |
+| `patch_invoice_seeds.sql` | 8 أنماط جاهزة (§12) | بعد `patch_invoices` |
+| `patch_settlement_foundation.sql` | `voucher_netting_lines` + توسيع `voucher_allocations` | بعد `patch_invoice_seeds` |
+| `patch_post_invoice.sql` | `post_invoice()` + حماية الفاتورة المرحّلة | بعد `patch_settlement_foundation` |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

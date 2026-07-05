@@ -2,6 +2,8 @@
 
 **الإصدار الحالي:** `0.1.0` · تجربة أولى (`trial-1`) — راجع [`CHANGELOG.md`](CHANGELOG.md) و[`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md)
 
+**مخطط النظام والتقدم:** [`docs/README.md`](docs/README.md) · [`docs/PROGRESS.md`](docs/PROGRESS.md) — أهداف الأقسام، المزايا، العلاقات، وأين وصلنا.
+
 Core accounting bootstrap files:
 
 - `database/`: SQL setup for Supabase — see `database/README.md`
