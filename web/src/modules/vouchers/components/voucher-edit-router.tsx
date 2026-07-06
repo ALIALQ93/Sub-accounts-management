@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { OpeningEntryVoucherForm } from "@/modules/opening-entry/components/opening-entry-voucher-form";
 import { PaymentVoucherForm } from "@/modules/vouchers/components/payment-voucher-form";
 import { ReceiptVoucherForm } from "@/modules/vouchers/components/receipt-voucher-form";
 import { SettlementVoucherForm } from "@/modules/vouchers/components/settlement-voucher-form";
@@ -18,6 +19,7 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
   const forceViewMode = searchParams.get("mode") === "view";
   const [voucherType, setVoucherType] = useState<VoucherType | null>(null);
   const [settlementMode, setSettlementMode] = useState<SettlementMode | null>(null);
+  const [isOpeningEntry, setIsOpeningEntry] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -30,6 +32,7 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
         if (!cancelled) {
           setVoucherType(details.header.voucher_type);
           setSettlementMode(details.header.settlement_mode);
+          setIsOpeningEntry(Boolean(details.header.is_opening_entry));
         }
       } catch (err) {
         if (!cancelled) {
@@ -59,6 +62,16 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
       <div className="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800">
         {error || "تعذّر تحديد نوع السند."}
       </div>
+    );
+  }
+
+  if (isOpeningEntry) {
+    return (
+      <OpeningEntryVoucherForm
+        initialMode="edit"
+        initialVoucherId={voucherId}
+        forceViewMode={forceViewMode}
+      />
     );
   }
 

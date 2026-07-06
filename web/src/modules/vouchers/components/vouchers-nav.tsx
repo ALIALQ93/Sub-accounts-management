@@ -30,6 +30,11 @@ const NAV_ITEMS = [
     match: (path: string) => path.includes("/close-movements"),
   },
   {
+    href: "/vouchers/opening-entry",
+    label: "قيد افتتاحي",
+    match: (path: string) => path.startsWith("/vouchers/opening-entry"),
+  },
+  {
     href: "/vouchers/settings",
     label: "إعدادات",
     permission: "vouchers.settings" as const,

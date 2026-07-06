@@ -41,9 +41,12 @@ export function hasAnyPermission(
 
 const ROUTE_PERMISSIONS: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: "/settings/permissions", permission: "settings.permissions.manage" },
+  { prefix: "/settings/branches", permission: "settings.company.view" },
+  { prefix: "/settings/accounting-periods", permission: "settings.company.view" },
   { prefix: "/settings/company", permission: "settings.company.view" },
   { prefix: "/settings", permission: "settings.company.view" },
   { prefix: "/vouchers/settings", permission: "vouchers.settings" },
+  { prefix: "/vouchers/opening-entry", permission: "vouchers.create" },
   { prefix: "/vouchers/receipt/close-movements/new", permission: "vouchers.create" },
   { prefix: "/vouchers/payment/close-movements/new", permission: "vouchers.create" },
   { prefix: "/vouchers/receipt/new", permission: "vouchers.create" },
@@ -59,6 +62,12 @@ const ROUTE_PERMISSIONS: Array<{ prefix: string; permission: PermissionKey }> = 
   { prefix: "/customers", permission: "customers.view" },
   { prefix: "/vendors", permission: "vendors.view" },
   { prefix: "/open-movements", permission: "open_movements.view" },
+  { prefix: "/invoices/transfers/new", permission: "invoices.create" },
+  { prefix: "/invoices/transfers", permission: "invoices.view" },
+  { prefix: "/invoices/patterns/new", permission: "invoices.settings" },
+  { prefix: "/invoices/patterns", permission: "invoices.view" },
+  { prefix: "/invoices/new", permission: "invoices.create" },
+  { prefix: "/invoices", permission: "invoices.view" },
   { prefix: "/", permission: "dashboard.view" },
 ];
 
@@ -68,6 +77,12 @@ export function getRoutePermission(pathname: string): PermissionKey {
   if (pathname.startsWith("/settings/users")) return "settings.users.view";
   if (pathname.match(/^\/vouchers\/[^/]+$/)) {
     return "vouchers.view";
+  }
+  if (pathname.match(/^\/invoices\/transfers\/[^/]+$/)) {
+    return "invoices.view";
+  }
+  if (pathname.match(/^\/invoices\/[^/]+$/) && pathname !== "/invoices/new") {
+    return "invoices.view";
   }
 
   const match = ROUTE_PERMISSIONS.find(

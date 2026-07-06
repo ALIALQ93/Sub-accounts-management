@@ -5,6 +5,7 @@ const UUID_FIELDS = new Set([
   "vendor_id",
   "currency_id",
   "cost_center_id",
+  "branch_id",
 ]);
 
 const VOUCHER_HEADER_WRITE_FIELDS = [
@@ -19,6 +20,8 @@ const VOUCHER_HEADER_WRITE_FIELDS = [
   "currency_id",
   "cost_center_id",
   "exchange_rate",
+  "branch_id",
+  "is_opening_entry",
 ] as const satisfies ReadonlyArray<keyof VoucherHeader>;
 
 function normalizeUuidField(value: unknown): string | null {

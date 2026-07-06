@@ -11,6 +11,16 @@ const ITEMS = [
     match: (path: string) => path === "/settings/company",
   },
   {
+    href: "/settings/branches",
+    label: "الفروع",
+    match: (path: string) => path.startsWith("/settings/branches"),
+  },
+  {
+    href: "/settings/accounting-periods",
+    label: "الفترات المحاسبية",
+    match: (path: string) => path.startsWith("/settings/accounting-periods"),
+  },
+  {
     href: "/settings/users",
     label: "المستخدمون",
     match: (path: string) =>

@@ -13,6 +13,7 @@ export interface TrialBalanceQueryParams {
   accountId?: string;
   accountSubtree?: boolean;
   costCenterId?: string;
+  periodId?: string;
   aggregateTree?: boolean;
   hideZero?: boolean;
   search?: string;
@@ -28,6 +29,7 @@ function emptyRow(account: Account): TrialBalanceRow {
     is_postable: account.is_postable,
     is_aggregated: false,
     depth: 0,
+    opening_entry_balance: 0,
     opening_balance: 0,
     period_debit: 0,
     period_credit: 0,
@@ -39,6 +41,8 @@ function emptyRow(account: Account): TrialBalanceRow {
 }
 
 function addRowAmounts(target: TrialBalanceRow, source: TrialBalanceRow): void {
+  target.opening_entry_balance =
+    (target.opening_entry_balance ?? 0) + (source.opening_entry_balance ?? 0);
   target.opening_balance += source.opening_balance;
   target.period_debit += source.period_debit;
   target.period_credit += source.period_credit;
@@ -64,11 +68,13 @@ export function mapRpcTrialBalanceRow(raw: {
   currency_id: string | null;
   parent_id: string | null;
   is_postable: boolean;
+  opening_entry_balance?: number | string | null;
   opening_balance: number | string;
   period_debit: number | string;
   period_credit: number | string;
   closing_balance: number | string;
 }): TrialBalanceRow {
+  const openingEntry = Number(raw.opening_entry_balance ?? 0);
   const opening = Number(raw.opening_balance ?? 0);
   const debit = Number(raw.period_debit ?? 0);
   const credit = Number(raw.period_credit ?? 0);
@@ -83,6 +89,7 @@ export function mapRpcTrialBalanceRow(raw: {
     is_postable: raw.is_postable,
     is_aggregated: false,
     depth: 0,
+    opening_entry_balance: openingEntry,
     opening_balance: opening,
     period_debit: debit,
     period_credit: credit,
@@ -141,6 +148,7 @@ export function aggregateTrialBalanceTree(
 
 export function hasTrialBalanceActivity(row: TrialBalanceRow): boolean {
   return (
+    Math.abs(row.opening_entry_balance ?? 0) > 0.000001 ||
     Math.abs(row.opening_balance) > 0.000001 ||
     Math.abs(row.period_debit) > 0.000001 ||
     Math.abs(row.period_credit) > 0.000001 ||
@@ -184,6 +192,11 @@ export function applyTrialBalanceCurrencyDisplay(
       ...row,
       currency_id: baseCurrency.id,
       currency_code: baseCurrency.code,
+      opening_entry_balance: convertAmount(
+        row.opening_entry_balance ?? 0,
+        fromRate,
+        toRate,
+      ),
       opening_balance: convertAmount(row.opening_balance, fromRate, toRate),
       period_debit: convertAmount(row.period_debit, fromRate, toRate),
       period_credit: convertAmount(row.period_credit, fromRate, toRate),
@@ -217,13 +230,14 @@ export function computeTrialBalanceTotals(rows: TrialBalanceRow[], postableOnly 
 
   return source.reduce(
     (acc, row) => {
+      acc.openingEntry += row.opening_entry_balance ?? 0;
       acc.opening += row.opening_balance;
       acc.debit += row.period_debit;
       acc.credit += row.period_credit;
       acc.closing += row.closing_balance;
       return acc;
     },
-    { opening: 0, debit: 0, credit: 0, closing: 0 },
+    { openingEntry: 0, opening: 0, debit: 0, credit: 0, closing: 0 },
   );
 }
 
@@ -242,6 +256,7 @@ export function buildTrialBalanceShareParams(
     accountId: params.accountId,
     accountSubtree: params.accountSubtree === false ? "0" : undefined,
     costCenterId: params.costCenterId,
+    periodId: params.periodId,
     tree: params.aggregateTree ? "1" : undefined,
     hideZero: params.hideZero ? "1" : undefined,
   };
@@ -261,6 +276,7 @@ export function parseTrialBalanceShareParams(
     accountId: searchParams.get("accountId") ?? "",
     accountSubtree: searchParams.get("accountSubtree") !== "0",
     costCenterId: searchParams.get("costCenterId") ?? "",
+    periodId: searchParams.get("periodId") ?? "",
     aggregateTree: searchParams.get("tree") === "1",
     hideZero: searchParams.get("hideZero") === "1",
   };

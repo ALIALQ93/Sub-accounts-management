@@ -126,6 +126,14 @@ declare
   v_row record;
   v_line_cost numeric(18, 2);
   v_has_materials boolean;
+  v_discount_acct uuid;
+  v_invoice_disc numeric(18, 2) := 0;
+  v_line_gross numeric(18, 2);
+  v_line_disc numeric(18, 2);
+  v_round_step numeric(18, 4);
+  v_party_total numeric(18, 2);
+  v_rounded_total numeric(18, 2);
+  v_rounding_diff numeric(18, 2);
 begin
   perform set_config('app.invoice_posting', 'true', true);
 
@@ -231,6 +239,8 @@ begin
     );
   end loop;
 
+  v_discount_acct := coalesce(v_inv.discount_account_id, v_pat.default_discount_account_id);
+
   -- مواد + قيود حسب النوع التجاري
   case v_pat.commercial_kind
   when 'sale' then
@@ -245,26 +255,62 @@ begin
       where iml.invoice_id = p_invoice_id
       order by iml.line_no
     loop
-      perform public._invoice_add_journal_line(
-        v_je_id, v_creditor, 0, v_row.line_amount,
-        'مبيعات — ' || v_inv.invoice_no,
-        v_row.cost_center_id, v_row.branch_id,
-        v_inv.currency_id, v_rate,
-        null, null, null, null,
-        p_invoice_id, v_row.id
-      );
+      v_line_gross := round((v_row.quantity * v_row.unit_price)::numeric, 2);
+      v_line_disc := coalesce(v_row.discount_amount, 0);
 
-      perform public._invoice_add_journal_line(
-        v_je_id, v_debtor, v_row.line_amount, 0,
-        case when v_inv.settlement_mode = 'credit' then 'ذمم عميل' else 'نقدي' end,
-        coalesce(v_row.cost_center_id, v_inv.cost_center_id), v_row.branch_id,
-        v_inv.currency_id, v_rate,
-        case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
-        case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
-        case when v_inv.settlement_mode = 'credit' then v_inv.due_date else null end,
-        case when v_inv.settlement_mode = 'credit' then v_inv.payment_terms_days else null end,
-        p_invoice_id, v_row.id
-      );
+      if v_line_disc > 0 then
+        if v_discount_acct is null then
+          raise exception 'Line discount requires discount_account_id on invoice or pattern.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_line_gross,
+          'مبيعات — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_discount_acct, v_line_disc, 0,
+          'خصم سطر — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, v_row.line_amount, 0,
+          case when v_inv.settlement_mode = 'credit' then 'ذمم عميل' else 'نقدي' end,
+          coalesce(v_row.cost_center_id, v_inv.cost_center_id), v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+          case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.due_date else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.payment_terms_days else null end,
+          p_invoice_id, v_row.id
+        );
+      else
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_row.line_amount,
+          'مبيعات — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null,
+          p_invoice_id, v_row.id
+        );
+
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, v_row.line_amount, 0,
+          case when v_inv.settlement_mode = 'credit' then 'ذمم عميل' else 'نقدي' end,
+          coalesce(v_row.cost_center_id, v_inv.cost_center_id), v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+          case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.due_date else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.payment_terms_days else null end,
+          p_invoice_id, v_row.id
+        );
+      end if;
 
       if v_inv_settings.inventory_method = 'perpetual'
          and v_cost is not null and v_inventory is not null then
@@ -310,12 +356,19 @@ begin
       where iml.invoice_id = p_invoice_id
       order by iml.line_no
     loop
+      v_line_gross := round((v_row.quantity * v_row.unit_price)::numeric, 2);
+      v_line_disc := coalesce(v_row.discount_amount, 0);
+
+      if v_line_disc > 0 and v_discount_acct is null then
+        raise exception 'Line discount requires discount_account_id on invoice or pattern.';
+      end if;
+
       if v_inv_settings.inventory_method = 'perpetual' then
         if v_inventory is null then
           raise exception 'Perpetual purchase requires inventory account.';
         end if;
         perform public._invoice_add_journal_line(
-          v_je_id, v_inventory, v_row.line_amount, 0,
+          v_je_id, v_inventory, case when v_line_disc > 0 then v_line_gross else v_row.line_amount end, 0,
           'مشتريات — مخزون', v_row.cost_center_id, v_row.branch_id,
           v_inv.currency_id, v_rate,
           null, null, null, null, p_invoice_id, v_row.id
@@ -325,8 +378,18 @@ begin
           raise exception 'Periodic purchase requires debtor/purchases account.';
         end if;
         perform public._invoice_add_journal_line(
-          v_je_id, v_debtor, v_row.line_amount, 0,
+          v_je_id, v_debtor, case when v_line_disc > 0 then v_line_gross else v_row.line_amount end, 0,
           'مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      if v_line_disc > 0 then
+        perform public._invoice_add_journal_line(
+          v_je_id, v_discount_acct, 0, v_line_disc,
+          'خصم سطر — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
           v_inv.currency_id, v_rate,
           null, null, null, null, p_invoice_id, v_row.id
         );
@@ -516,12 +579,256 @@ begin
       );
     end loop;
 
-  when 'return_purchase', 'opening_stock' then
-    raise exception 'Posting for commercial_kind % not implemented yet.', v_pat.commercial_kind;
+  when 'return_purchase' then
+    if v_creditor is null then
+      raise exception 'Return purchase requires creditor account (payable).';
+    end if;
+
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      if v_inv_settings.inventory_method = 'perpetual' then
+        if v_inventory is null then
+          raise exception 'Return purchase (perpetual) requires inventory account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, v_row.line_amount, 0,
+          'ذمم مورد — مرتجع مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          v_party_type, v_party_id, v_inv.due_date, v_inv.payment_terms_days,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, 0, v_row.line_amount,
+          'مخزون — مرتجع مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      else
+        if v_debtor is null then
+          raise exception 'Return purchase (periodic) requires debtor/purchases account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, v_row.line_amount, 0,
+          'ذمم مورد — مرتجع مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          v_party_type, v_party_id, v_inv.due_date, v_inv.payment_terms_days,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, 0, v_row.line_amount,
+          'مشتريات — مرتجع', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        -v_row.quantity, -v_row.quantity_base,
+        v_row.unit_price, v_row.line_amount,
+        'return_purchase', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+  when 'opening_stock' then
+    if v_creditor is null then
+      raise exception 'Opening stock requires creditor account (opening equity / counterpart).';
+    end if;
+
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      if v_inv_settings.inventory_method = 'perpetual' then
+        if v_inventory is null then
+          raise exception 'Opening stock (perpetual) requires inventory account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, v_row.line_amount, 0,
+          'مخزون — بضاعة أول المدة', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_row.line_amount,
+          'بضاعة أول المدة — طرف مقابل', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      else
+        if v_debtor is null then
+          raise exception 'Opening stock (periodic) requires debtor account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, v_row.line_amount, 0,
+          'بضاعة أول المدة', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_row.line_amount,
+          'بضاعة أول المدة — طرف مقابل', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        v_row.quantity, v_row.quantity_base,
+        v_row.unit_price, v_row.line_amount,
+        'opening_stock', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
 
   else
     raise exception 'Unsupported commercial_kind: %', v_pat.commercial_kind;
   end case;
+
+  -- خصم الفاتورة + تدوير الإجمالي (§9 / §التخفيض)
+  if coalesce(v_inv.invoice_discount_percent, 0) > 0 then
+    v_invoice_disc := round((v_material_total * v_inv.invoice_discount_percent / 100)::numeric, 2);
+  elsif coalesce(v_inv.invoice_discount_amount, 0) > 0 then
+    v_invoice_disc := v_inv.invoice_discount_amount;
+  end if;
+
+  if v_invoice_disc > 0 then
+    if v_discount_acct is null then
+      raise exception 'Invoice discount requires discount_account_id on invoice or pattern.';
+    end if;
+    case v_pat.commercial_kind
+    when 'sale' then
+      if v_debtor is null then
+        raise exception 'Sale discount requires debtor account.';
+      end if;
+      perform public._invoice_add_journal_line(
+        v_je_id, v_discount_acct, v_invoice_disc, 0,
+        'خصم فاتورة — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        null, null, null, null, p_invoice_id, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, v_debtor, 0, v_invoice_disc,
+        'تخفيض ذمم — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+        case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+        null, null, p_invoice_id, null
+      );
+    when 'purchase' then
+      if v_creditor is null then
+        raise exception 'Purchase discount requires creditor account.';
+      end if;
+      perform public._invoice_add_journal_line(
+        v_je_id, v_creditor, v_invoice_disc, 0,
+        'خصم مشتريات — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+        case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+        null, null, p_invoice_id, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, v_discount_acct, 0, v_invoice_disc,
+        'خصم مكتسب — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        null, null, null, null, p_invoice_id, null
+      );
+    else
+      null;
+    end case;
+  end if;
+
+  if v_pat.rounding_enabled
+     and coalesce(v_pat.rounding_target, 'invoice_total') in ('invoice_total', 'both')
+     and v_pat.commercial_kind in ('sale', 'purchase') then
+    v_round_step := coalesce(nullif(v_pat.rounding_step, 0), 1);
+    v_party_total := v_material_total - v_invoice_disc;
+    v_rounded_total := case coalesce(v_pat.rounding_mode, 'nearest')
+      when 'up' then ceil(v_party_total / v_round_step - 0.0000001) * v_round_step
+      when 'down' then floor(v_party_total / v_round_step + 0.0000001) * v_round_step
+      else round(v_party_total / v_round_step) * v_round_step
+    end;
+    v_rounding_diff := round((v_rounded_total - v_party_total)::numeric, 2);
+
+    if v_rounding_diff <> 0 then
+      case v_pat.commercial_kind
+      when 'sale' then
+        if v_debtor is null then
+          raise exception 'Sale rounding requires debtor account.';
+        end if;
+        if v_rounding_diff > 0 then
+          perform public._invoice_add_journal_line(
+            v_je_id, v_debtor, v_rounding_diff, 0,
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        else
+          perform public._invoice_add_journal_line(
+            v_je_id, v_debtor, 0, abs(v_rounding_diff),
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        end if;
+      when 'purchase' then
+        if v_creditor is null then
+          raise exception 'Purchase rounding requires creditor account.';
+        end if;
+        if v_rounding_diff > 0 then
+          perform public._invoice_add_journal_line(
+            v_je_id, v_creditor, 0, v_rounding_diff,
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        else
+          perform public._invoice_add_journal_line(
+            v_je_id, v_creditor, abs(v_rounding_diff), 0,
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        end if;
+      else
+        null;
+      end case;
+    end if;
+  end if;
 
   -- توازن القيد
   select

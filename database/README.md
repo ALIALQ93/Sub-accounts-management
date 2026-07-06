@@ -17,10 +17,10 @@
 database/setup_all.sql
 ```
 
-ملف واحد يشغّل بالترتيب: **حذف → مخطط → RLS → Storage**.
+ملف واحد يشغّل بالترتيب: **حذف → مخطط → RLS → ترقيعات (#27+) → Storage**.
 
-> `setup_all.sql` يجمع: `00_reset.sql` + `01_schema.sql` + `02_rls.sql` + **`06_storage.sql`**.  
-> بعد تعديل أي ملف مصدر، أعد توليد `setup_all.sql` يدوياً أو بالأمر في أسفل هذا الملف.
+> `setup_all.sql` يجمع: `00_reset.sql` + `01_schema.sql` + `02_rls.sql` + **15 ترقيعاً** + `06_storage.sql`.  
+> بعد تعديل أي ملف مصدر، أعد التوليد: `powershell -File database/build_setup_all.ps1`
 
 ## الطريقة المرحلية
 
@@ -113,13 +113,24 @@ database/setup_all.sql
 | `patch_invoices.sql` | أنماط + فواتير + مناقلة + `inventory_movements` + ترقيم | بعد `patch_journal_dimensions` |
 | `patch_invoice_seeds.sql` | 8 أنماط جاهزة (§12) | بعد `patch_invoices` |
 | `patch_settlement_foundation.sql` | `voucher_netting_lines` + توسيع `voucher_allocations` | بعد `patch_invoice_seeds` |
-| `patch_post_invoice.sql` | `post_invoice()` + حماية الفاتورة المرحّلة | بعد `patch_settlement_foundation` |
+| `patch_post_invoice.sql` | `post_invoice()` — كل الأنواع التجارية + حماية الفاتورة المرحّلة | بعد `patch_settlement_foundation` |
+| `patch_invoice_multiple_references.sql` | مراجع متعددة للفاتورة | بعد `patch_post_invoice` |
+| `patch_invoice_reference_close.sql` | إغلاق المرجع يدوياً | #12 |
+| `patch_opening_entry.sql` | قيد افتتاحي + فهرس per فرع/سنة | بعد branches + journal_dimensions |
+| `patch_trial_balance_opening.sql` | عمود `opening_entry_balance` في ميزان المراجعة | بعد #13 |
+| `patch_accounting_periods.sql` | فترات محاسبية | بعد branches |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql
 
 ```powershell
 cd database
+powershell -File build_setup_all.ps1
+```
+
+أو يدوياً (بدون ترقيعات):
+
+```powershell
 Get-Content 00_reset.sql, 01_schema.sql, 02_rls.sql, 06_storage.sql | Set-Content setup_all.sql -Encoding UTF8
 ```
 

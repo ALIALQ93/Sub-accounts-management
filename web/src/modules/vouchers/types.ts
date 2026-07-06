@@ -17,6 +17,8 @@ export interface VoucherHeader {
   currency_id?: string | null;
   cost_center_id?: string | null;
   exchange_rate?: number | null;
+  branch_id?: string | null;
+  is_opening_entry?: boolean;
 }
 
 export interface VoucherLine {
@@ -52,6 +54,7 @@ export interface CostCenter {
   name_ar: string;
   name_en: string | null;
   is_active: boolean;
+  netting_includes_cash_default?: boolean;
 }
 
 export interface VoucherTypeDefaults {
@@ -86,6 +89,7 @@ export interface VoucherDetails {
   header: VoucherHeader;
   lines: VoucherLine[];
   allocations: VoucherAllocation[];
+  netting_lines?: VoucherNettingLine[];
   attachments?: VoucherAttachment[];
 }
 
@@ -135,14 +139,60 @@ export interface VoucherListItem {
   total_amount_base: number;
 }
 
+export type OpenSide = "debit" | "credit";
+
+export interface OpenMovementFilters {
+  branchId?: string;
+  costCenterId?: string;
+  partyType?: "customer" | "vendor";
+  partyId?: string;
+  openSide?: OpenSide | "all";
+  eligibleOnly?: boolean;
+  overdueOnly?: boolean;
+}
+
 export interface OpenMovement {
   target_journal_line_id: string;
+  journal_entry_id?: string;
   entry_no: string;
+  entry_date?: string;
   account_id: string;
   account_code?: string;
   account_name?: string;
+  branch_id?: string | null;
+  branch_code?: string | null;
+  branch_name?: string | null;
+  cost_center_id?: string | null;
+  cost_center_code?: string | null;
+  cost_center_name?: string | null;
+  party_type?: string | null;
+  party_id?: string | null;
+  open_side?: OpenSide | null;
+  original_amount?: number;
+  allocated_amount?: number;
   open_amount: number;
+  due_date?: string | null;
+  is_eligible_for_payment?: boolean;
+  is_overdue?: boolean;
+  source_invoice_id?: string | null;
   line_description: string | null;
+}
+
+export type VoucherNettingKind = "cc" | "branch";
+
+export interface VoucherNettingLine {
+  id: string;
+  voucher_id: string;
+  netting_kind: VoucherNettingKind;
+  from_cc_id?: string | null;
+  to_cc_id?: string | null;
+  from_branch_id?: string | null;
+  to_branch_id?: string | null;
+  amount: number;
+  currency_id?: string | null;
+  includes_cash: boolean;
+  inter_account_id?: string | null;
+  note: string | null;
 }
 
 export interface Customer {
@@ -203,6 +253,7 @@ export interface TrialBalanceRow {
   is_postable: boolean;
   is_aggregated?: boolean;
   depth?: number;
+  opening_entry_balance?: number;
   opening_balance: number;
   period_debit: number;
   period_credit: number;
@@ -222,6 +273,7 @@ export interface TrialBalanceParams {
   accountId?: string;
   accountSubtree?: boolean;
   costCenterId?: string;
+  periodId?: string;
 }
 
 export interface DashboardLastMovement {

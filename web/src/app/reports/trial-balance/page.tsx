@@ -23,6 +23,10 @@ import {
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import type { Currency } from "@/modules/currencies/types";
 import { formatCurrencyAmount } from "@/modules/currencies/utils/convert-amount";
+import {
+  accountingPeriodApi,
+  type AccountingPeriod,
+} from "@/modules/accounting-periods/services/accounting-period-api";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { Account, CostCenter, TrialBalanceRow } from "@/modules/vouchers/types";
 
@@ -63,6 +67,8 @@ export default function TrialBalancePage() {
     initial.accountSubtree !== false,
   );
   const [costCenterId, setCostCenterId] = useState(initial.costCenterId ?? "");
+  const [periodId, setPeriodId] = useState(initial.periodId ?? "");
+  const [periods, setPeriods] = useState<AccountingPeriod[]>([]);
   const [aggregateTree, setAggregateTree] = useState(initial.aggregateTree ?? false);
   const [hideZero, setHideZero] = useState(initial.hideZero ?? false);
 
@@ -77,6 +83,7 @@ export default function TrialBalancePage() {
         accountId,
         accountSubtree,
         costCenterId,
+        periodId,
         aggregateTree,
         hideZero,
         ...overrides,
@@ -93,6 +100,7 @@ export default function TrialBalancePage() {
       accountId,
       accountSubtree,
       costCenterId,
+      periodId,
       aggregateTree,
       hideZero,
     ],
@@ -134,15 +142,18 @@ export default function TrialBalancePage() {
 
     const loadMeta = async () => {
       try {
-        const [accountsData, currenciesData, centersData] = await Promise.all([
+        const [accountsData, currenciesData, centersData, periodsData] =
+          await Promise.all([
           voucherApi.listAllAccounts(),
           currencyApi.listActiveCurrencies(),
           voucherApi.listCostCenters(),
+          accountingPeriodApi.listActivePeriodOptions(),
         ]);
         if (cancelled) return;
         setAccounts(accountsData);
         setCurrencies(currenciesData);
         setCostCenters(centersData);
+        setPeriods(periodsData);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "فشل تحميل البيانات.");
@@ -199,7 +210,8 @@ export default function TrialBalancePage() {
     return undefined;
   }, [currencyMode, currencyId, currencies]);
 
-  const showOpening = Boolean(fromDate);
+  const showMovementOpening = Boolean(fromDate);
+  const showOpeningEntry = true;
   const mixedCurrencies =
     currencyMode === "native" &&
     !currencyId &&
@@ -223,6 +235,7 @@ export default function TrialBalancePage() {
           accountId,
           accountSubtree,
           costCenterId,
+          periodId,
           aggregateTree,
           hideZero,
         }),
@@ -236,6 +249,7 @@ export default function TrialBalancePage() {
       accountId,
       accountSubtree,
       costCenterId,
+      periodId,
       aggregateTree,
       hideZero,
     ],
@@ -254,6 +268,7 @@ export default function TrialBalancePage() {
     setAccountId("");
     setAccountSubtree(true);
     setCostCenterId("");
+    setPeriodId("");
     setAggregateTree(false);
     setHideZero(false);
     setQuery("");
@@ -264,6 +279,7 @@ export default function TrialBalancePage() {
       accountId: undefined,
       accountSubtree: undefined,
       costCenterId: undefined,
+      periodId: undefined,
       tree: undefined,
       hideZero: undefined,
       q: undefined,
@@ -289,8 +305,8 @@ export default function TrialBalancePage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">ميزان المراجعة</h1>
           <p className="mt-1 text-xs text-slate-600">
-            حسابات مرحّلة — رصيد سابق عند تحديد «من تاريخ» — فلاتر عملة وحساب
-            ومركز كلفة.
+            حسابات مرحّلة — عمود افتتاحي منفصل عن حركة الفترة — فلاتر عملة
+            وحساب ومركز كلفة وفترة محاسبية.
           </p>
         </div>
         <OpenInNewTabLink
@@ -328,6 +344,39 @@ export default function TrialBalancePage() {
             className="rounded-md border border-slate-300 px-3 py-2 text-sm"
             title="إلى تاريخ"
           />
+        </div>
+
+        <div className="mt-3">
+          <label className="grid max-w-xl gap-1 text-sm">
+            <span className="font-medium text-slate-700">فترة محاسبية (اختياري)</span>
+            <select
+              value={periodId}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setPeriodId(nextId);
+                const period = periods.find((item) => item.id === nextId);
+                if (period) {
+                  setFromDate(period.start_date);
+                  setToDate(period.end_date);
+                  syncUrl({
+                    periodId: nextId,
+                    from: period.start_date,
+                    to: period.end_date,
+                  });
+                } else {
+                  syncUrl({ periodId: undefined });
+                }
+              }}
+              className="rounded-md border border-slate-300 px-3 py-2"
+            >
+              <option value="">— تواريخ يدوية —</option>
+              {periods.map((period) => (
+                <option key={period.id} value={period.id}>
+                  {period.period_code} · {period.start_date} → {period.end_date}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -445,7 +494,10 @@ export default function TrialBalancePage() {
                     <th className="border-b border-slate-200 p-2">كود</th>
                     <th className="border-b border-slate-200 p-2">اسم الحساب</th>
                     <th className="border-b border-slate-200 p-2">عملة</th>
-                    {showOpening && (
+                    {showOpeningEntry && (
+                      <th className="border-b border-slate-200 p-2">رصيد افتتاحي</th>
+                    )}
+                    {showMovementOpening && (
                       <th className="border-b border-slate-200 p-2">رصيد سابق</th>
                     )}
                     <th className="border-b border-slate-200 p-2">مدين الفترة</th>
@@ -494,7 +546,12 @@ export default function TrialBalancePage() {
                         <td className="border-b border-slate-100 p-2 font-mono text-xs">
                           {row.currency_code ?? rowCurrency?.code ?? "—"}
                         </td>
-                        {showOpening && (
+                        {showOpeningEntry && (
+                          <td className="border-b border-slate-100 p-2 font-mono">
+                            {formatAmount(row.opening_entry_balance ?? 0, rowCurrency)}
+                          </td>
+                        )}
+                        {showMovementOpening && (
                           <td className="border-b border-slate-100 p-2 font-mono">
                             {formatAmount(row.opening_balance, rowCurrency)}
                           </td>
@@ -526,7 +583,12 @@ export default function TrialBalancePage() {
                   {displayRows.length === 0 && (
                     <tr>
                       <td
-                        colSpan={showOpening ? 8 : 7}
+                        colSpan={
+                          5 +
+                          (showOpeningEntry ? 1 : 0) +
+                          (showMovementOpening ? 1 : 0) +
+                          1
+                        }
                         className="border-b border-slate-100 p-4 text-center text-slate-500"
                       >
                         لا توجد بيانات للفلاتر المحددة.
@@ -542,9 +604,20 @@ export default function TrialBalancePage() {
                 isBalanced
                   ? "bg-emerald-50 text-emerald-900"
                   : "bg-rose-50 text-rose-900"
-              } ${showOpening ? "sm:grid-cols-2 lg:grid-cols-5" : "sm:grid-cols-2 lg:grid-cols-4"}`}
+              } ${
+                showOpeningEntry && showMovementOpening
+                  ? "sm:grid-cols-2 lg:grid-cols-6"
+                  : showOpeningEntry || showMovementOpening
+                    ? "sm:grid-cols-2 lg:grid-cols-5"
+                    : "sm:grid-cols-2 lg:grid-cols-4"
+              }`}
             >
-              {showOpening && (
+              {showOpeningEntry && (
+                <p className="font-mono">
+                  رصيد افتتاحي: {formatAmount(totals.openingEntry, displayCurrency)}
+                </p>
+              )}
+              {showMovementOpening && (
                 <p className="font-mono">
                   رصيد سابق: {formatAmount(totals.opening, displayCurrency)}
                 </p>

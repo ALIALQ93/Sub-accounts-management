@@ -46,8 +46,16 @@ const REPORTS: ReportCard[] = [
     phase: "المرحلة 2",
   },
   {
+    title: "أعمار الذمم",
+    description:
+      "حركات مفتوحة حسب تاريخ الاستحقاق — عملاء وموردون، مرتبط بفواتير آجل.",
+    href: "/reports/receivables-aging",
+    status: "available",
+    phase: "جاهز",
+  },
+  {
     title: "ذمم العملاء والموردين",
-    description: "أعمار الذمم والحركات المفتوحة — مرتبط بوضع إغلاق الحركات.",
+    description: "قائمة خام للحركات المفتوحة — بدون تصنيف أعمار.",
     href: "/open-movements",
     status: "available",
     phase: "جاهز",

@@ -5,7 +5,33 @@
 -- استخدمه فقط عند إعادة التثبيت من الصفر (تطوير / بيئة اختبار).
 -- =============================================================================
 
+drop view if exists public.open_items_view cascade;
 drop view if exists public.account_direct_balances cascade;
+
+-- جداول الترقيعات (فواتير، فروع، مواد، فترات محاسبية)
+drop table if exists public.invoice_reference_links cascade;
+drop table if exists public.inventory_reservations cascade;
+drop table if exists public.voucher_netting_lines cascade;
+drop table if exists public.accounting_periods cascade;
+drop table if exists public.sales_reps cascade;
+drop table if exists public.invoice_material_lines cascade;
+drop table if exists public.invoice_account_lines cascade;
+drop table if exists public.inventory_transfer_lines cascade;
+drop table if exists public.inventory_movements cascade;
+drop table if exists public.inventory_transfers cascade;
+drop table if exists public.invoices cascade;
+drop table if exists public.invoice_pattern_allowed_materials cascade;
+drop table if exists public.invoice_pattern_allowed_categories cascade;
+drop table if exists public.invoice_pattern_conditions cascade;
+drop table if exists public.invoice_pattern_sequences cascade;
+drop table if exists public.invoice_patterns cascade;
+drop table if exists public.material_units cascade;
+drop table if exists public.materials cascade;
+drop table if exists public.material_categories cascade;
+drop table if exists public.warehouses cascade;
+drop table if exists public.company_inventory_settings cascade;
+drop table if exists public.company_settlement_accounts cascade;
+drop table if exists public.branches cascade;
 
 drop table if exists public.voucher_attachments cascade;
 drop table if exists public.voucher_allocations cascade;
@@ -60,4 +86,26 @@ drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, 
 drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
 drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
 drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
+drop function if exists public.get_open_items(uuid, uuid, varchar, uuid, varchar, uuid, boolean, boolean) cascade;
+drop function if exists public.post_invoice(uuid) cascade;
+drop function if exists public.close_invoice_reference(uuid) cascade;
+drop function if exists public.sync_invoice_reference_links() cascade;
+drop function if exists public.peek_invoice_no(uuid) cascade;
+drop function if exists public.reserve_invoice_no(uuid) cascade;
+drop function if exists public.format_invoice_no(varchar, boolean, int, int, int) cascade;
+drop function if exists public.sync_voucher_journal_opening_flag() cascade;
+drop function if exists public.voucher_allocations_apply_amount_base() cascade;
+drop function if exists public.journal_entry_lines_validate_party() cascade;
+drop function if exists public.sync_invoice_reservations(uuid) cascade;
+drop function if exists public.release_invoice_reservations(uuid, varchar) cascade;
+drop function if exists public.is_invoice_posting() cascade;
+drop function if exists public._invoice_add_journal_line(uuid, uuid, varchar, numeric, numeric, uuid, uuid, uuid, uuid, uuid, text) cascade;
+drop function if exists public.get_company_inventory_settings() cascade;
+drop function if exists public.lock_company_inventory_foundation(text) cascade;
+drop function if exists public.company_inventory_settings_guard_locked() cascade;
+drop function if exists public.material_quantity_to_base(numeric, uuid) cascade;
+drop function if exists public.material_quantity_from_base(numeric, uuid) cascade;
+drop function if exists public.material_units_validate() cascade;
+drop function if exists public.materials_require_base_unit() cascade;
+drop function if exists public.accounting_periods_set_updated_at() cascade;
 drop function if exists public.currencies_prevent_direct_rate_change() cascade;

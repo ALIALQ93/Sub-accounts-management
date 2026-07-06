@@ -11,6 +11,7 @@ import type {
   AccountStatementResult,
 } from "@/modules/accounts/types";
 import { resolveStatementLineAmounts } from "@/modules/reports/utils/account-statement-utils";
+import { mapRpcTrialBalanceRow } from "@/modules/reports/utils/trial-balance-utils";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import {
   computeNextSequencePreview,
@@ -758,36 +759,13 @@ export const voucherApi = {
     };
   },
 
-  async listOpenMovements(): Promise<OpenMovement[]> {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from("journal_entry_lines")
-      .select(
-        "id, account_id, debit, credit, line_description, journal_entries(entry_no), accounts(code, name_ar)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(150);
-    throwIfSupabaseError(error);
-
-    return (data ?? []).map((row) => {
-      const debit = Number((row as { debit?: number }).debit ?? 0);
-      const credit = Number((row as { credit?: number }).credit ?? 0);
-      const journalEntry = (row as { journal_entries?: { entry_no?: string } })
-        .journal_entries;
-      const account = (row as { accounts?: { code?: string; name_ar?: string } })
-        .accounts;
-
-      return {
-        target_journal_line_id: (row as { id: string }).id,
-        entry_no: journalEntry?.entry_no ?? "N/A",
-        account_id: (row as { account_id: string }).account_id,
-        account_code: account?.code,
-        account_name: account?.name_ar,
-        open_amount: Math.abs(debit - credit),
-        line_description: (row as { line_description: string | null })
-          .line_description,
-      } as OpenMovement;
-    });
+  async listOpenMovements(
+    filters: import("@/modules/vouchers/types").OpenMovementFilters = {},
+  ): Promise<OpenMovement[]> {
+    const { openMovementsApi } = await import(
+      "@/modules/vouchers/services/open-movements-api"
+    );
+    return openMovementsApi.list(filters);
   },
 
   async listCustomers(): Promise<Customer[]> {
@@ -950,43 +928,9 @@ export const voucherApi = {
     });
     throwIfSupabaseError(error);
 
-    return (data ?? []).map((row: Record<string, unknown>) => {
-      const typed = row as {
-        account_id: string;
-        account_code: string;
-        account_name: string;
-        currency_id: string | null;
-        parent_id: string | null;
-        is_postable: boolean;
-        opening_balance: number | string;
-        period_debit: number | string;
-        period_credit: number | string;
-        closing_balance: number | string;
-      };
-
-      const opening = Number(typed.opening_balance ?? 0);
-      const debit = Number(typed.period_debit ?? 0);
-      const credit = Number(typed.period_credit ?? 0);
-      const closing = Number(typed.closing_balance ?? 0);
-
-      return {
-        account_id: typed.account_id,
-        account_code: typed.account_code,
-        account_name: typed.account_name,
-        currency_id: typed.currency_id,
-        parent_id: typed.parent_id,
-        is_postable: typed.is_postable,
-        is_aggregated: false,
-        depth: 0,
-        opening_balance: opening,
-        period_debit: debit,
-        period_credit: credit,
-        closing_balance: closing,
-        debit,
-        credit,
-        balance: closing,
-      };
-    });
+    return (data ?? []).map((row: Record<string, unknown>) =>
+      mapRpcTrialBalanceRow(row as Parameters<typeof mapRpcTrialBalanceRow>[0]),
+    );
   },
 
   async getVoucherById(id: string): Promise<VoucherDetails> {
@@ -1019,10 +963,28 @@ export const voucherApi = {
       .order("created_at", { ascending: true });
     throwIfSupabaseError(allocationsError);
 
+    const { data: nettingLines, error: nettingError } = await supabase
+      .from("voucher_netting_lines")
+      .select("*")
+      .eq("voucher_id", id)
+      .order("created_at", { ascending: true });
+
+    const missingNettingTable =
+      nettingError?.code === "42P01" ||
+      nettingError?.code === "PGRST205" ||
+      nettingError?.code === "42703";
+
+    if (nettingError && !missingNettingTable) {
+      throwIfSupabaseError(nettingError);
+    }
+
     return {
       header: header as VoucherHeader,
       lines: (lines ?? []) as VoucherLine[],
       allocations: (allocations ?? []) as VoucherAllocation[],
+      netting_lines: missingNettingTable
+        ? []
+        : ((nettingLines ?? []) as import("@/modules/vouchers/types").VoucherNettingLine[]),
     };
   },
 
@@ -1396,6 +1358,59 @@ export const voucherApi = {
       );
     }
     return inserted;
+  },
+
+  async deleteAllVoucherNettingLines(voucherId: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase
+      .from("voucher_netting_lines")
+      .delete()
+      .eq("voucher_id", voucherId);
+
+    const missingTable =
+      error?.code === "42P01" ||
+      error?.code === "PGRST205" ||
+      error?.code === "42703";
+    if (error && !missingTable) throwIfSupabaseError(error);
+  },
+
+  async replaceVoucherNettingLines(
+    voucherId: string,
+    lines: Partial<import("@/modules/vouchers/types").VoucherNettingLine>[],
+  ): Promise<import("@/modules/vouchers/types").VoucherNettingLine[]> {
+    await this.deleteAllVoucherNettingLines(voucherId);
+
+    const validLines = lines.filter((line) => Number(line.amount || 0) > 0);
+    if (validLines.length === 0) return [];
+
+    const supabase = getSupabaseClient();
+    const payload = validLines.map((line) => ({
+      voucher_id: voucherId,
+      netting_kind: line.netting_kind,
+      from_cc_id: line.from_cc_id ?? null,
+      to_cc_id: line.to_cc_id ?? null,
+      from_branch_id: line.from_branch_id ?? null,
+      to_branch_id: line.to_branch_id ?? null,
+      amount: Number(line.amount),
+      currency_id: line.currency_id ?? null,
+      includes_cash: line.includes_cash ?? false,
+      inter_account_id: line.inter_account_id ?? null,
+      note: line.note?.trim() || null,
+    }));
+
+    const { data, error } = await supabase
+      .from("voucher_netting_lines")
+      .insert(payload)
+      .select("*");
+
+    const missingTable =
+      error?.code === "42P01" ||
+      error?.code === "PGRST205" ||
+      error?.code === "42703";
+    if (missingTable) return [];
+    throwIfSupabaseError(error);
+
+    return (data ?? []) as import("@/modules/vouchers/types").VoucherNettingLine[];
   },
 
   async approveVoucher(id: string): Promise<void> {

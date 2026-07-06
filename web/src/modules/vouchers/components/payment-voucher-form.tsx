@@ -2,6 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { InvoiceSettlementLinkBanner } from "@/modules/invoices/components/invoice-settlement-link-banner";
+import { invoiceSettlementApi } from "@/modules/invoices/services/invoice-settlement-api";
+import { buildVoucherAllocationsFromOpenItems } from "@/modules/invoices/utils/build-voucher-allocations-from-invoice";
 import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { VendorSearchField } from "@/modules/vouchers/components/vendor-search-field";
@@ -18,7 +22,7 @@ import { voucherLineCategoryApi } from "@/modules/vouchers/services/voucher-line
 import { StatusChip } from "@/modules/vouchers/components/status-chip";
 import { VoucherAdminPostedNotice } from "@/modules/vouchers/components/voucher-admin-posted-notice";
 import { VoucherViewModeBar } from "@/modules/vouchers/components/voucher-view-mode-bar";
-import { VoucherAllocations } from "@/modules/vouchers/components/voucher-allocations";
+import { CloseMovementSections } from "@/modules/vouchers/components/close-movement-sections";
 import { VoucherCurrencyFields } from "@/modules/vouchers/components/voucher-currency-fields";
 import { VoucherAttachmentsPanel } from "@/modules/vouchers/components/voucher-attachments-panel";
 import { useVoucherAccounts } from "@/modules/vouchers/hooks/use-voucher-accounts";
@@ -26,12 +30,14 @@ import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type {
   Account,
   CostCenter,
+  OpenMovement,
   SettlementMode,
   Vendor,
   VoucherAllocation,
   VoucherHeader,
   VoucherLine,
   VoucherLineCategory,
+  VoucherNettingLine,
   VoucherStatus,
 } from "@/modules/vouchers/types";
 import type { Currency } from "@/modules/currencies/types";
@@ -55,6 +61,17 @@ import {
   approveWithOptionalAutoPost,
   getApproveButtonLabel,
 } from "@/modules/vouchers/utils/voucher-auto-post-utils";
+import {
+  closeMovementLinesMatchAllocations,
+  sumVoucherAllocationTotal,
+  syncCloseMovementLinesWithAllocations,
+} from "@/modules/vouchers/utils/sync-close-movement-lines";
+import {
+  buildOpenAmountMapFromMovements,
+  parseOptionalPaymentAmount,
+  validateVoucherAllocations,
+} from "@/modules/vouchers/utils/validate-voucher-allocations";
+import { validateVoucherNettingLines } from "@/modules/vouchers/utils/validate-voucher-netting";
 
 interface PaymentVoucherFormProps {
   initialMode?: "create" | "edit";
@@ -66,6 +83,7 @@ interface PaymentVoucherFormProps {
 
 const EMPTY_LINES: VoucherLine[] = [];
 const EMPTY_ALLOCATIONS: VoucherAllocation[] = [];
+const EMPTY_NETTING_LINES: VoucherNettingLine[] = [];
 
 export function PaymentVoucherForm({
   initialMode = "create",
@@ -78,6 +96,7 @@ export function PaymentVoucherForm({
   const [nextNumberPreview, setNextNumberPreview] = useState("");
   const [autoNumberEnabled, setAutoNumberEnabled] = useState(true);
   const isCloseMovementsForm = lockedSettlementMode === "invoice";
+  const searchParams = useSearchParams();
   const [voucherDate, setVoucherDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -88,18 +107,22 @@ export function PaymentVoucherForm({
   const [status, setStatus] = useState<VoucherStatus>("draft");
   const [description, setDescription] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [branchId, setBranchId] = useState("");
   const [debitLines, setDebitLines] = useState<VoucherLine[]>(EMPTY_LINES);
   const [allocations, setAllocations] =
     useState<VoucherAllocation[]>(EMPTY_ALLOCATIONS);
+  const [nettingLines, setNettingLines] =
+    useState<VoucherNettingLine[]>(EMPTY_NETTING_LINES);
 
   const { accounts, isLoadingAccounts } = useVoucherAccounts();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [lineCategories, setLineCategories] = useState<VoucherLineCategory[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
-  const [openMovements, setOpenMovements] = useState<
-    Awaited<ReturnType<typeof voucherApi.listOpenMovements>>
-  >([]);
+  const [closeOpenMovements, setCloseOpenMovements] = useState<OpenMovement[]>([]);
+  const [allocationOpenLimits, setAllocationOpenLimits] = useState<
+    Record<string, number>
+  >({});
 
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [defaultPaymentAccountFromSettings, setDefaultPaymentAccountFromSettings] =
@@ -142,6 +165,17 @@ export function PaymentVoucherForm({
       debitLines.reduce((sum, line) => sum + Number(line.amount || 0), 0),
     [debitLines],
   );
+  const allocationTotal = useMemo(
+    () => sumVoucherAllocationTotal(allocations),
+    [allocations],
+  );
+  const openAmountByLineId = useMemo(
+    () => ({
+      ...buildOpenAmountMapFromMovements(closeOpenMovements),
+      ...allocationOpenLimits,
+    }),
+    [closeOpenMovements, allocationOpenLimits],
+  );
 
   const validDebitLines = useMemo(
     () =>
@@ -175,6 +209,7 @@ export function PaymentVoucherForm({
     currency_id: currencyId || null,
     cost_center_id: null,
     exchange_rate: exchangeRate > 0 ? exchangeRate : null,
+    branch_id: isInvoiceMode ? branchId || null : null,
   });
 
   const resolveVoucherNo = async (): Promise<string | null> => {
@@ -210,6 +245,10 @@ export function PaymentVoucherForm({
 
   const syncVoucherAllocations = async (id: string) => {
     await voucherApi.replaceVoucherAllocations(id, allocations);
+  };
+
+  const syncVoucherNettingLines = async (id: string) => {
+    await voucherApi.replaceVoucherNettingLines(id, nettingLines);
   };
 
   const saveVoucher = async (
@@ -271,6 +310,28 @@ export function PaymentVoucherForm({
           showError(vendorError);
           return null;
         }
+        if (!closeMovementLinesMatchAllocations(validDebitLines, allocations)) {
+          showError(
+            "إجمالي أسطر المدين يجب أن يساوي مجموع التخصيصات في إغلاق الحركات.",
+          );
+          return null;
+        }
+        const allocationError = validateVoucherAllocations(
+          allocations,
+          openAmountByLineId,
+        );
+        if (allocationError) {
+          showError(allocationError);
+          return null;
+        }
+        const nettingError = validateVoucherNettingLines(
+          nettingLines,
+          closeOpenMovements,
+        );
+        if (nettingError) {
+          showError(nettingError);
+          return null;
+        }
       }
 
       const resolvedNo = await resolveVoucherNo();
@@ -292,6 +353,7 @@ export function PaymentVoucherForm({
       await syncVoucherLines(activeId);
       if (isInvoiceMode) {
         await syncVoucherAllocations(activeId);
+        await syncVoucherNettingLines(activeId);
       }
 
       if (effectiveStatus === "posted") {
@@ -378,6 +440,51 @@ export function PaymentVoucherForm({
   };
 
   useEffect(() => {
+    if (initialMode !== "create" || !isCloseMovementsForm) return;
+    const fromQuery = searchParams.get("vendorId");
+    if (fromQuery) setVendorId(fromQuery);
+  }, [initialMode, isCloseMovementsForm, searchParams]);
+
+  useEffect(() => {
+    if (!isInvoiceMode || readOnly || isLoading || isLoadingAccounts) return;
+    if (allocations.length === 0) return;
+
+    const vendor = vendors.find((item) => item.id === vendorId);
+
+    setDebitLines((previous) => {
+      const nextLines = syncCloseMovementLinesWithAllocations({
+        lines: previous,
+        allocations,
+        side: "debit",
+        counterAccountId: vendor?.payable_account_id ?? "",
+        accounts,
+      });
+
+      if (closeMovementLinesMatchAllocations(previous, allocations)) {
+        const previousPrimary = previous[0];
+        const nextPrimary = nextLines[0];
+        if (
+          previous.length === nextLines.length &&
+          previousPrimary?.account_id === nextPrimary?.account_id &&
+          previousPrimary?.amount === nextPrimary?.amount
+        ) {
+          return previous;
+        }
+      }
+      return nextLines;
+    });
+  }, [
+    isInvoiceMode,
+    readOnly,
+    isLoading,
+    isLoadingAccounts,
+    allocations,
+    vendorId,
+    vendors,
+    accounts,
+  ]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
@@ -398,11 +505,9 @@ export function PaymentVoucherForm({
           voucherLineCategoryApi.listCategories("payment", true),
         ]);
 
-        let openMovementsData: Awaited<
-          ReturnType<typeof voucherApi.listOpenMovements>
-        > = [];
+        let openMovementsData: OpenMovement[] = [];
         if (isCloseMovementsForm) {
-          openMovementsData = await voucherApi.listOpenMovements();
+          openMovementsData = [];
         }
 
         if (cancelled) return;
@@ -411,7 +516,7 @@ export function PaymentVoucherForm({
         setCostCenters(costCentersData);
         setLineCategories(categoriesData);
         setCurrencies(currenciesData);
-        setOpenMovements(openMovementsData);
+        setCloseOpenMovements(openMovementsData);
         setAutoNumberEnabled(settings.auto_number_enabled);
 
         const defaultPaymentAccount = typeDefaults.default_account_id ?? "";
@@ -434,6 +539,33 @@ export function PaymentVoucherForm({
         });
 
         if (initialMode !== "edit" || !initialVoucherId) {
+          if (isCloseMovementsForm) {
+            const invoiceId = searchParams.get("invoiceId");
+            const autoAllocate = searchParams.get("autoAllocate") === "1";
+            if (invoiceId && autoAllocate) {
+              const invoiceItems =
+                await invoiceSettlementApi.listOpenItemsForInvoice(invoiceId);
+              if (!cancelled && invoiceItems.length > 0) {
+                const paymentAmount = parseOptionalPaymentAmount(
+                  searchParams.get("payAmount"),
+                );
+                setAllocationOpenLimits(
+                  Object.fromEntries(
+                    invoiceItems.map((item) => [
+                      item.journal_line_id,
+                      item.open_amount,
+                    ]),
+                  ),
+                );
+                setAllocations(
+                  buildVoucherAllocationsFromOpenItems(invoiceItems, {
+                    paymentAmount,
+                  }),
+                );
+              }
+            }
+          }
+
           if (settings.auto_number_enabled) {
             const preview = await voucherApi.peekVoucherNo("payment");
             if (!cancelled) setNextNumberPreview(preview);
@@ -483,8 +615,10 @@ export function PaymentVoucherForm({
         setStatus(details.header.status);
         setDescription(details.header.description ?? "");
         setVendorId(details.header.vendor_id ?? "");
+        setBranchId(details.header.branch_id ?? "");
         setDebitLines(loadedDebits);
         setAllocations(details.allocations);
+        setNettingLines(details.netting_lines ?? []);
       } catch (error) {
         if (!cancelled) showFromError(error);
       } finally {
@@ -540,6 +674,10 @@ export function PaymentVoucherForm({
             : "صرف مبلغ — دائن حساب الدفع تلقائياً، مدين حسابات مقابلة"}
         </p>
       </div>
+
+      {isCloseMovementsForm && initialMode === "create" && (
+        <InvoiceSettlementLinkBanner />
+      )}
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
 
@@ -647,10 +785,23 @@ export function PaymentVoucherForm({
         allowLineDelete={canDeleteLine}
       />
 
-      <VoucherAllocations
+      <CloseMovementSections
+        partyType="vendor"
+        partyId={vendorId}
+        defaultOpenSide="credit"
+        branchId={branchId}
+        onBranchIdChange={setBranchId}
+        costCenters={costCenters}
+        accounts={accounts}
+        voucherType="payment"
+        counterAccountId={paymentAccountId}
+        voucherLines={debitLines}
         allocations={allocations}
-        openMovements={openMovements}
-        onChange={setAllocations}
+        onAllocationsChange={setAllocations}
+        nettingLines={nettingLines}
+        onNettingLinesChange={setNettingLines}
+        openAmountByLineId={openAmountByLineId}
+        onOpenMovementsChange={setCloseOpenMovements}
         readOnly={readOnly || isSaving}
         visible={isInvoiceMode}
       />
@@ -669,6 +820,17 @@ export function PaymentVoucherForm({
           <p className="font-mono text-rose-900">
             دائن حساب الدفع: {formatVoucherAmount(totalDebit, selectedCurrency)}
           </p>
+          {isInvoiceMode && (
+            <p className="font-mono text-blue-900 sm:col-span-2">
+              مجموع التخصيصات:{" "}
+              {formatVoucherAmount(allocationTotal, selectedCurrency)}
+              {!closeMovementLinesMatchAllocations(debitLines, allocations) && (
+                <span className="ms-2 text-rose-700">
+                  — لا يطابق إجمالي المدين
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {canEditPosted && (

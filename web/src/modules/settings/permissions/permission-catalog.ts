@@ -95,6 +95,19 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
+    id: "invoices",
+    label: "الفواتير",
+    permissions: [
+      { key: "invoices.view", label: "عرض الفواتير" },
+      { key: "invoices.create", label: "إنشاء فاتورة" },
+      { key: "invoices.edit", label: "تعديل فاتورة (مسودة)" },
+      {
+        key: "invoices.settings",
+        label: "إعدادات أنماط الفواتير",
+      },
+    ],
+  },
+  {
     id: "settings",
     label: "الإعدادات والإدارة",
     permissions: [
@@ -148,6 +161,9 @@ export const ROLE_PERMISSION_DEFAULTS: Record<AppRole, PermissionKey[]> = {
     "vendors.create",
     "vendors.edit",
     "open_movements.view",
+    "invoices.view",
+    "invoices.create",
+    "invoices.edit",
     "settings.company.view",
   ],
   viewer: [
@@ -161,6 +177,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<AppRole, PermissionKey[]> = {
     "customers.view",
     "vendors.view",
     "open_movements.view",
+    "invoices.view",
     "settings.company.view",
   ],
 };

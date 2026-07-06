@@ -1,13 +1,19 @@
--- =============================================================================
+﻿-- =============================================================================
 -- setup_all.sql — إعداد كامل للتشغيل (ملف واحد)
 -- =============================================================================
 -- شغّل هذا الملف مرة واحدة في Supabase → SQL Editor.
--- يدمج بالترتيب: 00_reset.sql + 01_schema.sql + 02_rls.sql
 --
--- يشمل: المحاسبة، العملات، السندات، المصادقة (profiles)، الصلاحيات
---       (user_permissions / has_permission)، إعدادات الشركة والعملاء/الموردين.
+-- يدمج بالترتيب:
+--   00_reset + 01_schema + 02_rls
+--   + ترقيعات الفواتير/الفروع/المواد/الافتتاحي/الفترات (#27 وما بعدها)
+--   + 06_storage
+--
+-- يشمل: المحاسبة، العملات، السندات، الفواتير، الفروع، المواد،
+--       open_items_view، قيد افتتاحي، فترات محاسبية، المصادقة، الصلاحيات، Storage.
 --
 -- ⚠️ تحذير: يحذف جميع البيانات السابقة ويعيد بناء المخطط من الصفر.
+--
+-- إعادة التوليد:  powershell -File database/build_setup_all.ps1
 -- =============================================================================
 -- =============================================================================
 -- 00_reset.sql — إعادة ضبط كاملة للمخطط المحاسبي
@@ -16,7 +22,33 @@
 -- استخدمه فقط عند إعادة التثبيت من الصفر (تطوير / بيئة اختبار).
 -- =============================================================================
 
+drop view if exists public.open_items_view cascade;
 drop view if exists public.account_direct_balances cascade;
+
+-- جداول الترقيعات (فواتير، فروع، مواد، فترات محاسبية)
+drop table if exists public.invoice_reference_links cascade;
+drop table if exists public.inventory_reservations cascade;
+drop table if exists public.voucher_netting_lines cascade;
+drop table if exists public.accounting_periods cascade;
+drop table if exists public.sales_reps cascade;
+drop table if exists public.invoice_material_lines cascade;
+drop table if exists public.invoice_account_lines cascade;
+drop table if exists public.inventory_transfer_lines cascade;
+drop table if exists public.inventory_movements cascade;
+drop table if exists public.inventory_transfers cascade;
+drop table if exists public.invoices cascade;
+drop table if exists public.invoice_pattern_allowed_materials cascade;
+drop table if exists public.invoice_pattern_allowed_categories cascade;
+drop table if exists public.invoice_pattern_conditions cascade;
+drop table if exists public.invoice_pattern_sequences cascade;
+drop table if exists public.invoice_patterns cascade;
+drop table if exists public.material_units cascade;
+drop table if exists public.materials cascade;
+drop table if exists public.material_categories cascade;
+drop table if exists public.warehouses cascade;
+drop table if exists public.company_inventory_settings cascade;
+drop table if exists public.company_settlement_accounts cascade;
+drop table if exists public.branches cascade;
 
 drop table if exists public.voucher_attachments cascade;
 drop table if exists public.voucher_allocations cascade;
@@ -53,10 +85,10 @@ drop function if exists public.handle_new_user() cascade;
 drop function if exists public.has_permission(text) cascade;
 drop function if exists public.is_admin() cascade;
 drop function if exists public.customers_vendors_validate_accounts() cascade;
-drop function if exists public.delete_voucher_with_journal(uuid) cascade;
-drop function if exists public.is_force_voucher_delete() cascade;
 drop function if exists public.vouchers_validate_parties() cascade;
 drop function if exists public.voucher_lines_validate_account_is_postable() cascade;
+drop function if exists public.delete_voucher_with_journal(uuid) cascade;
+drop function if exists public.is_force_voucher_delete() cascade;
 drop function if exists public.voucher_lines_prevent_delete_when_posted() cascade;
 drop function if exists public.voucher_attachments_validate() cascade;
 drop function if exists public.voucher_allocations_validate() cascade;
@@ -71,7 +103,30 @@ drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, 
 drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
 drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
 drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
+drop function if exists public.get_open_items(uuid, uuid, varchar, uuid, varchar, uuid, boolean, boolean) cascade;
+drop function if exists public.post_invoice(uuid) cascade;
+drop function if exists public.close_invoice_reference(uuid) cascade;
+drop function if exists public.sync_invoice_reference_links() cascade;
+drop function if exists public.peek_invoice_no(uuid) cascade;
+drop function if exists public.reserve_invoice_no(uuid) cascade;
+drop function if exists public.format_invoice_no(varchar, boolean, int, int, int) cascade;
+drop function if exists public.sync_voucher_journal_opening_flag() cascade;
+drop function if exists public.voucher_allocations_apply_amount_base() cascade;
+drop function if exists public.journal_entry_lines_validate_party() cascade;
+drop function if exists public.sync_invoice_reservations(uuid) cascade;
+drop function if exists public.release_invoice_reservations(uuid, varchar) cascade;
+drop function if exists public.is_invoice_posting() cascade;
+drop function if exists public._invoice_add_journal_line(uuid, uuid, varchar, numeric, numeric, uuid, uuid, uuid, uuid, uuid, text) cascade;
+drop function if exists public.get_company_inventory_settings() cascade;
+drop function if exists public.lock_company_inventory_foundation(text) cascade;
+drop function if exists public.company_inventory_settings_guard_locked() cascade;
+drop function if exists public.material_quantity_to_base(numeric, uuid) cascade;
+drop function if exists public.material_quantity_from_base(numeric, uuid) cascade;
+drop function if exists public.material_units_validate() cascade;
+drop function if exists public.materials_require_base_unit() cascade;
+drop function if exists public.accounting_periods_set_updated_at() cascade;
 drop function if exists public.currencies_prevent_direct_rate_change() cascade;
+
 -- =============================================================================
 -- 01_schema.sql — المخطط المحاسبي الكامل (الوضع الحالي)
 -- =============================================================================
@@ -1942,6 +1997,7 @@ from public.currencies c
 where c.is_base = true;
 
 -- تصنيفات أسطر السند: لا بيانات افتراضية — تُعرَّف من إعدادات السندات في التطبيق
+
 -- =============================================================================
 -- 02_rls.sql — سياسات Row Level Security
 -- =============================================================================
@@ -2268,7 +2324,3526 @@ begin
 end $$;
 
 -- =============================================================================
--- 06_storage.sql — Supabase Storage
+-- BEGIN patch_branches.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_branches.sql — الفروع + حسابات التسوية + توسيع مراكز الكلفة
+-- =============================================================================
+-- قرار #27 — أساس الفواتير والمقاصة بين الفروع ومراكز الكلف.
+-- شغّله على قاعدة موجودة بعد 01_schema (أو setup_all).
+-- التالي: patch_materials_minimal.sql (يربط warehouses.branch_id)
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- الفروع
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.branches (
+  id uuid primary key default gen_random_uuid(),
+  branch_code varchar(30) not null unique,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  is_active boolean not null default true,
+  is_head_office boolean not null default false,
+  default_warehouse_id uuid null,
+  default_cost_center_id uuid null references public.cost_centers(id) on delete set null,
+  inventory_account_id uuid null references public.accounts(id) on delete set null,
+  inter_branch_account_id uuid null references public.accounts(id) on delete set null,
+  address text null,
+  phone varchar(50) null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.branches is 'فروع المنشأة — مرتبطة بالفواتير والمستودعات والقيود';
+comment on column public.branches.default_warehouse_id is 'FK إلى warehouses — يُضاف في patch_materials_minimal';
+comment on column public.branches.inter_branch_account_id is 'حساب تسوية وسيط افتراضي لهذا الفرع';
+
+create unique index if not exists idx_branches_single_head_office
+  on public.branches (is_head_office)
+  where is_head_office = true;
+
+create index if not exists idx_branches_active on public.branches(is_active);
+create index if not exists idx_branches_default_cost_center_id
+  on public.branches(default_cost_center_id);
+create index if not exists idx_branches_inventory_account_id
+  on public.branches(inventory_account_id);
+
+-- ---------------------------------------------------------------------------
+-- حسابات التسوية على مستوى الشركة (اختيارية — الوسيط per نمط فاتورة أيضاً)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.company_settlement_accounts (
+  id int primary key default 1 check (id = 1),
+  default_inter_branch_account_id uuid null references public.accounts(id) on delete set null,
+  default_inter_cc_account_id uuid null references public.accounts(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.company_settlement_accounts is
+  'حسابات وسيطة افتراضية للمقاصة — تُورَّث في السندات وتُعدَّل عند الحاجة';
+
+insert into public.company_settlement_accounts (id)
+values (1)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- توسيع مراكز الكلفة (مقاصة CC — قرار #27)
+-- ---------------------------------------------------------------------------
+
+alter table public.cost_centers
+  add column if not exists netting_includes_cash_default boolean not null default false;
+
+alter table public.cost_centers
+  add column if not exists inter_cc_account_id uuid null references public.accounts(id) on delete set null;
+
+comment on column public.cost_centers.netting_includes_cash_default is
+  'افتراضي: المقاصة بين CC تشمل النقد — قابل للتجاوز بصلاحية في السند';
+comment on column public.cost_centers.inter_cc_account_id is
+  'حساب تسوية وسيط افتراضي لهذا المركز';
+
+create index if not exists idx_cost_centers_inter_cc_account_id
+  on public.cost_centers(inter_cc_account_id);
+
+-- ---------------------------------------------------------------------------
+-- بذرة: فرع رئيسي واحد (إن لم يوجد أي فرع)
+-- ---------------------------------------------------------------------------
+
+insert into public.branches (branch_code, name_ar, name_en, is_head_office, is_active)
+select 'MAIN', 'الفرع الرئيسي', 'Head Office', true, true
+where not exists (select 1 from public.branches);
+
+-- ---------------------------------------------------------------------------
+-- محفزات
+-- ---------------------------------------------------------------------------
+
+drop trigger if exists trg_branches_updated_at on public.branches;
+create trigger trg_branches_updated_at
+before update on public.branches
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_company_settlement_accounts_updated_at on public.company_settlement_accounts;
+create trigger trg_company_settlement_accounts_updated_at
+before update on public.company_settlement_accounts
+for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security (نفس نمط MVP — authenticated)
+-- ---------------------------------------------------------------------------
+
+alter table public.branches enable row level security;
+alter table public.company_settlement_accounts enable row level security;
+
+drop policy if exists "branches_select_all" on public.branches;
+create policy "branches_select_all" on public.branches
+  for select to anon, authenticated using (true);
+
+drop policy if exists "branches_insert_all" on public.branches;
+create policy "branches_insert_all" on public.branches
+  for insert to anon, authenticated with check (true);
+
+drop policy if exists "branches_update_all" on public.branches;
+create policy "branches_update_all" on public.branches
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "company_settlement_accounts_select_all" on public.company_settlement_accounts;
+create policy "company_settlement_accounts_select_all" on public.company_settlement_accounts
+  for select to anon, authenticated using (true);
+
+drop policy if exists "company_settlement_accounts_update_admin" on public.company_settlement_accounts;
+create policy "company_settlement_accounts_update_admin" on public.company_settlement_accounts
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+drop policy if exists "company_settlement_accounts_insert_admin" on public.company_settlement_accounts;
+create policy "company_settlement_accounts_insert_admin" on public.company_settlement_accounts
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+-- =============================================================================
+-- BEGIN patch_materials_minimal.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_materials_minimal.sql — مواد ومستودعات (الحد الأدنى للفواتير)
+-- =============================================================================
+-- يتطلب: patch_branches.sql
+-- التالي: patch_company_inventory.sql
+--
+-- نموذج الوحدات: كل مادة لها وحداتها الخاصة (لا جدول وحدات عام مشترك).
+--   - وحدة أساسية واحدة per مادة (is_base_unit = true, factor_to_base = 1)
+--   - وحدات أخرى: factor_to_base = عدد وحدات الأساس في 1 من هذه الوحدة
+--     مثال: أساس=قطعة، علبة=12 → 1 علبة = 12 قطعة
+--     مادة أخرى: علبة=10 → التحويل خاص بتلك المادة فقط
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- أصناف المواد
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.material_categories (
+  id uuid primary key default gen_random_uuid(),
+  category_code varchar(30) not null unique,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  parent_id uuid null references public.material_categories(id) on delete restrict,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint material_categories_parent_not_self check (id is null or id <> parent_id)
+);
+
+comment on table public.material_categories is 'تصنيف المواد — شجرة اختيارية';
+
+create index if not exists idx_material_categories_parent_id
+  on public.material_categories(parent_id);
+create index if not exists idx_material_categories_active
+  on public.material_categories(is_active);
+
+-- ---------------------------------------------------------------------------
+-- المستودعات (مرتبطة بالفرع)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.warehouses (
+  id uuid primary key default gen_random_uuid(),
+  warehouse_code varchar(30) not null unique,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  branch_id uuid not null references public.branches(id) on delete restrict,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.warehouses is 'مستودعات التخزين — كل مستودع تابع لفرع واحد';
+
+create index if not exists idx_warehouses_branch_id on public.warehouses(branch_id);
+create index if not exists idx_warehouses_active on public.warehouses(is_active);
+
+alter table public.branches
+  drop constraint if exists branches_default_warehouse_id_fkey;
+
+alter table public.branches
+  add constraint branches_default_warehouse_id_fkey
+  foreign key (default_warehouse_id) references public.warehouses(id) on delete set null;
+
+-- ---------------------------------------------------------------------------
+-- بطاقة المادة (minimal) — الأسعار per الوحدة الأساسية
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.materials (
+  id uuid primary key default gen_random_uuid(),
+  material_code varchar(30) not null unique,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  category_id uuid null references public.material_categories(id) on delete set null,
+  purchase_price numeric(18, 4) not null default 0 check (purchase_price >= 0),
+  sale_price numeric(18, 4) not null default 0 check (sale_price >= 0),
+  inventory_account_id uuid null references public.accounts(id) on delete set null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.materials is 'بطاقة مادة — purchase_price/sale_price per الوحدة الأساسية';
+comment on column public.materials.purchase_price is 'سعر الشراء لوحدة الأساس';
+comment on column public.materials.sale_price is 'سعر البيع لوحدة الأساس';
+
+create index if not exists idx_materials_category_id on public.materials(category_id);
+create index if not exists idx_materials_inventory_account_id on public.materials(inventory_account_id);
+create index if not exists idx_materials_active on public.materials(is_active);
+
+-- ---------------------------------------------------------------------------
+-- وحدات المادة — معرّفة per مادة (لا تتكرر عالمياً)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.material_units (
+  id uuid primary key default gen_random_uuid(),
+  material_id uuid not null references public.materials(id) on delete cascade,
+  unit_code varchar(30) not null,
+  name_ar varchar(100) not null,
+  name_en varchar(100) null,
+  is_base_unit boolean not null default false,
+  factor_to_base numeric(18, 6) not null check (factor_to_base > 0),
+  is_active boolean not null default true,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (material_id, unit_code),
+  constraint material_units_base_factor check (
+    not is_base_unit or factor_to_base = 1
+  )
+);
+
+comment on table public.material_units is
+  'وحدات قياس خاصة بكل مادة — التحويل للأساس: qty_base = qty × factor_to_base';
+comment on column public.material_units.factor_to_base is
+  '1 من هذه الوحدة = factor_to_base من وحدة الأساس (العلبة 12 → factor_to_base = 12)';
+
+create unique index if not exists idx_material_units_one_base_per_material
+  on public.material_units (material_id)
+  where is_base_unit = true;
+
+create index if not exists idx_material_units_material_id
+  on public.material_units(material_id);
+create index if not exists idx_material_units_active
+  on public.material_units(material_id, is_active);
+
+-- ---------------------------------------------------------------------------
+-- تحويل الكمية إلى وحدة الأساس
+-- ---------------------------------------------------------------------------
+
+create or replace function public.material_quantity_to_base(
+  p_material_unit_id uuid,
+  p_quantity numeric
+)
+returns numeric
+language sql
+stable
+as $$
+  select round((p_quantity * mu.factor_to_base)::numeric, 6)
+  from public.material_units mu
+  where mu.id = p_material_unit_id;
+$$;
+
+comment on function public.material_quantity_to_base(uuid, numeric) is
+  'يحوّل كمية من وحدة المادة إلى مكافئ وحدة الأساس (ضرب factor_to_base)';
+
+create or replace function public.material_quantity_from_base(
+  p_material_unit_id uuid,
+  p_quantity_base numeric
+)
+returns numeric
+language sql
+stable
+as $$
+  select round((p_quantity_base / mu.factor_to_base)::numeric, 6)
+  from public.material_units mu
+  where mu.id = p_material_unit_id
+    and mu.factor_to_base > 0;
+$$;
+
+comment on function public.material_quantity_from_base(uuid, numeric) is
+  'يحوّل من وحدة الأساس إلى وحدة أخرى (قسمة factor_to_base)';
+
+-- ---------------------------------------------------------------------------
+-- تحقق: وحدة أساس واحدة + factor صحيح
+-- ---------------------------------------------------------------------------
+
+create or replace function public.material_units_validate()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_base_count int;
+begin
+  if new.is_base_unit then
+    new.factor_to_base := 1;
+  elsif new.factor_to_base = 1 and not new.is_base_unit then
+    raise exception 'Only the base unit may have factor_to_base = 1.';
+  end if;
+
+  if tg_op = 'INSERT' or new.is_base_unit is distinct from old.is_base_unit then
+    select count(*)
+    into v_base_count
+    from public.material_units mu
+    where mu.material_id = new.material_id
+      and mu.is_base_unit = true
+      and mu.id is distinct from new.id;
+
+    if new.is_base_unit and v_base_count > 0 then
+      raise exception 'Material already has a base unit.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.materials_require_base_unit()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (
+    select 1
+    from public.material_units mu
+    where mu.material_id = new.id
+      and mu.is_base_unit = true
+  ) then
+    raise exception 'Material must have exactly one base unit defined in material_units.';
+  end if;
+  return new;
+end;
+$$;
+
+-- يُفعَّل عند الحاجة — لا نمنع إنشاء مادة قبل إضافة وحداتها في نفس المعاملة
+-- (التحقق في التطبيق عند «اكتمال البطاقة» أو قبل أول فاتورة)
+
+-- ---------------------------------------------------------------------------
+-- بذور أولية
+-- ---------------------------------------------------------------------------
+
+insert into public.material_categories (category_code, name_ar, name_en)
+select 'GENERAL', 'عام', 'General'
+where not exists (select 1 from public.material_categories);
+
+insert into public.warehouses (warehouse_code, name_ar, name_en, branch_id)
+select 'WH-MAIN', 'المستودع الرئيسي', 'Main Warehouse', b.id
+from public.branches b
+where b.branch_code = 'MAIN'
+  and not exists (
+    select 1 from public.warehouses w where w.warehouse_code = 'WH-MAIN'
+  );
+
+update public.branches b
+set default_warehouse_id = w.id
+from public.warehouses w
+where b.branch_code = 'MAIN'
+  and w.warehouse_code = 'WH-MAIN'
+  and b.default_warehouse_id is null;
+
+-- ---------------------------------------------------------------------------
+-- محفزات
+-- ---------------------------------------------------------------------------
+
+drop trigger if exists trg_material_categories_updated_at on public.material_categories;
+create trigger trg_material_categories_updated_at
+before update on public.material_categories
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_warehouses_updated_at on public.warehouses;
+create trigger trg_warehouses_updated_at
+before update on public.warehouses
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_materials_updated_at on public.materials;
+create trigger trg_materials_updated_at
+before update on public.materials
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_material_units_updated_at on public.material_units;
+create trigger trg_material_units_updated_at
+before update on public.material_units
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_material_units_validate on public.material_units;
+create trigger trg_material_units_validate
+before insert or update on public.material_units
+for each row execute function public.material_units_validate();
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security
+-- ---------------------------------------------------------------------------
+
+alter table public.material_categories enable row level security;
+alter table public.warehouses enable row level security;
+alter table public.materials enable row level security;
+alter table public.material_units enable row level security;
+
+drop policy if exists "material_categories_select_all" on public.material_categories;
+create policy "material_categories_select_all" on public.material_categories
+  for select to anon, authenticated using (true);
+drop policy if exists "material_categories_insert_all" on public.material_categories;
+create policy "material_categories_insert_all" on public.material_categories
+  for insert to anon, authenticated with check (true);
+drop policy if exists "material_categories_update_all" on public.material_categories;
+create policy "material_categories_update_all" on public.material_categories
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "warehouses_select_all" on public.warehouses;
+create policy "warehouses_select_all" on public.warehouses
+  for select to anon, authenticated using (true);
+drop policy if exists "warehouses_insert_all" on public.warehouses;
+create policy "warehouses_insert_all" on public.warehouses
+  for insert to anon, authenticated with check (true);
+drop policy if exists "warehouses_update_all" on public.warehouses;
+create policy "warehouses_update_all" on public.warehouses
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "materials_select_all" on public.materials;
+create policy "materials_select_all" on public.materials
+  for select to anon, authenticated using (true);
+drop policy if exists "materials_insert_all" on public.materials;
+create policy "materials_insert_all" on public.materials
+  for insert to anon, authenticated with check (true);
+drop policy if exists "materials_update_all" on public.materials;
+create policy "materials_update_all" on public.materials
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "material_units_select_all" on public.material_units;
+create policy "material_units_select_all" on public.material_units
+  for select to anon, authenticated using (true);
+drop policy if exists "material_units_insert_all" on public.material_units;
+create policy "material_units_insert_all" on public.material_units
+  for insert to anon, authenticated with check (true);
+drop policy if exists "material_units_update_all" on public.material_units;
+create policy "material_units_update_all" on public.material_units
+  for update to anon, authenticated using (true) with check (true);
+
+-- =============================================================================
+-- BEGIN patch_company_inventory.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_company_inventory.sql — إعدادات الجرد والتكلفة (قفل عند أول عملية)
+-- =============================================================================
+-- يتطلب: patch_materials_minimal.sql
+-- التالي: patch_invoices.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- إعدادات المخزون والتكلفة — صف واحد per شركة (مثل party_settings)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.company_inventory_settings (
+  id int primary key default 1 check (id = 1),
+
+  -- ② طريقة الجرد (مقفول بعد foundation_locked)
+  inventory_method varchar(20) null
+    check (inventory_method is null or inventory_method in ('periodic', 'perpetual')),
+
+  -- ③ نظام التكلفة (مقفول)
+  costing_method varchar(30) null
+    check (costing_method is null or costing_method in (
+      'weighted_avg', 'fifo', 'standard', 'last_purchase'
+    )),
+
+  cost_per_warehouse boolean not null default false,
+  cost_per_cost_center boolean not null default false,
+
+  -- دائماً true per قرار المنتج #21 — احتساب مخزون مع كل حركة
+  track_quantity_on_movement boolean not null default true
+    check (track_quantity_on_movement = true),
+
+  -- قفل الإعدادات الأولية (معالج التثبيت أو أول ترحيل مخزني)
+  foundation_locked boolean not null default false,
+  foundation_locked_at timestamptz null,
+  first_posted_inventory_at timestamptz null,
+
+  updated_at timestamptz not null default now()
+);
+
+comment on table public.company_inventory_settings is
+  'إعدادات الجرد والتكلفة — تُختار في المعالج الأولي وتُقفَل بعد أول عملية مخزنية مرحّلة';
+comment on column public.company_inventory_settings.inventory_method is
+  'periodic = جرد دوري | perpetual = جرد مستمر — يحدد شكل قيود المبيعات/المناقلة';
+comment on column public.company_inventory_settings.costing_method is
+  'weighted_avg | fifo | standard | last_purchase';
+comment on column public.company_inventory_settings.foundation_locked is
+  'عند true: لا تعديل على inventory_method, costing_method, cost_per_*';
+
+insert into public.company_inventory_settings (id)
+values (1)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- منع تعديل الحقول المقفولة
+-- ---------------------------------------------------------------------------
+
+create or replace function public.company_inventory_settings_guard_locked()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.foundation_locked and (
+    new.inventory_method is distinct from old.inventory_method
+    or new.costing_method is distinct from old.costing_method
+    or new.cost_per_warehouse is distinct from old.cost_per_warehouse
+    or new.cost_per_cost_center is distinct from old.cost_per_cost_center
+    or new.track_quantity_on_movement is distinct from old.track_quantity_on_movement
+  ) then
+    raise exception
+      'Inventory foundation settings are locked. Cannot change inventory_method, costing_method, or cost separation.';
+  end if;
+
+  if new.foundation_locked and not old.foundation_locked then
+    new.foundation_locked_at := coalesce(new.foundation_locked_at, now());
+  end if;
+
+  if new.foundation_locked and old.foundation_locked
+     and new.foundation_locked_at is distinct from old.foundation_locked_at then
+    -- السماح بتعيين أول مرة فقط
+    if old.foundation_locked_at is not null then
+      new.foundation_locked_at := old.foundation_locked_at;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- يُستدعى لاحقاً عند أول فاتورة/حركة مخزنية مرحّلة
+create or replace function public.lock_company_inventory_foundation(
+  p_first_posted_at timestamptz default now()
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.company_inventory_settings
+  set
+    foundation_locked = true,
+    foundation_locked_at = coalesce(foundation_locked_at, p_first_posted_at),
+    first_posted_inventory_at = coalesce(first_posted_inventory_at, p_first_posted_at)
+  where id = 1
+    and not foundation_locked;
+end;
+$$;
+
+comment on function public.lock_company_inventory_foundation(timestamptz) is
+  'يُقفل إعدادات الجرد/التكلفة بعد أول عملية مخزنية مرحّلة';
+
+-- قراءة الإعدادات (للتطبيق والترحيل لاحقاً)
+create or replace function public.get_company_inventory_settings()
+returns public.company_inventory_settings
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select cis.*
+  from public.company_inventory_settings cis
+  where cis.id = 1;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- محفزات
+-- ---------------------------------------------------------------------------
+
+drop trigger if exists trg_company_inventory_settings_updated_at
+  on public.company_inventory_settings;
+create trigger trg_company_inventory_settings_updated_at
+before update on public.company_inventory_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_company_inventory_settings_guard_locked
+  on public.company_inventory_settings;
+create trigger trg_company_inventory_settings_guard_locked
+before update on public.company_inventory_settings
+for each row execute function public.company_inventory_settings_guard_locked();
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security
+-- ---------------------------------------------------------------------------
+
+alter table public.company_inventory_settings enable row level security;
+
+drop policy if exists "company_inventory_settings_select_all"
+  on public.company_inventory_settings;
+create policy "company_inventory_settings_select_all"
+  on public.company_inventory_settings
+  for select to anon, authenticated using (true);
+
+drop policy if exists "company_inventory_settings_update_admin"
+  on public.company_inventory_settings;
+create policy "company_inventory_settings_update_admin"
+  on public.company_inventory_settings
+  for update to authenticated
+  using (
+    not foundation_locked
+    and (
+      public.is_admin()
+      or public.has_permission('settings.company.edit')
+    )
+  )
+  with check (
+    not foundation_locked
+    and (
+      public.is_admin()
+      or public.has_permission('settings.company.edit')
+    )
+  );
+
+-- السماح بالتحديث عند القفل فقط لحقول غير مقفولة (مثل first_posted_inventory_at)
+drop policy if exists "company_inventory_settings_update_locked_meta"
+  on public.company_inventory_settings;
+create policy "company_inventory_settings_update_locked_meta"
+  on public.company_inventory_settings
+  for update to authenticated
+  using (
+    foundation_locked
+    and (
+      public.is_admin()
+      or public.has_permission('settings.company.edit')
+    )
+  )
+  with check (
+    foundation_locked
+    and (
+      public.is_admin()
+      or public.has_permission('settings.company.edit')
+    )
+  );
+
+drop policy if exists "company_inventory_settings_insert_admin"
+  on public.company_inventory_settings;
+create policy "company_inventory_settings_insert_admin"
+  on public.company_inventory_settings
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+-- =============================================================================
+-- BEGIN patch_journal_dimensions.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_journal_dimensions.sql — أبعاد القيد + الحركات المفتوحة
+-- =============================================================================
+-- يتطلب: patch_company_inventory.sql (و patch_branches.sql للـ FK)
+-- التالي: patch_invoices.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- توسيع أسطر القيد — فرع، طرف، استحقاق، مصدر الفاتورة
+-- ---------------------------------------------------------------------------
+
+alter table public.journal_entry_lines
+  add column if not exists branch_id uuid null references public.branches(id) on delete restrict;
+
+alter table public.journal_entry_lines
+  add column if not exists due_date date null;
+
+alter table public.journal_entry_lines
+  add column if not exists payment_terms_days int null
+    check (payment_terms_days is null or payment_terms_days >= 0);
+
+alter table public.journal_entry_lines
+  add column if not exists party_type varchar(20) null
+    check (party_type is null or party_type in ('customer', 'vendor'));
+
+alter table public.journal_entry_lines
+  add column if not exists party_id uuid null;
+
+alter table public.journal_entry_lines
+  add column if not exists source_invoice_id uuid null;
+
+alter table public.journal_entry_lines
+  add column if not exists source_invoice_line_id uuid null;
+
+alter table public.journal_entry_lines
+  add column if not exists source_return_id uuid null;
+
+comment on column public.journal_entry_lines.branch_id is
+  'فرع السطر — أساس المقاصة بين الفروع';
+comment on column public.journal_entry_lines.party_type is
+  'customer | vendor — مع party_id للذمم المفتوحة';
+comment on column public.journal_entry_lines.source_invoice_id is
+  'FK إلى invoices — يُضاف في patch_invoices.sql';
+comment on column public.journal_entry_lines.source_return_id is
+  'فاتورة مرتجع مصدر — يُضاف FK لاحقاً';
+
+create index if not exists idx_journal_lines_branch_id
+  on public.journal_entry_lines(branch_id);
+create index if not exists idx_journal_lines_due_date
+  on public.journal_entry_lines(due_date);
+create index if not exists idx_journal_lines_party
+  on public.journal_entry_lines(party_type, party_id);
+create index if not exists idx_journal_lines_source_invoice_id
+  on public.journal_entry_lines(source_invoice_id);
+
+-- ---------------------------------------------------------------------------
+-- تحقق: party_type و party_id معاً
+-- ---------------------------------------------------------------------------
+
+create or replace function public.journal_entry_lines_validate_party()
+returns trigger
+language plpgsql
+as $$
+begin
+  if (new.party_type is null) <> (new.party_id is null) then
+    raise exception 'party_type and party_id must both be set or both be null.';
+  end if;
+
+  if new.party_type = 'customer' and new.party_id is not null then
+    if not exists (select 1 from public.customers c where c.id = new.party_id) then
+      raise exception 'party_id does not reference an existing customer.';
+    end if;
+  elsif new.party_type = 'vendor' and new.party_id is not null then
+    if not exists (select 1 from public.vendors v where v.id = new.party_id) then
+      raise exception 'party_id does not reference an existing vendor.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_journal_entry_lines_validate_party on public.journal_entry_lines;
+create trigger trg_journal_entry_lines_validate_party
+before insert or update on public.journal_entry_lines
+for each row execute function public.journal_entry_lines_validate_party();
+
+-- ---------------------------------------------------------------------------
+-- عرض الحركات المفتوحة (خصم تخصيصات السندات المرحّلة فقط)
+-- ---------------------------------------------------------------------------
+
+create or replace view public.open_items_view
+with (security_invoker = true)
+as
+with line_allocations as (
+  select
+    va.target_journal_line_id,
+    coalesce(sum(va.applied_amount), 0)::numeric(18, 2) as allocated_amount
+  from public.voucher_allocations va
+  inner join public.vouchers v on v.id = va.voucher_id
+  where v.status = 'posted'
+  group by va.target_journal_line_id
+)
+select
+  jel.id as journal_line_id,
+  je.id as journal_entry_id,
+  je.entry_no,
+  je.entry_date,
+  jel.account_id,
+  acc.code as account_code,
+  acc.name_ar as account_name,
+  jel.branch_id,
+  br.branch_code,
+  br.name_ar as branch_name,
+  jel.cost_center_id,
+  cc.code as cost_center_code,
+  cc.name_ar as cost_center_name,
+  jel.currency_id,
+  jel.party_type,
+  jel.party_id,
+  jel.source_invoice_id,
+  jel.source_return_id,
+  jel.due_date,
+  jel.payment_terms_days,
+  jel.debit,
+  jel.credit,
+  abs(jel.debit - jel.credit)::numeric(18, 2) as original_amount,
+  coalesce(la.allocated_amount, 0)::numeric(18, 2) as allocated_amount,
+  greatest(
+    abs(jel.debit - jel.credit) - coalesce(la.allocated_amount, 0),
+    0
+  )::numeric(18, 2) as open_amount,
+  case
+    when jel.debit > jel.credit then 'debit'
+    when jel.credit > jel.debit then 'credit'
+    else null
+  end as open_side,
+  case
+    when jel.due_date is null then true
+    when jel.due_date <= current_date then true
+    else false
+  end as is_eligible_for_payment,
+  case
+    when jel.due_date is not null and jel.due_date < current_date then true
+    else false
+  end as is_overdue,
+  jel.line_description,
+  jel.created_at as line_created_at
+from public.journal_entry_lines jel
+inner join public.journal_entries je on je.id = jel.journal_entry_id
+inner join public.accounts acc on acc.id = jel.account_id
+left join public.branches br on br.id = jel.branch_id
+left join public.cost_centers cc on cc.id = jel.cost_center_id
+left join line_allocations la on la.target_journal_line_id = jel.id
+where je.status = 'posted'
+  and (jel.debit > 0 or jel.credit > 0)
+  and greatest(
+    abs(jel.debit - jel.credit) - coalesce(la.allocated_amount, 0),
+    0
+  ) > 0;
+
+comment on view public.open_items_view is
+  'حركات قيد مرحّلة ذات رصيد مفتوح — بعد خصم voucher_allocations من السندات المرحّلة';
+
+-- ---------------------------------------------------------------------------
+-- خدمة جلب الحركات المفتوحة مع فلاتر
+-- ---------------------------------------------------------------------------
+
+create or replace function public.get_open_items(
+  p_branch_id uuid default null,
+  p_cost_center_id uuid default null,
+  p_party_type varchar default null,
+  p_party_id uuid default null,
+  p_open_side varchar default null,
+  p_account_id uuid default null,
+  p_eligible_only boolean default false,
+  p_include_overdue_only boolean default false
+)
+returns setof public.open_items_view
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select oi.*
+  from public.open_items_view oi
+  where (p_branch_id is null or oi.branch_id = p_branch_id)
+    and (p_cost_center_id is null or oi.cost_center_id = p_cost_center_id)
+    and (p_party_type is null or oi.party_type = p_party_type)
+    and (p_party_id is null or oi.party_id = p_party_id)
+    and (p_open_side is null or oi.open_side = p_open_side)
+    and (p_account_id is null or oi.account_id = p_account_id)
+    and (not p_eligible_only or oi.is_eligible_for_payment)
+    and (not p_include_overdue_only or oi.is_overdue)
+  order by oi.due_date nulls last, oi.entry_date, oi.entry_no, oi.journal_line_id;
+$$;
+
+comment on function public.get_open_items is
+  'جلب الحركات المفتوحة — فلاتر فرع، CC، طرف، مدين/دائن، أهلية استحقاق';
+
+-- ---------------------------------------------------------------------------
+-- توسيع journal_entries — فرع اختياري على مستوى القيد (للتقارير)
+-- ---------------------------------------------------------------------------
+
+alter table public.journal_entries
+  add column if not exists branch_id uuid null references public.branches(id) on delete restrict;
+
+comment on column public.journal_entries.branch_id is
+  'فرع القيد — اختياري؛ التفصيل per سطر في journal_entry_lines';
+
+create index if not exists idx_journal_entries_branch_id
+  on public.journal_entries(branch_id);
+
+-- ---------------------------------------------------------------------------
+-- توسيع السندات — فرع (للمقاصة per فرع)
+-- ---------------------------------------------------------------------------
+
+alter table public.vouchers
+  add column if not exists branch_id uuid null references public.branches(id) on delete restrict;
+
+comment on column public.vouchers.branch_id is
+  'فرع السند — يقيّد التخصيصات والمقاصة per فرع';
+
+create index if not exists idx_vouchers_branch_id on public.vouchers(branch_id);
+
+-- =============================================================================
+-- BEGIN patch_invoices.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_invoices.sql — أنماط الفواتير، الفواتير، المناقلة، حركات المخزون
+-- =============================================================================
+-- يتطلب: patch_journal_dimensions.sql
+-- التالي: patch_settlement_foundation.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- أنماط الفواتير
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.invoice_patterns (
+  id uuid primary key default gen_random_uuid(),
+  pattern_no int generated by default as identity,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  secrecy_level smallint not null default 0 check (secrecy_level between 0 and 4),
+  direction varchar(10) not null
+    check (direction in ('input', 'output')),
+  commercial_kind varchar(30) not null,
+  is_return boolean not null default false,
+  is_opening_stock boolean not null default false,
+  is_active boolean not null default true,
+  sort_order int not null default 0,
+
+  default_branch_id uuid null references public.branches(id) on delete set null,
+  default_cost_center_id uuid null references public.cost_centers(id) on delete set null,
+  default_currency_id uuid null references public.currencies(id) on delete set null,
+  default_warehouse_id uuid null references public.warehouses(id) on delete set null,
+  target_warehouse_id uuid null references public.warehouses(id) on delete set null,
+
+  default_creditor_account_id uuid null references public.accounts(id) on delete set null,
+  default_debtor_account_id uuid null references public.accounts(id) on delete set null,
+  default_cost_account_id uuid null references public.accounts(id) on delete set null,
+  default_inventory_account_id uuid null references public.accounts(id) on delete set null,
+  default_discount_account_id uuid null references public.accounts(id) on delete set null,
+  default_extra_account_id uuid null references public.accounts(id) on delete set null,
+  default_commission_account_id uuid null references public.accounts(id) on delete set null,
+  transfer_transit_account_id uuid null references public.accounts(id) on delete set null,
+  inter_branch_account_id uuid null references public.accounts(id) on delete set null,
+  inter_cc_account_id uuid null references public.accounts(id) on delete set null,
+  paired_input_pattern_id uuid null references public.invoice_patterns(id) on delete set null,
+
+  generate_journal boolean not null default true,
+  auto_post boolean not null default false,
+  cc_on_goods boolean not null default false,
+  cc_on_party boolean not null default false,
+  load_party_currency boolean not null default false,
+  warehouse_movement boolean not null default false,
+
+  pricing_material_mode varchar(30) null,
+  pricing_cost_mode varchar(30) null,
+  pricing_consumed_mode varchar(30) null,
+
+  reference_settings jsonb not null default '{}'::jsonb,
+
+  default_settlement_mode varchar(10) not null default 'credit'
+    check (default_settlement_mode in ('credit', 'cash')),
+  payment_terms_enabled boolean not null default false,
+  default_payment_terms_days int null check (default_payment_terms_days is null or default_payment_terms_days >= 0),
+
+  rounding_enabled boolean not null default false,
+  rounding_target varchar(20) null
+    check (rounding_target is null or rounding_target in ('invoice_total', 'line_amount', 'both')),
+  rounding_mode varchar(10) null
+    check (rounding_mode is null or rounding_mode in ('nearest', 'up', 'down')),
+  rounding_step numeric(18, 4) null check (rounding_step is null or rounding_step > 0),
+
+  numbering_start int not null default 1 check (numbering_start >= 1),
+  numbering_prefix varchar(20) not null default 'INV',
+  numbering_padding int not null default 4 check (numbering_padding between 1 and 8),
+  numbering_include_year boolean not null default true,
+  numbering_reset varchar(10) not null default 'yearly'
+    check (numbering_reset in ('never', 'yearly', 'monthly')),
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_invoice_patterns_active_sort
+  on public.invoice_patterns(is_active, sort_order);
+create index if not exists idx_invoice_patterns_commercial_kind
+  on public.invoice_patterns(commercial_kind);
+
+-- ---------------------------------------------------------------------------
+-- ترقيم per نمط
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.invoice_pattern_sequences (
+  pattern_id uuid primary key references public.invoice_patterns(id) on delete cascade,
+  last_number int not null default 0 check (last_number >= 0),
+  sequence_year int not null default extract(year from current_date)::int,
+  sequence_month int not null default extract(month from current_date)::int,
+  updated_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- شروط النمط (§8) — 1:1
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.invoice_pattern_conditions (
+  pattern_id uuid primary key references public.invoice_patterns(id) on delete cascade,
+  require_party boolean not null default false,
+  require_sales_rep boolean not null default false,
+  require_cost_center boolean not null default false,
+  require_receipt_no boolean not null default false,
+  prevent_duplicate_receipt_no boolean not null default false,
+  require_payment_terms boolean not null default false,
+  require_warehouse boolean not null default false,
+  require_color boolean not null default false,
+  require_size boolean not null default false,
+  require_source boolean not null default false,
+  require_caliber boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.invoice_pattern_allowed_materials (
+  pattern_id uuid not null references public.invoice_patterns(id) on delete cascade,
+  material_id uuid not null references public.materials(id) on delete cascade,
+  primary key (pattern_id, material_id)
+);
+
+create table if not exists public.invoice_pattern_allowed_categories (
+  pattern_id uuid not null references public.invoice_patterns(id) on delete cascade,
+  category_id uuid not null references public.material_categories(id) on delete cascade,
+  primary key (pattern_id, category_id)
+);
+
+-- ---------------------------------------------------------------------------
+-- مستندات المناقلة
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.inventory_transfers (
+  id uuid primary key default gen_random_uuid(),
+  transfer_no varchar(40) not null unique,
+  from_branch_id uuid not null references public.branches(id) on delete restrict,
+  to_branch_id uuid not null references public.branches(id) on delete restrict,
+  from_warehouse_id uuid not null references public.warehouses(id) on delete restrict,
+  to_warehouse_id uuid not null references public.warehouses(id) on delete restrict,
+  out_invoice_id uuid null,
+  in_invoice_id uuid null,
+  status varchar(25) not null default 'draft'
+    check (status in (
+      'draft', 'dispatched', 'in_transit', 'partially_received', 'received', 'cancelled'
+    )),
+  shipped_at timestamptz null,
+  received_at timestamptz null,
+  notes text null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint inventory_transfers_distinct_branches check (from_branch_id <> to_branch_id)
+);
+
+create index if not exists idx_inventory_transfers_status on public.inventory_transfers(status);
+create index if not exists idx_inventory_transfers_from_branch on public.inventory_transfers(from_branch_id);
+create index if not exists idx_inventory_transfers_to_branch on public.inventory_transfers(to_branch_id);
+
+-- ---------------------------------------------------------------------------
+-- الفواتير
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.invoices (
+  id uuid primary key default gen_random_uuid(),
+  pattern_id uuid not null references public.invoice_patterns(id) on delete restrict,
+  invoice_no varchar(40) not null unique,
+  invoice_date date not null,
+
+  branch_id uuid not null references public.branches(id) on delete restrict,
+  cost_center_id uuid null references public.cost_centers(id) on delete restrict,
+
+  customer_id uuid null references public.customers(id) on delete restrict,
+  vendor_id uuid null references public.vendors(id) on delete restrict,
+
+  creditor_account_id uuid null references public.accounts(id) on delete restrict,
+  debtor_account_id uuid null references public.accounts(id) on delete restrict,
+  cost_account_id uuid null references public.accounts(id) on delete restrict,
+  inventory_account_id uuid null references public.accounts(id) on delete restrict,
+  discount_account_id uuid null references public.accounts(id) on delete restrict,
+  extra_account_id uuid null references public.accounts(id) on delete restrict,
+  commission_account_id uuid null references public.accounts(id) on delete restrict,
+  transfer_transit_account_id uuid null references public.accounts(id) on delete restrict,
+
+  reference_invoice_id uuid null references public.invoices(id) on delete restrict,
+  inventory_transfer_id uuid null references public.inventory_transfers(id) on delete restrict,
+  transfer_role varchar(5) null check (transfer_role is null or transfer_role in ('out', 'in')),
+
+  settlement_mode varchar(10) not null default 'credit'
+    check (settlement_mode in ('credit', 'cash')),
+  payment_terms_days int null check (payment_terms_days is null or payment_terms_days >= 0),
+  due_date date null,
+
+  currency_id uuid null references public.currencies(id) on delete restrict,
+  exchange_rate numeric(18, 6) null check (exchange_rate is null or exchange_rate > 0),
+  receipt_no varchar(50) null,
+
+  description text null,
+  status varchar(20) not null default 'draft'
+    check (status in ('draft', 'posted', 'cancelled')),
+  journal_entry_id uuid null unique references public.journal_entries(id) on delete restrict,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint invoices_single_party check (
+    not (customer_id is not null and vendor_id is not null)
+  )
+);
+
+create index if not exists idx_invoices_pattern_id on public.invoices(pattern_id);
+create index if not exists idx_invoices_status on public.invoices(status);
+create index if not exists idx_invoices_date on public.invoices(invoice_date);
+create index if not exists idx_invoices_branch_id on public.invoices(branch_id);
+create index if not exists idx_invoices_customer_id on public.invoices(customer_id);
+create index if not exists idx_invoices_vendor_id on public.invoices(vendor_id);
+create index if not exists idx_invoices_inventory_transfer_id on public.invoices(inventory_transfer_id);
+create unique index if not exists idx_invoices_receipt_no_unique
+  on public.invoices(receipt_no)
+  where receipt_no is not null and trim(receipt_no) <> '';
+
+-- ربط المناقلة بالفواتير (بعد إنشاء invoices)
+alter table public.inventory_transfers
+  drop constraint if exists inventory_transfers_out_invoice_id_fkey;
+alter table public.inventory_transfers
+  add constraint inventory_transfers_out_invoice_id_fkey
+  foreign key (out_invoice_id) references public.invoices(id) on delete set null;
+
+alter table public.inventory_transfers
+  drop constraint if exists inventory_transfers_in_invoice_id_fkey;
+alter table public.inventory_transfers
+  add constraint inventory_transfers_in_invoice_id_fkey
+  foreign key (in_invoice_id) references public.invoices(id) on delete set null;
+
+-- FK مصدر الفاتورة على أسطر القيد
+alter table public.journal_entry_lines
+  drop constraint if exists journal_entry_lines_source_invoice_id_fkey;
+alter table public.journal_entry_lines
+  add constraint journal_entry_lines_source_invoice_id_fkey
+  foreign key (source_invoice_id) references public.invoices(id) on delete set null;
+
+-- ---------------------------------------------------------------------------
+-- أسطر المواد
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.invoice_material_lines (
+  id uuid primary key default gen_random_uuid(),
+  invoice_id uuid not null references public.invoices(id) on delete cascade,
+  line_no int not null check (line_no > 0),
+
+  branch_id uuid not null references public.branches(id) on delete restrict,
+  cost_center_id uuid null references public.cost_centers(id) on delete restrict,
+  warehouse_id uuid not null references public.warehouses(id) on delete restrict,
+
+  material_id uuid not null references public.materials(id) on delete restrict,
+  material_unit_id uuid not null references public.material_units(id) on delete restrict,
+  quantity numeric(18, 6) not null check (quantity > 0),
+  quantity_base numeric(18, 6) not null check (quantity_base > 0),
+  unit_price numeric(18, 4) not null default 0 check (unit_price >= 0),
+  line_amount numeric(18, 2) not null default 0 check (line_amount >= 0),
+
+  qty_shipped numeric(18, 6) null check (qty_shipped is null or qty_shipped >= 0),
+  qty_received numeric(18, 6) null check (qty_received is null or qty_received >= 0),
+
+  color varchar(50) null,
+  size varchar(50) null,
+  source varchar(100) null,
+  caliber varchar(50) null,
+  line_description text null,
+
+  created_at timestamptz not null default now(),
+  unique (invoice_id, line_no)
+);
+
+create index if not exists idx_invoice_material_lines_invoice_id
+  on public.invoice_material_lines(invoice_id);
+create index if not exists idx_invoice_material_lines_material_id
+  on public.invoice_material_lines(material_id);
+create index if not exists idx_invoice_material_lines_warehouse_id
+  on public.invoice_material_lines(warehouse_id);
+
+-- ---------------------------------------------------------------------------
+-- أسطر الحسابات الإضافية
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.invoice_account_lines (
+  id uuid primary key default gen_random_uuid(),
+  invoice_id uuid not null references public.invoices(id) on delete cascade,
+  line_no int not null check (line_no > 0),
+
+  branch_id uuid not null references public.branches(id) on delete restrict,
+  cost_center_id uuid null references public.cost_centers(id) on delete restrict,
+  account_id uuid not null references public.accounts(id) on delete restrict,
+  side varchar(10) not null check (side in ('debit', 'credit')),
+  amount numeric(18, 2) not null check (amount > 0),
+  description text null,
+
+  created_at timestamptz not null default now(),
+  unique (invoice_id, line_no)
+);
+
+create index if not exists idx_invoice_account_lines_invoice_id
+  on public.invoice_account_lines(invoice_id);
+create index if not exists idx_invoice_account_lines_account_id
+  on public.invoice_account_lines(account_id);
+
+-- ---------------------------------------------------------------------------
+-- أسطر مستند المناقلة
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.inventory_transfer_lines (
+  id uuid primary key default gen_random_uuid(),
+  transfer_id uuid not null references public.inventory_transfers(id) on delete cascade,
+  line_no int not null check (line_no > 0),
+  material_id uuid not null references public.materials(id) on delete restrict,
+  material_unit_id uuid not null references public.material_units(id) on delete restrict,
+  qty_ordered numeric(18, 6) not null default 0 check (qty_ordered >= 0),
+  qty_shipped numeric(18, 6) not null default 0 check (qty_shipped >= 0),
+  qty_received numeric(18, 6) not null default 0 check (qty_received >= 0),
+  unit_cost_at_ship numeric(18, 4) null check (unit_cost_at_ship is null or unit_cost_at_ship >= 0),
+  out_line_id uuid null references public.invoice_material_lines(id) on delete set null,
+  in_line_id uuid null references public.invoice_material_lines(id) on delete set null,
+  unique (transfer_id, line_no)
+);
+
+create index if not exists idx_inventory_transfer_lines_transfer_id
+  on public.inventory_transfer_lines(transfer_id);
+
+-- ---------------------------------------------------------------------------
+-- دفتر حركات المخزون (تتبع مع كل حركة)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.inventory_movements (
+  id uuid primary key default gen_random_uuid(),
+  movement_date date not null default current_date,
+  material_id uuid not null references public.materials(id) on delete restrict,
+  warehouse_id uuid not null references public.warehouses(id) on delete restrict,
+  branch_id uuid not null references public.branches(id) on delete restrict,
+  cost_center_id uuid null references public.cost_centers(id) on delete restrict,
+  quantity_delta numeric(18, 6) not null,
+  quantity_base_delta numeric(18, 6) not null,
+  unit_cost numeric(18, 4) null check (unit_cost is null or unit_cost >= 0),
+  total_cost numeric(18, 2) null,
+  movement_kind varchar(30) not null
+    check (movement_kind in (
+      'sale', 'purchase', 'transfer_out', 'transfer_in',
+      'return_sale', 'return_purchase', 'opening_stock', 'adjustment'
+    )),
+  source_type varchar(30) not null,
+  source_id uuid not null,
+  source_line_id uuid null,
+  journal_line_id uuid null references public.journal_entry_lines(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_inventory_movements_material_wh
+  on public.inventory_movements(material_id, warehouse_id, movement_date);
+create index if not exists idx_inventory_movements_source
+  on public.inventory_movements(source_type, source_id);
+
+-- ---------------------------------------------------------------------------
+-- ترقيم الفواتير per نمط
+-- ---------------------------------------------------------------------------
+
+create or replace function public.format_invoice_no(
+  p_prefix varchar,
+  p_include_year boolean,
+  p_year int,
+  p_sequence int,
+  p_padding int
+)
+returns varchar
+language sql
+immutable
+as $$
+  select case
+    when p_include_year then
+      p_prefix || '-' || p_year::text || '-' || lpad(p_sequence::text, p_padding, '0')
+    else
+      p_prefix || '-' || lpad(p_sequence::text, p_padding, '0')
+  end;
+$$;
+
+create or replace function public.peek_invoice_no(p_pattern_id uuid)
+returns varchar
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  v_pattern public.invoice_patterns%rowtype;
+  v_seq public.invoice_pattern_sequences%rowtype;
+  v_year int := extract(year from current_date)::int;
+  v_month int := extract(month from current_date)::int;
+  v_next int;
+begin
+  select * into v_pattern from public.invoice_patterns where id = p_pattern_id;
+  if not found then
+    raise exception 'Invoice pattern not found.';
+  end if;
+
+  select * into v_seq from public.invoice_pattern_sequences where pattern_id = p_pattern_id;
+  if not found then
+    v_next := v_pattern.numbering_start;
+  else
+    v_next := v_seq.last_number + 1;
+    if v_pattern.numbering_reset = 'yearly'
+       and v_pattern.numbering_include_year
+       and v_seq.sequence_year <> v_year then
+      v_next := v_pattern.numbering_start;
+    elsif v_pattern.numbering_reset = 'monthly'
+       and (v_seq.sequence_year <> v_year or v_seq.sequence_month <> v_month) then
+      v_next := v_pattern.numbering_start;
+    end if;
+  end if;
+
+  return public.format_invoice_no(
+    v_pattern.numbering_prefix,
+    v_pattern.numbering_include_year,
+    v_year,
+    v_next,
+    v_pattern.numbering_padding
+  );
+end;
+$$;
+
+create or replace function public.reserve_invoice_no(p_pattern_id uuid)
+returns varchar
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_pattern public.invoice_patterns%rowtype;
+  v_seq public.invoice_pattern_sequences%rowtype;
+  v_year int := extract(year from current_date)::int;
+  v_month int := extract(month from current_date)::int;
+  v_next int;
+  v_no varchar(40);
+begin
+  select * into v_pattern from public.invoice_patterns where id = p_pattern_id;
+  if not found then
+    raise exception 'Invoice pattern not found.';
+  end if;
+
+  insert into public.invoice_pattern_sequences (pattern_id)
+  values (p_pattern_id)
+  on conflict (pattern_id) do nothing;
+
+  select * into v_seq
+  from public.invoice_pattern_sequences
+  where pattern_id = p_pattern_id
+  for update;
+
+  if v_pattern.numbering_reset = 'yearly'
+     and v_pattern.numbering_include_year
+     and v_seq.sequence_year <> v_year then
+    v_seq.last_number := 0;
+    v_seq.sequence_year := v_year;
+  elsif v_pattern.numbering_reset = 'monthly'
+     and (v_seq.sequence_year <> v_year or v_seq.sequence_month <> v_month) then
+    v_seq.last_number := 0;
+    v_seq.sequence_year := v_year;
+    v_seq.sequence_month := v_month;
+  end if;
+
+  v_next := greatest(v_seq.last_number + 1, v_pattern.numbering_start);
+  v_no := public.format_invoice_no(
+    v_pattern.numbering_prefix,
+    v_pattern.numbering_include_year,
+    v_year,
+    v_next,
+    v_pattern.numbering_padding
+  );
+
+  update public.invoice_pattern_sequences
+  set
+    last_number = v_next,
+    sequence_year = v_year,
+    sequence_month = v_month,
+    updated_at = now()
+  where pattern_id = p_pattern_id;
+
+  return v_no;
+end;
+$$;
+
+grant execute on function public.peek_invoice_no(uuid) to anon, authenticated;
+grant execute on function public.reserve_invoice_no(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- محفزات: إنشاء شروط + تسلسل عند نمط جديد
+-- ---------------------------------------------------------------------------
+
+create or replace function public.invoice_patterns_after_insert()
+returns trigger
+language plpgsql
+as $$
+begin
+  insert into public.invoice_pattern_conditions (pattern_id)
+  values (new.id)
+  on conflict (pattern_id) do nothing;
+
+  insert into public.invoice_pattern_sequences (pattern_id, last_number)
+  values (new.id, greatest(new.numbering_start - 1, 0))
+  on conflict (pattern_id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_invoice_patterns_after_insert on public.invoice_patterns;
+create trigger trg_invoice_patterns_after_insert
+after insert on public.invoice_patterns
+for each row execute function public.invoice_patterns_after_insert();
+
+-- ---------------------------------------------------------------------------
+-- محفزات: أسطر المواد — quantity_base + مبلغ السطر
+-- ---------------------------------------------------------------------------
+
+create or replace function public.invoice_material_lines_apply_quantities()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_factor numeric(18, 6);
+begin
+  if not exists (
+    select 1 from public.material_units mu
+    where mu.id = new.material_unit_id
+      and mu.material_id = new.material_id
+  ) then
+    raise exception 'material_unit_id does not belong to material_id.';
+  end if;
+
+  new.quantity_base := public.material_quantity_to_base(new.material_unit_id, new.quantity);
+  new.line_amount := round((new.quantity * new.unit_price)::numeric, 2);
+
+  if exists (
+    select 1 from public.warehouses w
+    where w.id = new.warehouse_id
+      and w.branch_id <> new.branch_id
+  ) then
+    raise exception 'warehouse branch must match line branch_id.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_invoice_material_lines_apply_quantities on public.invoice_material_lines;
+create trigger trg_invoice_material_lines_apply_quantities
+before insert or update on public.invoice_material_lines
+for each row execute function public.invoice_material_lines_apply_quantities();
+
+-- ---------------------------------------------------------------------------
+-- محفزات: تحقق الفاتورة والطرف
+-- ---------------------------------------------------------------------------
+
+create or replace function public.invoices_validate_parties()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_customer_active boolean;
+  v_vendor_active boolean;
+begin
+  if new.customer_id is not null then
+    select is_active into v_customer_active from public.customers where id = new.customer_id;
+    if not coalesce(v_customer_active, false) then
+      raise exception 'Referenced customer must be active.';
+    end if;
+  end if;
+
+  if new.vendor_id is not null then
+    select is_active into v_vendor_active from public.vendors where id = new.vendor_id;
+    if not coalesce(v_vendor_active, false) then
+      raise exception 'Referenced vendor must be active.';
+    end if;
+  end if;
+
+  if new.transfer_role is not null and new.inventory_transfer_id is null then
+    raise exception 'transfer_role requires inventory_transfer_id.';
+  end if;
+
+  if new.settlement_mode = 'credit'
+     and new.payment_terms_days is not null
+     and new.due_date is null then
+    new.due_date := new.invoice_date + new.payment_terms_days;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_invoices_validate_parties on public.invoices;
+create trigger trg_invoices_validate_parties
+before insert or update on public.invoices
+for each row execute function public.invoices_validate_parties();
+
+-- ---------------------------------------------------------------------------
+-- updated_at
+-- ---------------------------------------------------------------------------
+
+drop trigger if exists trg_invoice_patterns_updated_at on public.invoice_patterns;
+create trigger trg_invoice_patterns_updated_at
+before update on public.invoice_patterns
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_invoice_pattern_conditions_updated_at on public.invoice_pattern_conditions;
+create trigger trg_invoice_pattern_conditions_updated_at
+before update on public.invoice_pattern_conditions
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_invoice_pattern_sequences_updated_at on public.invoice_pattern_sequences;
+create trigger trg_invoice_pattern_sequences_updated_at
+before update on public.invoice_pattern_sequences
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_invoices_updated_at on public.invoices;
+create trigger trg_invoices_updated_at
+before update on public.invoices
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_inventory_transfers_updated_at on public.inventory_transfers;
+create trigger trg_inventory_transfers_updated_at
+before update on public.inventory_transfers
+for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Row Level Security
+-- ---------------------------------------------------------------------------
+
+alter table public.invoice_patterns enable row level security;
+alter table public.invoice_pattern_sequences enable row level security;
+alter table public.invoice_pattern_conditions enable row level security;
+alter table public.invoice_pattern_allowed_materials enable row level security;
+alter table public.invoice_pattern_allowed_categories enable row level security;
+alter table public.invoices enable row level security;
+alter table public.invoice_material_lines enable row level security;
+alter table public.invoice_account_lines enable row level security;
+alter table public.inventory_transfers enable row level security;
+alter table public.inventory_transfer_lines enable row level security;
+alter table public.inventory_movements enable row level security;
+
+-- أنماط الفواتير
+drop policy if exists "invoice_patterns_select_all" on public.invoice_patterns;
+create policy "invoice_patterns_select_all" on public.invoice_patterns
+  for select to anon, authenticated using (true);
+drop policy if exists "invoice_patterns_insert_all" on public.invoice_patterns;
+create policy "invoice_patterns_insert_all" on public.invoice_patterns
+  for insert to anon, authenticated with check (true);
+drop policy if exists "invoice_patterns_update_all" on public.invoice_patterns;
+create policy "invoice_patterns_update_all" on public.invoice_patterns
+  for update to anon, authenticated using (true) with check (true);
+
+-- جداول مساعدة للأنماط
+drop policy if exists "invoice_pattern_sequences_select_all" on public.invoice_pattern_sequences;
+create policy "invoice_pattern_sequences_select_all" on public.invoice_pattern_sequences
+  for select to anon, authenticated using (true);
+drop policy if exists "invoice_pattern_sequences_insert_all" on public.invoice_pattern_sequences;
+create policy "invoice_pattern_sequences_insert_all" on public.invoice_pattern_sequences
+  for insert to anon, authenticated with check (true);
+drop policy if exists "invoice_pattern_sequences_update_all" on public.invoice_pattern_sequences;
+create policy "invoice_pattern_sequences_update_all" on public.invoice_pattern_sequences
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "invoice_pattern_conditions_select_all" on public.invoice_pattern_conditions;
+create policy "invoice_pattern_conditions_select_all" on public.invoice_pattern_conditions
+  for select to anon, authenticated using (true);
+drop policy if exists "invoice_pattern_conditions_insert_all" on public.invoice_pattern_conditions;
+create policy "invoice_pattern_conditions_insert_all" on public.invoice_pattern_conditions
+  for insert to anon, authenticated with check (true);
+drop policy if exists "invoice_pattern_conditions_update_all" on public.invoice_pattern_conditions;
+create policy "invoice_pattern_conditions_update_all" on public.invoice_pattern_conditions
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "invoice_pattern_allowed_materials_all" on public.invoice_pattern_allowed_materials;
+create policy "invoice_pattern_allowed_materials_all" on public.invoice_pattern_allowed_materials
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "invoice_pattern_allowed_categories_all" on public.invoice_pattern_allowed_categories;
+create policy "invoice_pattern_allowed_categories_all" on public.invoice_pattern_allowed_categories
+  for all to anon, authenticated using (true) with check (true);
+
+-- الفواتير وأسطرها
+drop policy if exists "invoices_select_all" on public.invoices;
+create policy "invoices_select_all" on public.invoices
+  for select to anon, authenticated using (true);
+drop policy if exists "invoices_insert_all" on public.invoices;
+create policy "invoices_insert_all" on public.invoices
+  for insert to anon, authenticated with check (true);
+drop policy if exists "invoices_update_all" on public.invoices;
+create policy "invoices_update_all" on public.invoices
+  for update to anon, authenticated using (true) with check (true);
+
+drop policy if exists "invoice_material_lines_all" on public.invoice_material_lines;
+create policy "invoice_material_lines_all" on public.invoice_material_lines
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "invoice_account_lines_all" on public.invoice_account_lines;
+create policy "invoice_account_lines_all" on public.invoice_account_lines
+  for all to anon, authenticated using (true) with check (true);
+
+-- المناقلة والمخزون
+drop policy if exists "inventory_transfers_all" on public.inventory_transfers;
+create policy "inventory_transfers_all" on public.inventory_transfers
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "inventory_transfer_lines_all" on public.inventory_transfer_lines;
+create policy "inventory_transfer_lines_all" on public.inventory_transfer_lines
+  for all to anon, authenticated using (true) with check (true);
+
+drop policy if exists "inventory_movements_select_all" on public.inventory_movements;
+create policy "inventory_movements_select_all" on public.inventory_movements
+  for select to anon, authenticated using (true);
+drop policy if exists "inventory_movements_insert_all" on public.inventory_movements;
+create policy "inventory_movements_insert_all" on public.inventory_movements
+  for insert to anon, authenticated with check (true);
+
+-- =============================================================================
+-- BEGIN patch_invoice_seeds.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_invoice_seeds.sql — أنماط فواتير جاهزة (§12)
+-- =============================================================================
+-- يتطلب: patch_invoices.sql
+-- الحسابات الافتراضية NULL — يُضبط من الواجهة أو الإعداد الأولي
+-- =============================================================================
+
+-- مبيعات
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind,
+  numbering_prefix, default_settlement_mode, payment_terms_enabled,
+  default_payment_terms_days, warehouse_movement, cc_on_goods, cc_on_party,
+  sort_order
+)
+select
+  'مبيعات', 'Sales', 'output', 'sale',
+  'SAL', 'credit', true, 90, true, true, true, 10
+where not exists (
+  select 1 from public.invoice_patterns where commercial_kind = 'sale' and name_ar = 'مبيعات'
+);
+
+-- مشتريات
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind,
+  numbering_prefix, default_settlement_mode, payment_terms_enabled,
+  default_payment_terms_days, warehouse_movement, sort_order
+)
+select
+  'مشتريات', 'Purchases', 'input', 'purchase',
+  'PUR', 'credit', true, 60, true, 20
+where not exists (
+  select 1 from public.invoice_patterns where commercial_kind = 'purchase' and name_ar = 'مشتريات'
+);
+
+-- مناقلة إخراج
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind,
+  numbering_prefix, warehouse_movement, generate_journal, sort_order
+)
+select
+  'مناقلة — إخراج', 'Transfer Out', 'output', 'transfer_out',
+  'TRO', true, true, 30
+where not exists (
+  select 1 from public.invoice_patterns where commercial_kind = 'transfer_out'
+);
+
+-- مناقلة إدخال
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind,
+  numbering_prefix, warehouse_movement, generate_journal, sort_order
+)
+select
+  'مناقلة — إدخال', 'Transfer In', 'input', 'transfer_in',
+  'TRI', true, true, 40
+where not exists (
+  select 1 from public.invoice_patterns where commercial_kind = 'transfer_in'
+);
+
+-- ربط out → in
+update public.invoice_patterns out_p
+set paired_input_pattern_id = in_p.id
+from public.invoice_patterns in_p
+where out_p.commercial_kind = 'transfer_out'
+  and in_p.commercial_kind = 'transfer_in'
+  and out_p.paired_input_pattern_id is null;
+
+-- مرتجع مبيعات
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind, is_return,
+  numbering_prefix, warehouse_movement, sort_order
+)
+select
+  'مرتجع مبيعات', 'Sales Return', 'input', 'return_sale', true,
+  'RSR', true, 50
+where not exists (
+  select 1 from public.invoice_patterns where commercial_kind = 'return_sale'
+);
+
+-- مرتجع مشتريات
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind, is_return,
+  numbering_prefix, warehouse_movement, sort_order
+)
+select
+  'مرتجع مشتريات', 'Purchase Return', 'output', 'return_purchase', true,
+  'RPR', true, 60
+where not exists (
+  select 1 from public.invoice_patterns where commercial_kind = 'return_purchase'
+);
+
+-- بضاعة أول المدة
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind, is_opening_stock,
+  numbering_prefix, warehouse_movement, sort_order
+)
+select
+  'بضاعة أول المدة', 'Opening Stock', 'input', 'opening_stock', true,
+  'OPS', true, 70
+where not exists (
+  select 1 from public.invoice_patterns where commercial_kind = 'opening_stock'
+);
+
+-- نسخ نقدي (اختيارية)
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind,
+  numbering_prefix, default_settlement_mode, payment_terms_enabled,
+  warehouse_movement, cc_on_goods, cc_on_party, sort_order
+)
+select
+  'مبيعات نقدي', 'Cash Sales', 'output', 'sale',
+  'SAL-C', 'cash', false, true, true, true, 11
+where not exists (
+  select 1 from public.invoice_patterns where name_ar = 'مبيعات نقدي'
+);
+
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind,
+  numbering_prefix, default_settlement_mode, payment_terms_enabled,
+  warehouse_movement, sort_order
+)
+select
+  'مشتريات نقدي', 'Cash Purchases', 'input', 'purchase',
+  'PUR-C', 'cash', false, true, 21
+where not exists (
+  select 1 from public.invoice_patterns where name_ar = 'مشتريات نقدي'
+);
+
+-- =============================================================================
+-- BEGIN patch_invoice_reservation_discount.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_invoice_reservation_discount.sql — حجز، تخفيض، مندوبي مبيعات
+-- =============================================================================
+-- يتطلب: patch_invoices.sql
+-- الترتيب: patch #9
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- تبويب التخفيض + الحجز على أنماط الفواتير (§14)
+-- ---------------------------------------------------------------------------
+
+alter table public.invoice_patterns
+  add column if not exists discount_enabled boolean not null default false;
+
+alter table public.invoice_patterns
+  add column if not exists max_discount_percent numeric(5, 2) null
+    check (max_discount_percent is null or (max_discount_percent >= 0 and max_discount_percent <= 100));
+
+alter table public.invoice_patterns
+  add column if not exists discount_applies_to varchar(10) null
+    check (discount_applies_to is null or discount_applies_to in ('line', 'invoice'));
+
+alter table public.invoice_patterns
+  add column if not exists reservation_enabled boolean not null default false;
+
+alter table public.invoice_patterns
+  add column if not exists reserve_on_save boolean not null default true;
+
+alter table public.invoice_patterns
+  add column if not exists release_on_cancel boolean not null default true;
+
+alter table public.invoice_patterns
+  add column if not exists reservation_days int null
+    check (reservation_days is null or reservation_days > 0);
+
+-- ---------------------------------------------------------------------------
+-- مندوبو مبيعات (minimal — يُوسَّع لاحقاً مع قسم المندوب)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.sales_reps (
+  id uuid primary key default gen_random_uuid(),
+  rep_code varchar(20) not null unique,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_sales_reps_active on public.sales_reps(is_active);
+
+alter table public.invoices
+  add column if not exists sales_rep_id uuid null references public.sales_reps(id) on delete set null;
+
+create index if not exists idx_invoices_sales_rep_id on public.invoices(sales_rep_id);
+
+-- ---------------------------------------------------------------------------
+-- RLS
+-- ---------------------------------------------------------------------------
+
+alter table public.sales_reps enable row level security;
+
+drop policy if exists "sales_reps_select_all" on public.sales_reps;
+create policy "sales_reps_select_all" on public.sales_reps
+  for select to anon, authenticated using (true);
+
+drop policy if exists "sales_reps_insert_all" on public.sales_reps;
+create policy "sales_reps_insert_all" on public.sales_reps
+  for insert to anon, authenticated with check (true);
+
+drop policy if exists "sales_reps_update_all" on public.sales_reps;
+create policy "sales_reps_update_all" on public.sales_reps
+  for update to anon, authenticated using (true) with check (true);
+
+drop trigger if exists trg_sales_reps_updated_at on public.sales_reps;
+create trigger trg_sales_reps_updated_at
+before update on public.sales_reps
+for each row execute function public.set_updated_at();
+
+-- مندوب تجريبي (اختياري — يُحذف أو يُعدَّل من الواجهة لاحقاً)
+insert into public.sales_reps (rep_code, name_ar, name_en)
+select 'REP01', 'مندوب تجريبي', 'Sample Rep'
+where not exists (select 1 from public.sales_reps where rep_code = 'REP01');
+
+-- =============================================================================
+-- BEGIN patch_invoice_discount_rounding.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_invoice_discount_rounding.sql — خصم الفاتورة، تدوير، حجز مخزون
+-- =============================================================================
+-- يتطلب: patch_invoice_reservation_discount.sql
+-- الترتيب: patch #10
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- خصم تجاري على أسطر المواد والفاتورة
+-- ---------------------------------------------------------------------------
+
+alter table public.invoice_material_lines
+  add column if not exists discount_percent numeric(5, 2) null
+    check (discount_percent is null or (discount_percent >= 0 and discount_percent <= 100));
+
+alter table public.invoice_material_lines
+  add column if not exists discount_amount numeric(18, 2) not null default 0
+    check (discount_amount >= 0);
+
+alter table public.invoices
+  add column if not exists invoice_discount_percent numeric(5, 2) null
+    check (invoice_discount_percent is null or (invoice_discount_percent >= 0 and invoice_discount_percent <= 100));
+
+alter table public.invoices
+  add column if not exists invoice_discount_amount numeric(18, 2) not null default 0
+    check (invoice_discount_amount >= 0);
+
+-- ---------------------------------------------------------------------------
+-- محفز أسطر المواد — مبلغ صافٍ بعد الخصم
+-- ---------------------------------------------------------------------------
+
+create or replace function public.invoice_material_lines_apply_quantities()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_gross numeric(18, 4);
+  v_discount numeric(18, 2);
+begin
+  if not exists (
+    select 1 from public.material_units mu
+    where mu.id = new.material_unit_id
+      and mu.material_id = new.material_id
+  ) then
+    raise exception 'material_unit_id does not belong to material_id.';
+  end if;
+
+  new.quantity_base := public.material_quantity_to_base(new.material_unit_id, new.quantity);
+  v_gross := new.quantity * new.unit_price;
+
+  if new.discount_percent is not null and new.discount_percent > 0 then
+    v_discount := round((v_gross * new.discount_percent / 100)::numeric, 2);
+    new.discount_amount := v_discount;
+  else
+    v_discount := coalesce(new.discount_amount, 0);
+    if v_discount > v_gross then
+      raise exception 'discount_amount cannot exceed line gross amount.';
+    end if;
+  end if;
+
+  new.line_amount := round((v_gross - v_discount)::numeric, 2);
+
+  if exists (
+    select 1 from public.warehouses w
+    where w.id = new.warehouse_id
+      and w.branch_id <> new.branch_id
+  ) then
+    raise exception 'warehouse branch must match line branch_id.';
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- حجز المخزون لمسودات الفواتير
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.inventory_reservations (
+  id uuid primary key default gen_random_uuid(),
+  invoice_id uuid not null references public.invoices(id) on delete cascade,
+  invoice_line_id uuid not null references public.invoice_material_lines(id) on delete cascade,
+  material_id uuid not null references public.materials(id) on delete restrict,
+  warehouse_id uuid not null references public.warehouses(id) on delete restrict,
+  quantity numeric(18, 6) not null check (quantity > 0),
+  quantity_base numeric(18, 6) not null check (quantity_base > 0),
+  status varchar(20) not null default 'active'
+    check (status in ('active', 'released', 'fulfilled')),
+  expires_at timestamptz null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (invoice_line_id)
+);
+
+create index if not exists idx_inventory_reservations_invoice
+  on public.inventory_reservations(invoice_id, status);
+create index if not exists idx_inventory_reservations_material_wh
+  on public.inventory_reservations(material_id, warehouse_id, status);
+
+alter table public.inventory_reservations enable row level security;
+
+drop policy if exists "inventory_reservations_all" on public.inventory_reservations;
+create policy "inventory_reservations_all" on public.inventory_reservations
+  for all to anon, authenticated using (true) with check (true);
+
+drop trigger if exists trg_inventory_reservations_updated_at on public.inventory_reservations;
+create trigger trg_inventory_reservations_updated_at
+before update on public.inventory_reservations
+for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- مزامنة حجوزات الفاتورة بعد الحفظ
+-- ---------------------------------------------------------------------------
+
+create or replace function public.sync_invoice_reservations(p_invoice_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inv public.invoices%rowtype;
+  v_pat public.invoice_patterns%rowtype;
+  v_expires timestamptz;
+  v_row record;
+begin
+  select * into v_inv from public.invoices where id = p_invoice_id;
+  if not found then
+    raise exception 'invoice not found.';
+  end if;
+
+  select * into v_pat from public.invoice_patterns where id = v_inv.pattern_id;
+
+  if v_inv.status <> 'draft'
+     or not v_pat.reservation_enabled
+     or not v_pat.reserve_on_save
+     or not v_pat.warehouse_movement then
+    update public.inventory_reservations
+    set status = 'released', updated_at = now()
+    where invoice_id = p_invoice_id and status = 'active';
+    return;
+  end if;
+
+  v_expires := case
+    when v_pat.reservation_days is not null and v_pat.reservation_days > 0
+    then now() + (v_pat.reservation_days || ' days')::interval
+    else null
+  end;
+
+  update public.inventory_reservations
+  set status = 'released', updated_at = now()
+  where invoice_id = p_invoice_id
+    and status = 'active'
+    and invoice_line_id not in (
+      select id from public.invoice_material_lines where invoice_id = p_invoice_id
+    );
+
+  for v_row in
+    select iml.*
+    from public.invoice_material_lines iml
+    where iml.invoice_id = p_invoice_id
+  loop
+    insert into public.inventory_reservations (
+      invoice_id, invoice_line_id, material_id, warehouse_id,
+      quantity, quantity_base, status, expires_at
+    )
+    values (
+      p_invoice_id, v_row.id, v_row.material_id, v_row.warehouse_id,
+      v_row.quantity, v_row.quantity_base, 'active', v_expires
+    )
+    on conflict (invoice_line_id) do update set
+      material_id = excluded.material_id,
+      warehouse_id = excluded.warehouse_id,
+      quantity = excluded.quantity,
+      quantity_base = excluded.quantity_base,
+      status = 'active',
+      expires_at = excluded.expires_at,
+      updated_at = now();
+  end loop;
+end;
+$$;
+
+grant execute on function public.sync_invoice_reservations(uuid) to anon, authenticated;
+
+-- تحرير الحجز عند الترحيل
+create or replace function public.release_invoice_reservations(p_invoice_id uuid, p_status varchar)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.inventory_reservations
+  set status = p_status, updated_at = now()
+  where invoice_id = p_invoice_id and status = 'active';
+end;
+$$;
+
+grant execute on function public.release_invoice_reservations(uuid, varchar) to anon, authenticated;
+
+-- =============================================================================
+-- BEGIN patch_settlement_foundation.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_settlement_foundation.sql — أساس مقاصة CC والفروع
+-- =============================================================================
+-- يتطلب: patch_invoice_seeds.sql
+-- التالي: patch_post_invoice.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- توسيع voucher_allocations
+-- ---------------------------------------------------------------------------
+
+alter table public.voucher_allocations
+  add column if not exists allocation_type varchar(20) not null default 'close'
+    check (allocation_type in ('close', 'netting_cc', 'netting_branch'));
+
+alter table public.voucher_allocations
+  add column if not exists applied_amount_base numeric(18, 2) null
+    check (applied_amount_base is null or applied_amount_base >= 0);
+
+alter table public.voucher_allocations
+  add column if not exists source_branch_id uuid null references public.branches(id) on delete restrict;
+
+alter table public.voucher_allocations
+  add column if not exists target_branch_id uuid null references public.branches(id) on delete restrict;
+
+alter table public.voucher_allocations
+  add column if not exists source_cost_center_id uuid null references public.cost_centers(id) on delete restrict;
+
+alter table public.voucher_allocations
+  add column if not exists target_cost_center_id uuid null references public.cost_centers(id) on delete restrict;
+
+comment on column public.voucher_allocations.allocation_type is
+  'close = إغلاق ذمة | netting_cc | netting_branch';
+
+create index if not exists idx_voucher_allocations_allocation_type
+  on public.voucher_allocations(allocation_type);
+create index if not exists idx_voucher_allocations_target_branch_id
+  on public.voucher_allocations(target_branch_id);
+
+-- تعبئة applied_amount_base من السند عند الإدراج (إن وُجد سعر صرف)
+create or replace function public.voucher_allocations_apply_amount_base()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_rate numeric(18, 6);
+begin
+  select coalesce(nullif(v.exchange_rate, 0), 1)
+  into v_rate
+  from public.vouchers v
+  where v.id = new.voucher_id;
+
+  new.applied_amount_base := public.to_base_amount(new.applied_amount, v_rate);
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_voucher_allocations_apply_amount_base on public.voucher_allocations;
+create trigger trg_voucher_allocations_apply_amount_base
+before insert or update on public.voucher_allocations
+for each row execute function public.voucher_allocations_apply_amount_base();
+
+-- ---------------------------------------------------------------------------
+-- أسطر المقاصة على السند (CC / فرع)
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.voucher_netting_lines (
+  id uuid primary key default gen_random_uuid(),
+  voucher_id uuid not null references public.vouchers(id) on delete cascade,
+  netting_kind varchar(10) not null check (netting_kind in ('cc', 'branch')),
+  from_cc_id uuid null references public.cost_centers(id) on delete restrict,
+  to_cc_id uuid null references public.cost_centers(id) on delete restrict,
+  from_branch_id uuid null references public.branches(id) on delete restrict,
+  to_branch_id uuid null references public.branches(id) on delete restrict,
+  amount numeric(18, 2) not null check (amount > 0),
+  currency_id uuid null references public.currencies(id) on delete restrict,
+  includes_cash boolean not null default false,
+  inter_account_id uuid null references public.accounts(id) on delete restrict,
+  note text null,
+  created_at timestamptz not null default now(),
+  constraint voucher_netting_lines_cc_required check (
+    netting_kind <> 'cc'
+    or (from_cc_id is not null and to_cc_id is not null and from_cc_id <> to_cc_id)
+  ),
+  constraint voucher_netting_lines_branch_required check (
+    netting_kind <> 'branch'
+    or (from_branch_id is not null and to_branch_id is not null and from_branch_id <> to_branch_id)
+  )
+);
+
+create index if not exists idx_voucher_netting_lines_voucher_id
+  on public.voucher_netting_lines(voucher_id);
+
+alter table public.voucher_netting_lines enable row level security;
+
+drop policy if exists "voucher_netting_lines_all" on public.voucher_netting_lines;
+create policy "voucher_netting_lines_all" on public.voucher_netting_lines
+  for all to anon, authenticated using (true) with check (true);
+
+-- ---------------------------------------------------------------------------
+-- إعادة بناء open_items_view (تخصيصات موسّعة — نفس المنطق)
+-- ---------------------------------------------------------------------------
+
+create or replace view public.open_items_view
+with (security_invoker = true)
+as
+with line_allocations as (
+  select
+    va.target_journal_line_id,
+    coalesce(sum(va.applied_amount), 0)::numeric(18, 2) as allocated_amount
+  from public.voucher_allocations va
+  inner join public.vouchers v on v.id = va.voucher_id
+  where v.status = 'posted'
+  group by va.target_journal_line_id
+)
+select
+  jel.id as journal_line_id,
+  je.id as journal_entry_id,
+  je.entry_no,
+  je.entry_date,
+  jel.account_id,
+  acc.code as account_code,
+  acc.name_ar as account_name,
+  jel.branch_id,
+  br.branch_code,
+  br.name_ar as branch_name,
+  jel.cost_center_id,
+  cc.code as cost_center_code,
+  cc.name_ar as cost_center_name,
+  jel.currency_id,
+  jel.party_type,
+  jel.party_id,
+  jel.source_invoice_id,
+  jel.source_return_id,
+  jel.due_date,
+  jel.payment_terms_days,
+  jel.debit,
+  jel.credit,
+  abs(jel.debit - jel.credit)::numeric(18, 2) as original_amount,
+  coalesce(la.allocated_amount, 0)::numeric(18, 2) as allocated_amount,
+  greatest(
+    abs(jel.debit - jel.credit) - coalesce(la.allocated_amount, 0),
+    0
+  )::numeric(18, 2) as open_amount,
+  case
+    when jel.debit > jel.credit then 'debit'
+    when jel.credit > jel.debit then 'credit'
+    else null
+  end as open_side,
+  case
+    when jel.due_date is null then true
+    when jel.due_date <= current_date then true
+    else false
+  end as is_eligible_for_payment,
+  case
+    when jel.due_date is not null and jel.due_date < current_date then true
+    else false
+  end as is_overdue,
+  jel.line_description,
+  jel.created_at as line_created_at
+from public.journal_entry_lines jel
+inner join public.journal_entries je on je.id = jel.journal_entry_id
+inner join public.accounts acc on acc.id = jel.account_id
+left join public.branches br on br.id = jel.branch_id
+left join public.cost_centers cc on cc.id = jel.cost_center_id
+left join line_allocations la on la.target_journal_line_id = jel.id
+where je.status = 'posted'
+  and (jel.debit > 0 or jel.credit > 0)
+  and greatest(
+    abs(jel.debit - jel.credit) - coalesce(la.allocated_amount, 0),
+    0
+  ) > 0;
+
+-- =============================================================================
+-- BEGIN patch_post_invoice.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_post_invoice.sql — ترحيل الفاتورة إلى قيد + حركة مخزون
+-- =============================================================================
+-- يتطلب: patch_settlement_foundation.sql
+-- =============================================================================
+
+create or replace function public.is_invoice_posting()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce(current_setting('app.invoice_posting', true), '') = 'true';
+$$;
+
+-- ---------------------------------------------------------------------------
+-- إدراج سطر قيد مساعد
+-- ---------------------------------------------------------------------------
+
+create or replace function public._invoice_add_journal_line(
+  p_journal_entry_id uuid,
+  p_account_id uuid,
+  p_debit numeric,
+  p_credit numeric,
+  p_description text,
+  p_cost_center_id uuid,
+  p_branch_id uuid,
+  p_currency_id uuid,
+  p_exchange_rate numeric,
+  p_party_type varchar default null,
+  p_party_id uuid default null,
+  p_due_date date default null,
+  p_payment_terms_days int default null,
+  p_source_invoice_id uuid default null,
+  p_source_invoice_line_id uuid default null
+)
+returns uuid
+language plpgsql
+as $$
+declare
+  v_line_id uuid;
+  v_rate numeric(18, 6);
+begin
+  if p_account_id is null then
+    raise exception 'Journal line requires account_id.';
+  end if;
+
+  if (p_debit > 0 and p_credit > 0) or (p_debit = 0 and p_credit = 0) then
+    raise exception 'Journal line must have either debit or credit.';
+  end if;
+
+  v_rate := coalesce(nullif(p_exchange_rate, 0), 1);
+
+  insert into public.journal_entry_lines (
+    journal_entry_id,
+    account_id,
+    debit,
+    credit,
+    line_description,
+    cost_center_id,
+    branch_id,
+    currency_id,
+    exchange_rate,
+    debit_base,
+    credit_base,
+    party_type,
+    party_id,
+    due_date,
+    payment_terms_days,
+    source_invoice_id,
+    source_invoice_line_id
+  )
+  values (
+    p_journal_entry_id,
+    p_account_id,
+    coalesce(p_debit, 0),
+    coalesce(p_credit, 0),
+    p_description,
+    p_cost_center_id,
+    p_branch_id,
+    p_currency_id,
+    v_rate,
+    public.to_base_amount(coalesce(p_debit, 0), v_rate),
+    public.to_base_amount(coalesce(p_credit, 0), v_rate),
+    p_party_type,
+    p_party_id,
+    p_due_date,
+    p_payment_terms_days,
+    p_source_invoice_id,
+    p_source_invoice_line_id
+  )
+  returning id into v_line_id;
+
+  return v_line_id;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- ترحيل الفاتورة
+-- ---------------------------------------------------------------------------
+
+create or replace function public.post_invoice(p_invoice_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inv public.invoices%rowtype;
+  v_pat public.invoice_patterns%rowtype;
+  v_inv_settings public.company_inventory_settings%rowtype;
+  v_je_id uuid;
+  v_entry_no varchar(40);
+  v_rate numeric(18, 6);
+  v_creditor uuid;
+  v_debtor uuid;
+  v_cost uuid;
+  v_inventory uuid;
+  v_transit uuid;
+  v_material_total numeric(18, 2) := 0;
+  v_account_debit numeric(18, 2) := 0;
+  v_account_credit numeric(18, 2) := 0;
+  v_je_debit numeric(18, 2);
+  v_je_credit numeric(18, 2);
+  v_party_type varchar(20);
+  v_party_id uuid;
+  v_row record;
+  v_line_cost numeric(18, 2);
+  v_has_materials boolean;
+  v_discount_acct uuid;
+  v_invoice_disc numeric(18, 2) := 0;
+  v_line_gross numeric(18, 2);
+  v_line_disc numeric(18, 2);
+  v_round_step numeric(18, 4);
+  v_party_total numeric(18, 2);
+  v_rounded_total numeric(18, 2);
+  v_rounding_diff numeric(18, 2);
+begin
+  perform set_config('app.invoice_posting', 'true', true);
+
+  select * into v_inv from public.invoices where id = p_invoice_id for update;
+  if not found then
+    raise exception 'Invoice not found.';
+  end if;
+
+  if v_inv.status = 'posted' then
+    raise exception 'Invoice is already posted.';
+  end if;
+
+  if v_inv.status = 'cancelled' then
+    raise exception 'Cannot post cancelled invoice.';
+  end if;
+
+  select * into v_pat from public.invoice_patterns where id = v_inv.pattern_id;
+  select * into v_inv_settings from public.company_inventory_settings where id = 1;
+
+  v_creditor := coalesce(v_inv.creditor_account_id, v_pat.default_creditor_account_id);
+  v_debtor := coalesce(v_inv.debtor_account_id, v_pat.default_debtor_account_id);
+  v_cost := coalesce(v_inv.cost_account_id, v_pat.default_cost_account_id);
+  v_inventory := coalesce(v_inv.inventory_account_id, v_pat.default_inventory_account_id);
+  v_transit := coalesce(v_inv.transfer_transit_account_id, v_pat.transfer_transit_account_id);
+  v_rate := coalesce(nullif(v_inv.exchange_rate, 0), 1);
+
+  select coalesce(sum(iml.line_amount), 0)
+  into v_material_total
+  from public.invoice_material_lines iml
+  where iml.invoice_id = p_invoice_id;
+
+  select
+    coalesce(sum(case when ial.side = 'debit' then ial.amount else 0 end), 0),
+    coalesce(sum(case when ial.side = 'credit' then ial.amount else 0 end), 0)
+  into v_account_debit, v_account_credit
+  from public.invoice_account_lines ial
+  where ial.invoice_id = p_invoice_id;
+
+  v_has_materials := exists (
+    select 1 from public.invoice_material_lines iml where iml.invoice_id = p_invoice_id
+  );
+
+  if v_has_materials and v_inv_settings.inventory_method is null then
+    raise exception 'Configure inventory_method in company_inventory_settings before posting.';
+  end if;
+
+  if not v_has_materials and v_account_debit = 0 and v_account_credit = 0 then
+    raise exception 'Cannot post empty invoice.';
+  end if;
+
+  if v_inv.customer_id is not null then
+    v_party_type := 'customer';
+    v_party_id := v_inv.customer_id;
+  elsif v_inv.vendor_id is not null then
+    v_party_type := 'vendor';
+    v_party_id := v_inv.vendor_id;
+  else
+    v_party_type := null;
+    v_party_id := null;
+  end if;
+
+  v_entry_no := 'JE-' || v_inv.invoice_no;
+
+  insert into public.journal_entries (
+    entry_no,
+    entry_date,
+    description,
+    status,
+    source_type,
+    source_id,
+    branch_id
+  )
+  values (
+    v_entry_no,
+    v_inv.invoice_date,
+    coalesce(v_inv.description, 'مرحّل من فاتورة ' || v_inv.invoice_no),
+    'posted',
+    'invoice',
+    p_invoice_id,
+    v_inv.branch_id
+  )
+  returning id into v_je_id;
+
+  -- أسطر الحسابات الإضافية
+  for v_row in
+    select * from public.invoice_account_lines ial
+    where ial.invoice_id = p_invoice_id
+    order by ial.line_no
+  loop
+    perform public._invoice_add_journal_line(
+      v_je_id,
+      v_row.account_id,
+      case when v_row.side = 'debit' then v_row.amount else 0 end,
+      case when v_row.side = 'credit' then v_row.amount else 0 end,
+      coalesce(v_row.description, 'حساب إضافي — فاتورة ' || v_inv.invoice_no),
+      v_row.cost_center_id,
+      v_row.branch_id,
+      v_inv.currency_id,
+      v_rate,
+      null, null, null, null,
+      p_invoice_id,
+      v_row.id
+    );
+  end loop;
+
+  v_discount_acct := coalesce(v_inv.discount_account_id, v_pat.default_discount_account_id);
+
+  -- مواد + قيود حسب النوع التجاري
+  case v_pat.commercial_kind
+  when 'sale' then
+    if v_creditor is null or v_debtor is null then
+      raise exception 'Sale invoice requires creditor and debtor accounts.';
+    end if;
+
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      v_line_gross := round((v_row.quantity * v_row.unit_price)::numeric, 2);
+      v_line_disc := coalesce(v_row.discount_amount, 0);
+
+      if v_line_disc > 0 then
+        if v_discount_acct is null then
+          raise exception 'Line discount requires discount_account_id on invoice or pattern.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_line_gross,
+          'مبيعات — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_discount_acct, v_line_disc, 0,
+          'خصم سطر — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, v_row.line_amount, 0,
+          case when v_inv.settlement_mode = 'credit' then 'ذمم عميل' else 'نقدي' end,
+          coalesce(v_row.cost_center_id, v_inv.cost_center_id), v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+          case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.due_date else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.payment_terms_days else null end,
+          p_invoice_id, v_row.id
+        );
+      else
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_row.line_amount,
+          'مبيعات — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null,
+          p_invoice_id, v_row.id
+        );
+
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, v_row.line_amount, 0,
+          case when v_inv.settlement_mode = 'credit' then 'ذمم عميل' else 'نقدي' end,
+          coalesce(v_row.cost_center_id, v_inv.cost_center_id), v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+          case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.due_date else null end,
+          case when v_inv.settlement_mode = 'credit' then v_inv.payment_terms_days else null end,
+          p_invoice_id, v_row.id
+        );
+      end if;
+
+      if v_inv_settings.inventory_method = 'perpetual'
+         and v_cost is not null and v_inventory is not null then
+        v_line_cost := round((v_row.quantity_base * v_row.purchase_price)::numeric, 2);
+        if v_line_cost > 0 then
+          perform public._invoice_add_journal_line(
+            v_je_id, v_cost, v_line_cost, 0,
+            'تكلفة مبيعات', v_row.cost_center_id, v_row.branch_id,
+            v_inv.currency_id, v_rate,
+            null, null, null, null, p_invoice_id, v_row.id
+          );
+          perform public._invoice_add_journal_line(
+            v_je_id, v_inventory, 0, v_line_cost,
+            'مخزون', v_row.cost_center_id, v_row.branch_id,
+            v_inv.currency_id, v_rate,
+            null, null, null, null, p_invoice_id, v_row.id
+          );
+        end if;
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        -v_row.quantity, -v_row.quantity_base,
+        v_row.purchase_price, v_row.line_amount,
+        'sale', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+  when 'purchase' then
+    if v_creditor is null then
+      raise exception 'Purchase invoice requires creditor account (payable/cash).';
+    end if;
+
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      v_line_gross := round((v_row.quantity * v_row.unit_price)::numeric, 2);
+      v_line_disc := coalesce(v_row.discount_amount, 0);
+
+      if v_line_disc > 0 and v_discount_acct is null then
+        raise exception 'Line discount requires discount_account_id on invoice or pattern.';
+      end if;
+
+      if v_inv_settings.inventory_method = 'perpetual' then
+        if v_inventory is null then
+          raise exception 'Perpetual purchase requires inventory account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, case when v_line_disc > 0 then v_line_gross else v_row.line_amount end, 0,
+          'مشتريات — مخزون', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      else
+        if v_debtor is null then
+          raise exception 'Periodic purchase requires debtor/purchases account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, case when v_line_disc > 0 then v_line_gross else v_row.line_amount end, 0,
+          'مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      if v_line_disc > 0 then
+        perform public._invoice_add_journal_line(
+          v_je_id, v_discount_acct, 0, v_line_disc,
+          'خصم سطر — ' || v_inv.invoice_no,
+          v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      perform public._invoice_add_journal_line(
+        v_je_id, v_creditor, 0, v_row.line_amount,
+        case when v_inv.settlement_mode = 'credit' then 'ذمم مورد' else 'نقدي' end,
+        coalesce(v_row.cost_center_id, v_inv.cost_center_id), v_row.branch_id,
+        v_inv.currency_id, v_rate,
+        case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+        case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+        case when v_inv.settlement_mode = 'credit' then v_inv.due_date else null end,
+        case when v_inv.settlement_mode = 'credit' then v_inv.payment_terms_days else null end,
+        p_invoice_id, v_row.id
+      );
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        v_row.quantity, v_row.quantity_base,
+        v_row.unit_price, v_row.line_amount,
+        'purchase', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+  when 'transfer_out' then
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      v_line_cost := round((v_row.quantity_base * v_row.purchase_price)::numeric, 2);
+
+      if v_inv_settings.inventory_method = 'perpetual' then
+        if v_inventory is null then
+          raise exception 'Transfer out (perpetual) requires inventory account.';
+        end if;
+        if v_transit is null then
+          raise exception 'Transfer out (perpetual) requires transit account on pattern/invoice.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_transit, v_line_cost, 0,
+          'بضاعة بالطريق — إخراج', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, 0, v_line_cost,
+          'مخزون مصدر — إخراج', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        -v_row.quantity, -v_row.quantity_base,
+        v_row.purchase_price, v_line_cost,
+        'transfer_out', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+    if v_inv.inventory_transfer_id is not null then
+      update public.inventory_transfers
+      set status = 'dispatched', shipped_at = coalesce(shipped_at, now()), out_invoice_id = p_invoice_id
+      where id = v_inv.inventory_transfer_id;
+    end if;
+
+  when 'transfer_in' then
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      v_line_cost := round((v_row.quantity_base * v_row.purchase_price)::numeric, 2);
+
+      if v_inv_settings.inventory_method = 'perpetual' then
+        if v_inventory is null or v_transit is null then
+          raise exception 'Transfer in (perpetual) requires inventory and transit accounts.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, v_line_cost, 0,
+          'مخزون هدف — إدخال', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_transit, 0, v_line_cost,
+          'إغلاق بالطريق — إدخال', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        coalesce(v_row.qty_received, v_row.quantity),
+        v_row.quantity_base,
+        v_row.purchase_price, v_line_cost,
+        'transfer_in', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+    if v_inv.inventory_transfer_id is not null then
+      update public.inventory_transfers
+      set
+        status = case
+          when exists (
+            select 1 from public.inventory_transfer_lines itl
+            where itl.transfer_id = v_inv.inventory_transfer_id
+              and itl.qty_received < itl.qty_shipped
+              and itl.qty_shipped > 0
+          ) then 'partially_received'
+          else 'received'
+        end,
+        received_at = coalesce(received_at, now()),
+        in_invoice_id = p_invoice_id
+      where id = v_inv.inventory_transfer_id;
+    end if;
+
+  when 'return_sale' then
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      perform public._invoice_add_journal_line(
+        v_je_id, v_creditor, v_row.line_amount, 0,
+        'مرتجع مبيعات', v_row.cost_center_id, v_row.branch_id,
+        v_inv.currency_id, v_rate,
+        null, null, null, null, p_invoice_id, v_row.id
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, v_debtor, 0, v_row.line_amount,
+        'ذمم عميل — مرتجع', v_row.cost_center_id, v_row.branch_id,
+        v_inv.currency_id, v_rate,
+        v_party_type, v_party_id, v_inv.due_date, v_inv.payment_terms_days,
+        p_invoice_id, v_row.id
+      );
+
+      if v_inv_settings.inventory_method = 'perpetual'
+         and v_cost is not null and v_inventory is not null then
+        v_line_cost := round((v_row.quantity_base * v_row.purchase_price)::numeric, 2);
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, v_line_cost, 0,
+          'مخزون — مرتجع', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate, null, null, null, null, p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_cost, 0, v_line_cost,
+          'تكلفة — مرتجع', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate, null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        v_row.quantity, v_row.quantity_base,
+        v_row.purchase_price, v_row.line_amount,
+        'return_sale', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+  when 'return_purchase' then
+    if v_creditor is null then
+      raise exception 'Return purchase requires creditor account (payable).';
+    end if;
+
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      if v_inv_settings.inventory_method = 'perpetual' then
+        if v_inventory is null then
+          raise exception 'Return purchase (perpetual) requires inventory account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, v_row.line_amount, 0,
+          'ذمم مورد — مرتجع مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          v_party_type, v_party_id, v_inv.due_date, v_inv.payment_terms_days,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, 0, v_row.line_amount,
+          'مخزون — مرتجع مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      else
+        if v_debtor is null then
+          raise exception 'Return purchase (periodic) requires debtor/purchases account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, v_row.line_amount, 0,
+          'ذمم مورد — مرتجع مشتريات', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          v_party_type, v_party_id, v_inv.due_date, v_inv.payment_terms_days,
+          p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, 0, v_row.line_amount,
+          'مشتريات — مرتجع', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        -v_row.quantity, -v_row.quantity_base,
+        v_row.unit_price, v_row.line_amount,
+        'return_purchase', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+  when 'opening_stock' then
+    if v_creditor is null then
+      raise exception 'Opening stock requires creditor account (opening equity / counterpart).';
+    end if;
+
+    for v_row in
+      select iml.*, m.purchase_price
+      from public.invoice_material_lines iml
+      inner join public.materials m on m.id = iml.material_id
+      where iml.invoice_id = p_invoice_id
+      order by iml.line_no
+    loop
+      if v_inv_settings.inventory_method = 'perpetual' then
+        if v_inventory is null then
+          raise exception 'Opening stock (perpetual) requires inventory account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_inventory, v_row.line_amount, 0,
+          'مخزون — بضاعة أول المدة', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_row.line_amount,
+          'بضاعة أول المدة — طرف مقابل', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      else
+        if v_debtor is null then
+          raise exception 'Opening stock (periodic) requires debtor account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          v_je_id, v_debtor, v_row.line_amount, 0,
+          'بضاعة أول المدة', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+        perform public._invoice_add_journal_line(
+          v_je_id, v_creditor, 0, v_row.line_amount,
+          'بضاعة أول المدة — طرف مقابل', v_row.cost_center_id, v_row.branch_id,
+          v_inv.currency_id, v_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id
+      )
+      values (
+        v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
+        v_row.quantity, v_row.quantity_base,
+        v_row.unit_price, v_row.line_amount,
+        'opening_stock', 'invoice', p_invoice_id, v_row.id
+      );
+    end loop;
+
+  else
+    raise exception 'Unsupported commercial_kind: %', v_pat.commercial_kind;
+  end case;
+
+  -- خصم الفاتورة + تدوير الإجمالي (§9 / §التخفيض)
+  if coalesce(v_inv.invoice_discount_percent, 0) > 0 then
+    v_invoice_disc := round((v_material_total * v_inv.invoice_discount_percent / 100)::numeric, 2);
+  elsif coalesce(v_inv.invoice_discount_amount, 0) > 0 then
+    v_invoice_disc := v_inv.invoice_discount_amount;
+  end if;
+
+  if v_invoice_disc > 0 then
+    if v_discount_acct is null then
+      raise exception 'Invoice discount requires discount_account_id on invoice or pattern.';
+    end if;
+    case v_pat.commercial_kind
+    when 'sale' then
+      if v_debtor is null then
+        raise exception 'Sale discount requires debtor account.';
+      end if;
+      perform public._invoice_add_journal_line(
+        v_je_id, v_discount_acct, v_invoice_disc, 0,
+        'خصم فاتورة — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        null, null, null, null, p_invoice_id, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, v_debtor, 0, v_invoice_disc,
+        'تخفيض ذمم — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+        case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+        null, null, p_invoice_id, null
+      );
+    when 'purchase' then
+      if v_creditor is null then
+        raise exception 'Purchase discount requires creditor account.';
+      end if;
+      perform public._invoice_add_journal_line(
+        v_je_id, v_creditor, v_invoice_disc, 0,
+        'خصم مشتريات — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+        case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+        null, null, p_invoice_id, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, v_discount_acct, 0, v_invoice_disc,
+        'خصم مكتسب — ' || v_inv.invoice_no,
+        v_inv.cost_center_id, v_inv.branch_id,
+        v_inv.currency_id, v_rate,
+        null, null, null, null, p_invoice_id, null
+      );
+    else
+      null;
+    end case;
+  end if;
+
+  if v_pat.rounding_enabled
+     and coalesce(v_pat.rounding_target, 'invoice_total') in ('invoice_total', 'both')
+     and v_pat.commercial_kind in ('sale', 'purchase') then
+    v_round_step := coalesce(nullif(v_pat.rounding_step, 0), 1);
+    v_party_total := v_material_total - v_invoice_disc;
+    v_rounded_total := case coalesce(v_pat.rounding_mode, 'nearest')
+      when 'up' then ceil(v_party_total / v_round_step - 0.0000001) * v_round_step
+      when 'down' then floor(v_party_total / v_round_step + 0.0000001) * v_round_step
+      else round(v_party_total / v_round_step) * v_round_step
+    end;
+    v_rounding_diff := round((v_rounded_total - v_party_total)::numeric, 2);
+
+    if v_rounding_diff <> 0 then
+      case v_pat.commercial_kind
+      when 'sale' then
+        if v_debtor is null then
+          raise exception 'Sale rounding requires debtor account.';
+        end if;
+        if v_rounding_diff > 0 then
+          perform public._invoice_add_journal_line(
+            v_je_id, v_debtor, v_rounding_diff, 0,
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        else
+          perform public._invoice_add_journal_line(
+            v_je_id, v_debtor, 0, abs(v_rounding_diff),
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        end if;
+      when 'purchase' then
+        if v_creditor is null then
+          raise exception 'Purchase rounding requires creditor account.';
+        end if;
+        if v_rounding_diff > 0 then
+          perform public._invoice_add_journal_line(
+            v_je_id, v_creditor, 0, v_rounding_diff,
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        else
+          perform public._invoice_add_journal_line(
+            v_je_id, v_creditor, abs(v_rounding_diff), 0,
+            'تدوير فاتورة — ' || v_inv.invoice_no,
+            v_inv.cost_center_id, v_inv.branch_id,
+            v_inv.currency_id, v_rate,
+            case when v_inv.settlement_mode = 'credit' then v_party_type else null end,
+            case when v_inv.settlement_mode = 'credit' then v_party_id else null end,
+            null, null, p_invoice_id, null
+          );
+        end if;
+      else
+        null;
+      end case;
+    end if;
+  end if;
+
+  -- توازن القيد
+  select
+    coalesce(sum(debit), 0),
+    coalesce(sum(credit), 0)
+  into v_je_debit, v_je_credit
+  from public.journal_entry_lines
+  where journal_entry_id = v_je_id;
+
+  if v_je_debit <> v_je_credit then
+    raise exception 'Posted invoice journal is unbalanced: debit (%) <> credit (%).', v_je_debit, v_je_credit;
+  end if;
+
+  if v_has_materials then
+    perform public.lock_company_inventory_foundation(v_inv.invoice_date::timestamptz);
+  end if;
+
+  update public.invoices
+  set status = 'posted', journal_entry_id = v_je_id, updated_at = now()
+  where id = p_invoice_id;
+
+  perform set_config('app.invoice_posting', 'false', true);
+
+  return v_je_id;
+exception
+  when others then
+    perform set_config('app.invoice_posting', 'false', true);
+    raise;
+end;
+$$;
+
+grant execute on function public.post_invoice(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- حماية الفاتورة المرحّلة
+-- ---------------------------------------------------------------------------
+
+create or replace function public.invoices_before_update_guard()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.status = 'posted' then
+    if not public.is_admin() then
+      raise exception 'Posted invoice cannot be modified.';
+    end if;
+    return new;
+  end if;
+
+  if new.status = 'posted' and old.status <> 'posted' then
+    if not public.is_invoice_posting() then
+      raise exception 'Use post_invoice(invoice_id) to post invoices.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_invoices_before_update_guard on public.invoices;
+create trigger trg_invoices_before_update_guard
+before update on public.invoices
+for each row execute function public.invoices_before_update_guard();
+
+create or replace function public.invoice_lines_prevent_change_when_posted()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_status varchar(20);
+begin
+  select i.status into v_status
+  from public.invoices i
+  where i.id = coalesce(new.invoice_id, old.invoice_id);
+
+  if v_status = 'posted' and not public.is_admin() then
+    raise exception 'Cannot modify lines of a posted invoice.';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_invoice_material_lines_posted_guard on public.invoice_material_lines;
+create trigger trg_invoice_material_lines_posted_guard
+before insert or update or delete on public.invoice_material_lines
+for each row execute function public.invoice_lines_prevent_change_when_posted();
+
+drop trigger if exists trg_invoice_account_lines_posted_guard on public.invoice_account_lines;
+create trigger trg_invoice_account_lines_posted_guard
+before insert or update or delete on public.invoice_account_lines
+for each row execute function public.invoice_lines_prevent_change_when_posted();
+
+-- =============================================================================
+-- BEGIN patch_invoice_multiple_references.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_invoice_multiple_references.sql — مراجع متعددة للفاتورة
+-- =============================================================================
+-- يتطلب: patch_invoices.sql (#5)
+-- الترتيب: patch #11
+-- =============================================================================
+
+create table if not exists public.invoice_reference_links (
+  id uuid primary key default gen_random_uuid(),
+  invoice_id uuid not null references public.invoices(id) on delete cascade,
+  reference_invoice_id uuid not null references public.invoices(id) on delete restrict,
+  sort_order int not null default 0 check (sort_order >= 0),
+  created_at timestamptz not null default now(),
+
+  constraint invoice_reference_links_unique
+    unique (invoice_id, reference_invoice_id),
+  constraint invoice_reference_links_not_self
+    check (invoice_id <> reference_invoice_id)
+);
+
+create index if not exists idx_invoice_reference_links_invoice_id
+  on public.invoice_reference_links(invoice_id);
+
+create index if not exists idx_invoice_reference_links_reference_invoice_id
+  on public.invoice_reference_links(reference_invoice_id);
+
+-- ---------------------------------------------------------------------------
+-- مزامنة المراجع الإضافية (المرجع الرئيسي يبقى في invoices.reference_invoice_id)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.sync_invoice_reference_links(
+  p_invoice_id uuid,
+  p_reference_ids uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_primary uuid;
+begin
+  select reference_invoice_id into v_primary
+  from public.invoices
+  where id = p_invoice_id;
+
+  delete from public.invoice_reference_links
+  where invoice_id = p_invoice_id;
+
+  if p_reference_ids is null or array_length(p_reference_ids, 1) is null then
+    return;
+  end if;
+
+  insert into public.invoice_reference_links (invoice_id, reference_invoice_id, sort_order)
+  select
+    p_invoice_id,
+    ref_id,
+    ordinality - 1
+  from unnest(p_reference_ids) with ordinality as t(ref_id, ordinality)
+  where ref_id is not null
+    and ref_id <> p_invoice_id
+    and (v_primary is null or ref_id <> v_primary)
+  on conflict (invoice_id, reference_invoice_id) do nothing;
+end;
+$$;
+
+grant execute on function public.sync_invoice_reference_links(uuid, uuid[]) to authenticated;
+
+-- =============================================================================
+-- BEGIN patch_invoice_reference_close.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_invoice_reference_close.sql — إغلاق المرجع يدوياً
+-- =============================================================================
+-- يتطلب: patch_invoices.sql (#5)
+-- الترتيب: patch #12
+-- =============================================================================
+
+alter table public.invoices
+  add column if not exists reference_closed_at timestamptz null;
+
+create index if not exists idx_invoices_reference_closed_at
+  on public.invoices(reference_closed_at)
+  where reference_closed_at is not null;
+
+-- ---------------------------------------------------------------------------
+
+create or replace function public.close_invoice_reference(p_invoice_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inv public.invoices%rowtype;
+begin
+  select * into v_inv
+  from public.invoices
+  where id = p_invoice_id
+  for update;
+
+  if not found then
+    raise exception 'Invoice not found.';
+  end if;
+
+  if v_inv.status <> 'posted' then
+    raise exception 'Only posted invoices can be closed as reference.';
+  end if;
+
+  if v_inv.reference_closed_at is not null then
+    raise exception 'Invoice reference is already closed.';
+  end if;
+
+  update public.invoices
+  set reference_closed_at = now(),
+      updated_at = now()
+  where id = p_invoice_id;
+end;
+$$;
+
+grant execute on function public.close_invoice_reference(uuid) to authenticated;
+
+-- =============================================================================
+-- BEGIN patch_opening_entry.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_opening_entry.sql — قيد افتتاحي + فهرس per فرع/سنة
+-- =============================================================================
+-- يتطلب: patch_branches.sql، patch_journal_dimensions.sql
+-- التالي: (اختياري) تحديث get_trial_balance لفصل حركة الافتتاح
+-- =============================================================================
+
+alter table public.vouchers
+  add column if not exists is_opening_entry boolean not null default false;
+
+alter table public.journal_entries
+  add column if not exists is_opening_entry boolean not null default false;
+
+comment on column public.vouchers.is_opening_entry is
+  'سند قيد افتتاحي — ميزانية بداية الفترة';
+comment on column public.journal_entries.is_opening_entry is
+  'قيد مولّد من سند افتتاحي — يُفصل في ميزان المراجعة';
+
+create index if not exists idx_vouchers_is_opening_entry
+  on public.vouchers(is_opening_entry)
+  where is_opening_entry = true;
+
+create index if not exists idx_journal_entries_is_opening_entry
+  on public.journal_entries(is_opening_entry)
+  where is_opening_entry = true;
+
+-- قيد افتتاحي مرحّل واحد per (فرع، سنة)
+create unique index if not exists idx_vouchers_opening_per_branch_year
+  on public.vouchers (
+    branch_id,
+    (extract(year from voucher_date)::int)
+  )
+  where is_opening_entry = true
+    and status = 'posted'
+    and branch_id is not null;
+
+-- نسخ العلامة إلى القيد عند الترحيل
+create or replace function public.sync_voucher_journal_opening_flag()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.journal_entry_id is not null and new.is_opening_entry then
+    update public.journal_entries
+    set is_opening_entry = true
+    where id = new.journal_entry_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_vouchers_sync_journal_opening on public.vouchers;
+create trigger trg_vouchers_sync_journal_opening
+after insert or update of journal_entry_id, is_opening_entry on public.vouchers
+for each row execute function public.sync_voucher_journal_opening_flag();
+
+-- =============================================================================
+-- BEGIN patch_trial_balance_opening.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_trial_balance_opening.sql — عمود رصيد افتتاحي منفصل في ميزان المراجعة
+-- =============================================================================
+-- يتطلب: patch_opening_entry.sql (is_opening_entry على journal_entries)
+-- =============================================================================
+
+create or replace function public.get_trial_balance(
+  p_from_date date default null,
+  p_to_date date default null,
+  p_currency_id uuid default null,
+  p_account_id uuid default null,
+  p_account_subtree boolean default true,
+  p_cost_center_id uuid default null
+)
+returns table (
+  account_id uuid,
+  account_code varchar,
+  account_name varchar,
+  currency_id uuid,
+  parent_id uuid,
+  is_postable boolean,
+  opening_entry_balance numeric,
+  opening_balance numeric,
+  period_debit numeric,
+  period_credit numeric,
+  closing_balance numeric
+)
+language sql
+stable
+set search_path = public
+as $$
+  with scoped_accounts as (
+    select a.*
+    from public.accounts a
+    where a.is_active = true
+      and (p_currency_id is null or a.currency_id = p_currency_id)
+      and (
+        p_account_id is null
+        or (
+          p_account_subtree
+          and a.id in (
+            with recursive account_tree as (
+              select id
+              from public.accounts
+              where id = p_account_id
+              union all
+              select child.id
+              from public.accounts child
+              inner join account_tree parent on child.parent_id = parent.id
+            )
+            select id from account_tree
+          )
+        )
+        or (not p_account_subtree and a.id = p_account_id)
+      )
+  ),
+  line_agg as (
+    select
+      jel.account_id,
+      coalesce(sum(
+        case
+          when coalesce(je.is_opening_entry, false)
+            then jel.debit - jel.credit
+          else 0
+        end
+      ), 0)::numeric(18, 2) as opening_entry_balance,
+      coalesce(sum(
+        case
+          when not coalesce(je.is_opening_entry, false)
+            and p_from_date is not null
+            and je.entry_date < p_from_date
+            then jel.debit - jel.credit
+          else 0
+        end
+      ), 0)::numeric(18, 2) as opening_balance,
+      coalesce(sum(
+        case
+          when not coalesce(je.is_opening_entry, false)
+            and (p_from_date is null or je.entry_date >= p_from_date)
+            and (p_to_date is null or je.entry_date <= p_to_date)
+            then jel.debit
+          else 0
+        end
+      ), 0)::numeric(18, 2) as period_debit,
+      coalesce(sum(
+        case
+          when not coalesce(je.is_opening_entry, false)
+            and (p_from_date is null or je.entry_date >= p_from_date)
+            and (p_to_date is null or je.entry_date <= p_to_date)
+            then jel.credit
+          else 0
+        end
+      ), 0)::numeric(18, 2) as period_credit
+    from public.journal_entry_lines jel
+    inner join public.journal_entries je on je.id = jel.journal_entry_id
+    where je.status = 'posted'
+      and (p_cost_center_id is null or jel.cost_center_id = p_cost_center_id)
+    group by jel.account_id
+  )
+  select
+    sa.id as account_id,
+    sa.code as account_code,
+    sa.name_ar as account_name,
+    sa.currency_id,
+    sa.parent_id,
+    sa.is_postable,
+    coalesce(la.opening_entry_balance, 0)::numeric(18, 2) as opening_entry_balance,
+    coalesce(la.opening_balance, 0)::numeric(18, 2) as opening_balance,
+    coalesce(la.period_debit, 0)::numeric(18, 2) as period_debit,
+    coalesce(la.period_credit, 0)::numeric(18, 2) as period_credit,
+    (
+      coalesce(la.opening_entry_balance, 0)
+      + coalesce(la.opening_balance, 0)
+      + coalesce(la.period_debit, 0)
+      - coalesce(la.period_credit, 0)
+    )::numeric(18, 2) as closing_balance
+  from scoped_accounts sa
+  left join line_agg la on la.account_id = sa.id
+  where sa.is_postable = true
+  order by sa.code;
+$$;
+
+comment on function public.get_trial_balance is
+  'ميزان مراجعة — opening_entry_balance منفصل عن حركة الفترة (يستثني is_opening_entry)';
+
+-- =============================================================================
+-- BEGIN patch_accounting_periods.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_accounting_periods.sql — فترات محاسبية
+-- =============================================================================
+-- يتطلب: patch_branches.sql (branch_id اختياري)
+-- =============================================================================
+
+create table if not exists public.accounting_periods (
+  id uuid primary key default gen_random_uuid(),
+  period_code varchar(20) not null,
+  name_ar varchar(120) not null,
+  fiscal_year int not null check (fiscal_year >= 1900 and fiscal_year <= 9999),
+  start_date date not null,
+  end_date date not null,
+  status varchar(10) not null default 'open'
+    check (status in ('open', 'closed')),
+  branch_id uuid null references public.branches(id) on delete restrict,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint accounting_periods_dates check (end_date >= start_date)
+);
+
+create unique index if not exists idx_accounting_periods_code_branch
+  on public.accounting_periods (period_code, coalesce(branch_id, '00000000-0000-0000-0000-000000000000'::uuid));
+
+create index if not exists idx_accounting_periods_fiscal_year
+  on public.accounting_periods(fiscal_year);
+
+create index if not exists idx_accounting_periods_dates
+  on public.accounting_periods(start_date, end_date);
+
+comment on table public.accounting_periods is
+  'فترات محاسبية — ربط التقارير والإقفال';
+
+alter table public.accounting_periods enable row level security;
+
+drop policy if exists "accounting_periods_all" on public.accounting_periods;
+create policy "accounting_periods_all" on public.accounting_periods
+  for all to anon, authenticated using (true) with check (true);
+
+create or replace function public.accounting_periods_set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_accounting_periods_updated_at on public.accounting_periods;
+create trigger trg_accounting_periods_updated_at
+before update on public.accounting_periods
+for each row execute function public.accounting_periods_set_updated_at();
+
+-- =============================================================================
+-- 06_storage.sql — Supabase Storage (شعار الشركة + مرفقات السندات مستقبلاً)
+-- =============================================================================
+-- شغّل بعد 05_permissions.sql (أو بعد setup_all.sql) على قاعدة موجودة.
 -- =============================================================================
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -2306,6 +5881,10 @@ on conflict (id) do update set
   public = excluded.public,
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
+
+-- ---------------------------------------------------------------------------
+-- company-assets — شعار الشركة (قراءة عامة لصفحة الدخول)
+-- ---------------------------------------------------------------------------
 
 drop policy if exists "company_assets_public_read" on storage.objects;
 create policy "company_assets_public_read" on storage.objects
@@ -2347,6 +5926,10 @@ create policy "company_assets_delete" on storage.objects
       or public.has_permission('settings.company.edit')
     )
   );
+
+-- ---------------------------------------------------------------------------
+-- voucher-attachments — جاهز لمرفقات السندات (قراءة للمصادقين فقط)
+-- ---------------------------------------------------------------------------
 
 drop policy if exists "voucher_attachments_select" on storage.objects;
 create policy "voucher_attachments_select" on storage.objects
@@ -2395,8 +5978,6 @@ create policy "voucher_attachments_delete" on storage.objects
     )
   );
 
-grant execute on function public.delete_voucher_with_journal(uuid) to authenticated;
-
 -- =============================================================================
 -- اكتمل التثبيت
 -- =============================================================================
@@ -2407,7 +5988,6 @@ grant execute on function public.delete_voucher_with_journal(uuid) to authentica
 --    (اختياري للإنشاء من الواجهة) SUPABASE_SERVICE_ROLE_KEY
 -- 3. افتح التطبيق → /login → سجّل أول مستخدم (يصبح admin تلقائياً)
 -- 4. من /settings/users أدر المستخدمين، ومن /settings/permissions الصلاحيات
--- 5. من /settings/company ارفع شعار الشركة وعدّل بياناتها
--- 6. من /vouchers/settings حدّد الحسابات الافتراضية
--- 7. (اختياري) شغّل 03_test_cases.sql للتحقق من سيناريوهات القبض والصرف
+-- 5. من /settings/branches و /settings/accounting-periods الإعدادات الجديدة
+-- 6. (اختياري) شغّل 03_test_cases.sql للتحقق من سيناريوهات القبض والصرف
 -- =============================================================================
