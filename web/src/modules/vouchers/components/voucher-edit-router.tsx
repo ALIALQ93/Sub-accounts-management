@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { OpeningEntryVoucherForm } from "@/modules/opening-entry/components/opening-entry-voucher-form";
 import { PaymentVoucherForm } from "@/modules/vouchers/components/payment-voucher-form";
@@ -14,7 +14,7 @@ interface VoucherEditRouterProps {
   voucherId: string;
 }
 
-export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
+function VoucherEditRouterInner({ voucherId }: VoucherEditRouterProps) {
   const searchParams = useSearchParams();
   const forceViewMode = searchParams.get("mode") === "view";
   const [voucherType, setVoucherType] = useState<VoucherType | null>(null);
@@ -118,5 +118,19 @@ export function VoucherEditRouter({ voucherId }: VoucherEditRouterProps) {
       lockedVoucherType={voucherType}
       forceViewMode={forceViewMode}
     />
+  );
+}
+
+export function VoucherEditRouter(props: VoucherEditRouterProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
+          جاري تحميل السند...
+        </div>
+      }
+    >
+      <VoucherEditRouterInner {...props} />
+    </Suspense>
   );
 }

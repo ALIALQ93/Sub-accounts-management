@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { InvoiceSettlementLinkBanner } from "@/modules/invoices/components/invoice-settlement-link-banner";
 import { invoiceSettlementApi } from "@/modules/invoices/services/invoice-settlement-api";
@@ -85,7 +85,7 @@ const EMPTY_LINES: VoucherLine[] = [];
 const EMPTY_ALLOCATIONS: VoucherAllocation[] = [];
 const EMPTY_NETTING_LINES: VoucherNettingLine[] = [];
 
-export function PaymentVoucherForm({
+function PaymentVoucherFormInner({
   initialMode = "create",
   initialVoucherId,
   forceViewMode = false,
@@ -936,5 +936,21 @@ export function PaymentVoucherForm({
         </div>
       </section>
     </div>
+  );
+}
+
+function PaymentVoucherFormFallback() {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
+      جاري تحميل سند الدفع...
+    </div>
+  );
+}
+
+export function PaymentVoucherForm(props: PaymentVoucherFormProps) {
+  return (
+    <Suspense fallback={<PaymentVoucherFormFallback />}>
+      <PaymentVoucherFormInner {...props} />
+    </Suspense>
   );
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { parseOptionalPaymentAmount } from "@/modules/vouchers/utils/validate-voucher-allocations";
 
-export function InvoiceSettlementLinkBanner() {
+function InvoiceSettlementLinkBannerInner() {
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get("invoiceId");
   const payAmount = parseOptionalPaymentAmount(searchParams.get("payAmount"));
@@ -34,5 +35,13 @@ export function InvoiceSettlementLinkBanner() {
         العودة إلى الفاتورة
       </Link>
     </div>
+  );
+}
+
+export function InvoiceSettlementLinkBanner() {
+  return (
+    <Suspense fallback={null}>
+      <InvoiceSettlementLinkBannerInner />
+    </Suspense>
   );
 }
