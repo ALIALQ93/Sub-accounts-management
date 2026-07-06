@@ -108,6 +108,16 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
+    id: "materials",
+    label: "المواد والمستودعات",
+    permissions: [
+      { key: "materials.view", label: "عرض المواد والمستودعات" },
+      { key: "materials.create", label: "إضافة مادة" },
+      { key: "materials.edit", label: "تعديل مواد ومستودعات" },
+      { key: "materials.settings", label: "إعدادات الجرد والتكلفة" },
+    ],
+  },
+  {
     id: "settings",
     label: "الإعدادات والإدارة",
     permissions: [
@@ -164,6 +174,10 @@ export const ROLE_PERMISSION_DEFAULTS: Record<AppRole, PermissionKey[]> = {
     "invoices.view",
     "invoices.create",
     "invoices.edit",
+    "materials.view",
+    "materials.create",
+    "materials.edit",
+    "materials.settings",
     "settings.company.view",
   ],
   viewer: [
@@ -178,6 +192,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<AppRole, PermissionKey[]> = {
     "vendors.view",
     "open_movements.view",
     "invoices.view",
+    "materials.view",
     "settings.company.view",
   ],
 };

@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "الرئيسية", permission: "dashboard.view" },
   { href: "/vouchers", label: "السندات", permission: "vouchers.view" },
   { href: "/invoices", label: "الفواتير", permission: "invoices.view" },
+  { href: "/materials", label: "المواد", permission: "materials.view" },
   { href: "/accounts", label: "دليل الحسابات", permission: "accounts.view" },
   { href: "/currencies", label: "العملات", permission: "currencies.view" },
   { href: "/cost-centers", label: "مراكز الكلفة", permission: "cost_centers.view" },
