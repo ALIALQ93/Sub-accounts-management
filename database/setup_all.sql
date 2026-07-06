@@ -5663,6 +5663,8 @@ for each row execute function public.sync_voucher_journal_opening_flag();
 -- يتطلب: patch_opening_entry.sql (is_opening_entry على journal_entries)
 -- =============================================================================
 
+drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
+
 create or replace function public.get_trial_balance(
   p_from_date date default null,
   p_to_date date default null,
