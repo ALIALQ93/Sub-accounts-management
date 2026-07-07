@@ -190,7 +190,7 @@ export function CloseMovementSections({
         <p className="text-sm text-slate-600">جاري تحميل الحركات المفتوحة...</p>
       )}
       {!isLoadingMovements && loadError && (
-        <p className="text-sm text-rose-700">{loadError}</p>
+        <p className="text-sm text-[var(--danger)]">{loadError}</p>
       )}
       {!isLoadingMovements && !loadError && (
         <p className="text-xs text-slate-600">

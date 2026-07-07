@@ -28,6 +28,8 @@ drop table if exists public.invoice_patterns cascade;
 drop table if exists public.warehouse_material_limits cascade;
 drop table if exists public.material_units cascade;
 drop table if exists public.materials cascade;
+drop function if exists public.material_categories_apply_hierarchy_rules() cascade;
+drop function if exists public.warehouses_prevent_branch_change_with_movements() cascade;
 drop table if exists public.material_categories cascade;
 drop table if exists public.warehouses cascade;
 drop table if exists public.company_inventory_settings cascade;

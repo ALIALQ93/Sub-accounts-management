@@ -13,7 +13,7 @@ export default function NewVoucherPickerPage() {
   return (
     <main className="flex w-full flex-col gap-4">
       <section>
-        <h1 className="text-xl font-bold text-slate-900">اختر نوع السند</h1>
+        <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">اختر نوع السند</h1>
         <p className="text-xs text-slate-600">
           كل نوع له نافذة مخصصة وترقيم تلقائي مستقل.
         </p>

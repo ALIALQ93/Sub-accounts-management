@@ -31,7 +31,7 @@ export function CloseMovementFiltersBar({
   };
 
   return (
-    <section className="rounded-lg border border-violet-200 bg-violet-50/50 p-4">
+    <section className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 shadow-sm">
       <div className="mb-2">
         <h2 className="text-sm font-semibold text-violet-950">فلاتر الحركات المفتوحة</h2>
         <p className="mt-0.5 text-xs text-violet-900/80">

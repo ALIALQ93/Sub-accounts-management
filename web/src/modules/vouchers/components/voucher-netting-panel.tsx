@@ -52,7 +52,7 @@ export function VoucherNettingPanel({
   );
 
   return (
-    <section className="rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+    <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-semibold text-amber-950">مقاصة CC / فرع</h2>
@@ -202,7 +202,7 @@ export function VoucherNettingPanel({
       )}
 
       {lines.length > 0 && (
-        <p className="mt-3 font-mono text-sm text-amber-950">
+        <p className="mt-3 font-mono tabular-nums text-sm text-amber-950">
           إجمالي المقاصة: {nettingTotal.toFixed(2)}
         </p>
       )}
@@ -265,7 +265,7 @@ function NettingTable({
                       onAmountChange(line, Math.max(0, Number(event.target.value)))
                     }
                     disabled={readOnly}
-                    className="w-full rounded-md border border-slate-300 px-2 py-1 font-mono"
+                    className="w-full rounded-md border border-slate-300 px-2 py-1 font-mono tabular-nums"
                   />
                 </td>
                 <td className="border-b border-amber-100 p-2 text-center">
@@ -292,7 +292,7 @@ function NettingTable({
                     type="button"
                     onClick={() => onRemove(line)}
                     disabled={readOnly}
-                    className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
+                    className="btn btn-sm btn-outline text-[var(--danger)] disabled:opacity-50"
                   >
                     حذف
                   </button>

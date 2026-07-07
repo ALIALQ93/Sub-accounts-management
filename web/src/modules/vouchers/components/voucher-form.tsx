@@ -495,7 +495,7 @@ export function VoucherForm({
 
   if (isLoading || isLoadingAccounts) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
         جاري تحميل السند...
       </div>
     );
@@ -513,7 +513,7 @@ export function VoucherForm({
       />
       {typeConfig && (
         <div
-          className={`rounded-lg border px-4 py-3 text-sm ${typeConfig.colorClass}`}
+          className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${typeConfig.colorClass}`}
         >
           <p className="font-semibold">{typeConfig.labelAr}</p>
           <p className="mt-0.5 opacity-90">{typeConfig.descriptionAr}</p>
@@ -522,9 +522,9 @@ export function VoucherForm({
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">{pageTitle}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">{pageTitle}</h1>
           <StatusChip status={status} />
         </div>
 
@@ -656,11 +656,19 @@ export function VoucherForm({
         readOnly={readOnly || isSaving}
       />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 grid gap-2 text-sm sm:grid-cols-3">
-          <p className="font-mono">مدين: {totals.debit.toFixed(2)}</p>
-          <p className="font-mono">دائن: {totals.credit.toFixed(2)}</p>
-          <p className="font-mono">فرق: {totals.difference.toFixed(2)}</p>
+          <p className="font-mono tabular-nums">مدين: {totals.debit.toFixed(2)}</p>
+          <p className="font-mono tabular-nums">دائن: {totals.credit.toFixed(2)}</p>
+          <p
+            className={`font-mono tabular-nums font-semibold ${
+              totals.difference === 0
+                ? "text-[var(--success)]"
+                : "text-[var(--danger)]"
+            }`}
+          >
+            فرق: {totals.difference.toFixed(2)}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canEditPosted && (
@@ -668,7 +676,7 @@ export function VoucherForm({
               type="button"
               onClick={() => void onAdminSavePosted()}
               disabled={isSaving}
-              className="rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn bg-amber-700 text-white shadow-sm hover:bg-amber-600"
             >
               حفظ التعديلات (مدير)
             </button>
@@ -679,7 +687,7 @@ export function VoucherForm({
                 type="button"
                 onClick={onSaveDraft}
                 disabled={isSaving}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                className="btn btn-outline"
               >
                 حفظ مسودة
               </button>
@@ -687,7 +695,7 @@ export function VoucherForm({
                 type="button"
                 onClick={onApprove}
                 disabled={isSaving || (autoPostEnabled && !canPost)}
-                className="rounded-md border border-amber-300 px-4 py-2 text-sm font-medium text-amber-800 disabled:opacity-50"
+                className="btn btn-outline text-amber-800"
               >
                 {getApproveButtonLabel(autoPostEnabled)}
               </button>
@@ -698,7 +706,7 @@ export function VoucherForm({
               type="button"
               onClick={onPost}
               disabled={!canPost || isSaving}
-              className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn bg-emerald-700 text-white shadow-sm hover:bg-emerald-600"
             >
               ترحيل
             </button>
@@ -708,22 +716,16 @@ export function VoucherForm({
               type="button"
               onClick={onReverse}
               disabled={status !== "posted" || isSaving}
-              className="rounded-md border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
+              className="btn btn-outline text-[var(--danger)]"
             >
               عكس
             </button>
           )}
-          <Link
-            href="/vouchers"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-          >
+          <Link href="/vouchers" className="btn btn-outline">
             قائمة السندات
           </Link>
           {journalEntryId && (
-            <Link
-              href={`/journals/${journalEntryId}`}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-            >
+            <Link href={`/journals/${journalEntryId}`} className="btn btn-outline">
               فتح القيد الناتج
             </Link>
           )}

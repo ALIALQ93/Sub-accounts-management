@@ -42,7 +42,7 @@ export default function VoucherLineCategoriesPage() {
   return (
     <main className="flex w-full flex-col gap-4">
       <section>
-        <h1 className="text-xl font-bold text-slate-900">إعدادات السندات</h1>
+        <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">إعدادات السندات</h1>
         <p className="text-xs text-slate-600">
           تصنيفات عامة لأسطر السند — للتقارير، منفصلة عن كود الحساب.
         </p>

@@ -21,7 +21,8 @@ import {
   getVisibleTree,
   isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
-import { generateAccountCode } from "@/modules/accounts/utils/generate-account-code";
+import { createAccountWithGeneratedCode } from "@/modules/accounts/utils/create-account-with-code";
+import { normalizeArabicForComparison } from "@/modules/accounts/utils/normalize-arabic-text";
 import { currencyApi } from "@/modules/currencies/services/currency-api";
 import type { AccountDirectBalance, Currency } from "@/modules/currencies/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
@@ -165,17 +166,23 @@ export default function AccountsPage() {
       return;
     }
 
-    const code = generateAccountCode(parent, accounts);
+    const comparableName = normalizeArabicForComparison(values.name_ar);
+    if (
+      accounts.some(
+        (account) => normalizeArabicForComparison(account.name_ar) === comparableName,
+      )
+    ) {
+      setFormError("اسم الحساب موجود مسبقاً في الدليل (بعد توحيد أشكال الألف والتشكيل).");
+      return;
+    }
 
     setIsSaving(true);
     setFormError("");
     try {
-      await voucherApi.createAccount({
-        code,
+      await createAccountWithGeneratedCode(parent, accounts, {
         sub_code: values.sub_code?.trim() || null,
         name_ar: values.name_ar.trim(),
         name_en: values.name_en.trim() || null,
-        parent_id: values.parent_id,
         currency_id: values.currency_id,
         is_postable: values.is_postable,
         is_active: true,

@@ -72,38 +72,39 @@ export function VoucherLinesTable({
     .reduce((sum, line) => sum + Number(line.amount || 0), 0);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">أسطر السند</h2>
+        <h2 className="text-lg font-semibold text-[var(--brand-navy)]">أسطر السند</h2>
         <button
           type="button"
-          className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="btn btn-primary"
           onClick={addLine}
           disabled={readOnly}
         >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 5v14M5 12h14" />
+          </svg>
           إضافة سطر
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] border-collapse text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-right text-slate-700">
-              <th className="border-b border-slate-200 p-2">الحساب</th>
-              <th className="border-b border-slate-200 p-2">الطرف</th>
-              <th className="border-b border-slate-200 p-2">المبلغ</th>
-              {costCenters.length > 0 && (
-                <th className="border-b border-slate-200 p-2">مركز الكلفة</th>
-              )}
-              <th className="border-b border-slate-200 p-2">نوع السطر</th>
-              <th className="border-b border-slate-200 p-2">الوصف</th>
-              <th className="border-b border-slate-200 p-2">إجراء</th>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="data-table min-w-[980px]">
+          <thead>
+            <tr>
+              <th>الحساب</th>
+              <th>الطرف</th>
+              <th>المبلغ</th>
+              {costCenters.length > 0 && <th>مركز الكلفة</th>}
+              <th>نوع السطر</th>
+              <th>الوصف</th>
+              <th>إجراء</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line) => (
-              <tr key={line.id} className="odd:bg-white even:bg-slate-50/60 align-top">
-                <td className="border-b border-slate-100 p-2 min-w-[240px]">
+              <tr key={line.id} className="align-top">
+                <td className="min-w-[240px]">
                   <AccountSearchField
                     accounts={accounts}
                     value={line.account_id ?? ""}
@@ -148,7 +149,7 @@ export function VoucherLinesTable({
                   />
                 </td>
                 {costCenters.length > 0 && (
-                  <td className="border-b border-slate-100 p-2 min-w-[200px]">
+                  <td className="min-w-[200px]">
                     <CostCenterSearchField
                       costCenters={costCenters}
                       value={line.cost_center_id ?? defaultCostCenterId ?? ""}
@@ -158,7 +159,7 @@ export function VoucherLinesTable({
                     />
                   </td>
                 )}
-                <td className="min-w-[160px] border-b border-slate-100 p-2">
+                <td className="min-w-[160px]">
                   <VoucherLineCategoryFields
                     categories={lineCategories}
                     categoryId={line.line_category_id ?? ""}
@@ -186,12 +187,12 @@ export function VoucherLinesTable({
                     placeholder="وصف السطر"
                   />
                 </td>
-                <td className="border-b border-slate-100 p-2">
+                <td>
                   <button
                     type="button"
                     onClick={() => removeLine(line.id)}
                     disabled={readOnly || !allowLineDelete}
-                    className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
+                    className="btn btn-sm btn-outline text-[var(--danger)] disabled:opacity-50"
                   >
                     حذف
                   </button>
@@ -202,7 +203,7 @@ export function VoucherLinesTable({
               <tr>
                 <td
                   colSpan={(costCenters.length > 0 ? 6 : 5) + 1}
-                  className="border-b border-slate-100 p-4 text-center text-slate-500"
+                  className="p-4 text-center text-slate-500"
                 >
                   لا توجد أسطر — استخدم الإدخال السريع أو «إضافة سطر».
                 </td>
@@ -213,9 +214,9 @@ export function VoucherLinesTable({
       </div>
 
       <div className="mt-3 grid gap-2 rounded-md bg-slate-50 p-3 text-sm sm:grid-cols-3">
-        <p className="font-mono">إجمالي المدين: {totalDebit.toFixed(2)}</p>
-        <p className="font-mono">إجمالي الدائن: {totalCredit.toFixed(2)}</p>
-        <p className="font-mono text-blue-900">
+        <p className="font-mono tabular-nums">إجمالي المدين: {totalDebit.toFixed(2)}</p>
+        <p className="font-mono tabular-nums">إجمالي الدائن: {totalCredit.toFixed(2)}</p>
+        <p className="font-mono tabular-nums font-semibold text-[var(--brand-navy)]">
           الفرق: {(totalDebit - totalCredit).toFixed(2)}
         </p>
       </div>

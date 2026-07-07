@@ -12,7 +12,7 @@ export function CloseMovementJournalPreview({
   if (entries.length === 0) return null;
 
   return (
-    <section className="rounded-lg border border-sky-200 bg-sky-50/50 p-4">
+    <section className="rounded-xl border border-sky-200 bg-sky-50/50 p-4 shadow-sm">
       <div className="mb-3">
         <h2 className="text-lg font-semibold text-sky-950">معاينة القيود الناتجة</h2>
         <p className="mt-0.5 text-xs text-sky-900/80">
@@ -33,7 +33,7 @@ export function CloseMovementJournalPreview({
           return (
             <div
               key={`${entry.kind}-${index}`}
-              className="rounded-md border border-sky-100 bg-white p-3"
+              className="rounded-lg border border-sky-100 bg-white p-3 shadow-sm"
             >
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-slate-800">{entry.title}</h3>
@@ -69,13 +69,13 @@ export function CloseMovementJournalPreview({
                           <span className="font-mono">{line.account_code}</span>
                           <span className="ms-1 text-slate-600">{line.account_name}</span>
                         </td>
-                        <td className="border-b border-slate-100 p-1.5 font-mono">
+                        <td className="border-b border-slate-100 p-1.5 font-mono tabular-nums">
                           {line.cost_center_code ?? "—"}
                         </td>
-                        <td className="border-b border-slate-100 p-1.5 font-mono">
+                        <td className="border-b border-slate-100 p-1.5 font-mono tabular-nums">
                           {line.branch_code ?? "—"}
                         </td>
-                        <td className="border-b border-slate-100 p-1.5 font-mono">
+                        <td className="border-b border-slate-100 p-1.5 font-mono tabular-nums">
                           {line.amount.toFixed(2)}
                         </td>
                         <td className="border-b border-slate-100 p-1.5">

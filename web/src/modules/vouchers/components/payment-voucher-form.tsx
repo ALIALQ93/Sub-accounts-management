@@ -634,7 +634,7 @@ function PaymentVoucherFormInner({
 
   if (isLoading || isLoadingAccounts) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
         {isCloseMovementsForm
           ? "جاري تحميل إغلاق حركات الدفع..."
           : "جاري تحميل سند الدفع..."}
@@ -659,7 +659,7 @@ function PaymentVoucherFormInner({
         status={status}
       />
       <div
-        className={`rounded-lg border px-4 py-3 text-sm ${
+        className={`rounded-xl border px-4 py-3 text-sm shadow-sm ${
           isCloseMovementsForm
             ? "border-violet-300 bg-violet-50 text-violet-900"
             : "border-rose-300 bg-rose-50 text-rose-900"
@@ -681,9 +681,9 @@ function PaymentVoucherFormInner({
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-bold text-slate-900">{formTitle}</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">{formTitle}</h1>
           <StatusChip status={status} />
         </div>
 
@@ -812,20 +812,20 @@ function PaymentVoucherFormInner({
         readOnly={readOnly || isSaving}
       />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 grid gap-2 text-sm sm:grid-cols-2">
-          <p className="font-mono text-rose-900">
+          <p className="font-mono tabular-nums text-rose-900">
             إجمالي المدين: {formatVoucherAmount(totalDebit, selectedCurrency)}
           </p>
-          <p className="font-mono text-rose-900">
+          <p className="font-mono tabular-nums text-rose-900">
             دائن حساب الدفع: {formatVoucherAmount(totalDebit, selectedCurrency)}
           </p>
           {isInvoiceMode && (
-            <p className="font-mono text-blue-900 sm:col-span-2">
+            <p className="font-mono tabular-nums text-[var(--brand-navy)] sm:col-span-2">
               مجموع التخصيصات:{" "}
               {formatVoucherAmount(allocationTotal, selectedCurrency)}
               {!closeMovementLinesMatchAllocations(debitLines, allocations) && (
-                <span className="ms-2 text-rose-700">
+                <span className="ms-2 text-[var(--danger)]">
                   — لا يطابق إجمالي المدين
                 </span>
               )}
@@ -841,7 +841,7 @@ function PaymentVoucherFormInner({
                 void saveVoucher("posted").finally(() => setIsSaving(false));
               }}
               disabled={isSaving}
-              className="rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn bg-amber-700 text-white shadow-sm hover:bg-amber-600"
             >
               حفظ التعديلات (مدير)
             </button>
@@ -855,7 +855,7 @@ function PaymentVoucherFormInner({
                   void saveVoucher("draft").finally(() => setIsSaving(false));
                 }}
                 disabled={isSaving}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+                className="btn btn-outline"
               >
                 حفظ مسودة
               </button>
@@ -892,7 +892,7 @@ function PaymentVoucherFormInner({
                   })().finally(() => setIsSaving(false));
                 }}
                 disabled={isSaving || (autoPostEnabled && !canPost)}
-                className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-800 disabled:opacity-50"
+                className="btn btn-outline text-amber-800"
               >
                 {getApproveButtonLabel(autoPostEnabled)}
               </button>
@@ -919,12 +919,12 @@ function PaymentVoucherFormInner({
                 })().finally(() => setIsSaving(false));
               }}
               disabled={!canPost || isSaving}
-              className="rounded-md bg-rose-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="btn bg-rose-700 text-white shadow-sm hover:bg-rose-600"
             >
               ترحيل
             </button>
           )}
-          <Link href="/vouchers" className="rounded-md border border-slate-300 px-4 py-2 text-sm">
+          <Link href="/vouchers" className="btn btn-outline">
             قائمة السندات
           </Link>
           {journalEntryId && (
@@ -941,7 +941,7 @@ function PaymentVoucherFormInner({
 
 function PaymentVoucherFormFallback() {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
       جاري تحميل سند الدفع...
     </div>
   );

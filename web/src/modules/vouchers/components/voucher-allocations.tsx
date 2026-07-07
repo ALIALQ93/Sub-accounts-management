@@ -88,10 +88,10 @@ export function VoucherAllocations({
   const remainingOpen = Math.max(0, openTotal - allocationTotal);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">
+          <h2 className="text-lg font-semibold text-[var(--brand-navy)]">
             تخصيصات اغلاق الحركات
           </h2>
           <p className="mt-1 text-xs text-slate-500">
@@ -100,32 +100,35 @@ export function VoucherAllocations({
         </div>
         <button
           type="button"
-          className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="btn btn-primary"
           onClick={addAllocation}
           disabled={readOnly}
         >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 5v14M5 12h14" />
+          </svg>
           اضافة تخصيص
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1100px] border-collapse text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-right text-slate-700">
-              <th className="border-b border-slate-200 p-2">مرجع الحركة</th>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="data-table min-w-[1100px]">
+          <thead>
+            <tr>
+              <th>مرجع الحركة</th>
               {showDimensions && (
                 <>
-                  <th className="border-b border-slate-200 p-2">CC</th>
-                  <th className="border-b border-slate-200 p-2">فرع</th>
-                  <th className="border-b border-slate-200 p-2">جانب</th>
-                  <th className="border-b border-slate-200 p-2">استحقاق</th>
+                  <th>CC</th>
+                  <th>فرع</th>
+                  <th>جانب</th>
+                  <th>استحقاق</th>
                 </>
               )}
-              <th className="border-b border-slate-200 p-2">المفتوح</th>
-              <th className="border-b border-slate-200 p-2">المبلغ المخصص</th>
-              <th className="border-b border-slate-200 p-2">الباقي</th>
-              <th className="border-b border-slate-200 p-2">ملاحظة</th>
-              <th className="border-b border-slate-200 p-2">إجراء</th>
+              <th>المفتوح</th>
+              <th>المبلغ المخصص</th>
+              <th>الباقي</th>
+              <th>ملاحظة</th>
+              <th>إجراء</th>
             </tr>
           </thead>
           <tbody>
@@ -150,11 +153,8 @@ export function VoucherAllocations({
                 : undefined;
 
               return (
-                <tr
-                  key={allocation.id}
-                  className="odd:bg-white even:bg-slate-50/60"
-                >
-                  <td className="border-b border-slate-100 p-2">
+                <tr key={allocation.id}>
+                  <td>
                     <select
                       value={allocation.target_journal_line_id ?? ""}
                       onChange={(event) => {
@@ -189,31 +189,31 @@ export function VoucherAllocations({
                   </td>
                   {showDimensions && (
                     <>
-                      <td className="border-b border-slate-100 p-2 text-xs">
+                      <td className="text-xs">
                         {movement?.cost_center_code ?? "—"}
                       </td>
-                      <td className="border-b border-slate-100 p-2 text-xs">
+                      <td className="text-xs">
                         {movement?.branch_code ?? "—"}
                       </td>
-                      <td className="border-b border-slate-100 p-2 text-xs">
+                      <td className="text-xs">
                         {movement?.open_side === "debit"
                           ? "مدين"
                           : movement?.open_side === "credit"
                             ? "دائن"
                             : "—"}
                       </td>
-                      <td className="border-b border-slate-100 p-2 text-xs">
+                      <td className="text-xs">
                         {movement?.due_date ?? "—"}
                         {movement?.is_overdue ? (
-                          <span className="ms-1 text-rose-700">متأخر</span>
+                          <span className="ms-1 text-[var(--danger)]">متأخر</span>
                         ) : null}
                       </td>
                     </>
                   )}
-                  <td className="border-b border-slate-100 p-2 font-mono text-xs text-slate-600">
+                  <td className="font-mono tabular-nums text-xs text-slate-600">
                     {openAmount != null ? openAmount.toFixed(2) : "—"}
                   </td>
-                  <td className="border-b border-slate-100 p-2 font-mono">
+                  <td className="font-mono">
                     <div className="flex items-center gap-1">
                       <input
                         type="number"
@@ -230,7 +230,7 @@ export function VoucherAllocations({
                           })
                         }
                         disabled={readOnly}
-                        className="w-full rounded-md border border-slate-300 px-2 py-1 outline-none focus:border-blue-900"
+                        className="w-full rounded-md border border-slate-300 px-2 py-1 tabular-nums outline-none focus:border-blue-900"
                       />
                       {openAmount != null && !readOnly && applied < openAmount && (
                         <button
@@ -248,7 +248,7 @@ export function VoucherAllocations({
                       )}
                     </div>
                   </td>
-                  <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                  <td className="font-mono tabular-nums text-xs">
                     {lineRemaining != null ? (
                       <span
                         className={
@@ -263,7 +263,7 @@ export function VoucherAllocations({
                       "—"
                     )}
                   </td>
-                  <td className="border-b border-slate-100 p-2">
+                  <td>
                     <input
                       value={allocation.note ?? ""}
                       onChange={(event) =>
@@ -276,12 +276,12 @@ export function VoucherAllocations({
                       placeholder="ملاحظة"
                     />
                   </td>
-                  <td className="border-b border-slate-100 p-2">
+                  <td>
                     <button
                       type="button"
                       onClick={() => removeAllocation(allocation.id)}
                       disabled={readOnly}
-                      className="rounded-md border border-rose-300 px-2 py-1 text-xs font-medium text-rose-700 disabled:opacity-50"
+                      className="btn btn-sm btn-outline text-[var(--danger)] disabled:opacity-50"
                     >
                       حذف
                     </button>
@@ -293,7 +293,7 @@ export function VoucherAllocations({
               <tr>
                 <td
                   colSpan={showDimensions ? 10 : 6}
-                  className="border-b border-slate-100 p-4 text-center text-slate-500"
+                  className="p-4 text-center text-slate-500"
                 >
                   لا توجد تخصيصات بعد.
                 </td>
@@ -304,13 +304,13 @@ export function VoucherAllocations({
       </div>
 
       <div className="mt-3 grid gap-2 rounded-md bg-slate-50 p-3 text-sm sm:grid-cols-3">
-        <p className="font-mono text-slate-700">
+        <p className="font-mono tabular-nums text-slate-700">
           إجمالي التخصيصات: {allocationTotal.toFixed(2)}
         </p>
-        <p className="font-mono text-slate-700">
+        <p className="font-mono tabular-nums text-slate-700">
           إجمالي المفتوح للأسطر: {openTotal.toFixed(2)}
         </p>
-        <p className="font-mono text-amber-800">
+        <p className="font-mono tabular-nums text-amber-800">
           متبقٍ بعد التخصيص: {remainingOpen.toFixed(2)}
         </p>
       </div>

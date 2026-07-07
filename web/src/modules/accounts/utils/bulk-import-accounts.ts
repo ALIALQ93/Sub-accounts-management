@@ -1,6 +1,7 @@
 import type { Currency } from "@/modules/currencies/types";
 import { getDefaultCurrencyId } from "@/modules/accounts/utils/compute-account-balances";
 import { generateAccountCode } from "@/modules/accounts/utils/generate-account-code";
+import { normalizeArabicForComparison } from "@/modules/accounts/utils/normalize-arabic-text";
 import type { Account } from "@/modules/vouchers/types";
 
 export const BULK_ACCOUNT_IMPORT_MAX_ROWS = 200;
@@ -51,6 +52,10 @@ export function createEmptyBulkImportRow(): BulkAccountImportRow {
 
 function normalizeAccountName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
+}
+
+function comparableAccountName(name: string): string {
+  return normalizeArabicForComparison(normalizeAccountName(name));
 }
 
 function parseDelimitedLine(line: string): string[] {
@@ -123,14 +128,12 @@ export function validateBulkAccountRows(
   const accountByCode = new Map(accounts.map((account) => [account.code, account]));
 
   const existingNames = new Set(
-    accounts.map((account) =>
-      normalizeAccountName(account.name_ar).toLocaleLowerCase("ar"),
-    ),
+    accounts.map((account) => comparableAccountName(account.name_ar)),
   );
 
   const batchNameCounts = new Map<string, number>();
   for (const row of rows) {
-    const normalized = normalizeAccountName(row.name_ar).toLocaleLowerCase("ar");
+    const normalized = comparableAccountName(row.name_ar);
     if (!normalized) continue;
     batchNameCounts.set(normalized, (batchNameCounts.get(normalized) ?? 0) + 1);
   }
@@ -140,7 +143,7 @@ export function validateBulkAccountRows(
   return rows.map((row) => {
     const errors: string[] = [];
     const nameAr = normalizeAccountName(row.name_ar);
-    const normalizedName = nameAr.toLocaleLowerCase("ar");
+    const normalizedName = comparableAccountName(nameAr);
     const parentCode = row.parent_code.trim();
     const subCode = row.sub_code.trim();
     const currencyCode = row.currency_code.trim().toUpperCase();

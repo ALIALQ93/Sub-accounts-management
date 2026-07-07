@@ -122,7 +122,7 @@ function CategoryFormPanel({
           type="button"
           onClick={onSubmit}
           disabled={isSaving}
-          className="rounded-md bg-blue-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          className="btn btn-sm btn-primary"
         >
           {submitLabel}
         </button>
@@ -130,7 +130,7 @@ function CategoryFormPanel({
           type="button"
           onClick={onCancel}
           disabled={isSaving}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50"
+          className="btn btn-sm btn-outline"
         >
           إلغاء
         </button>
@@ -243,7 +243,7 @@ export function VoucherLineCategoriesSettings({
   return (
     <section className="grid gap-4">
       <div>
-        <h2 className="text-base font-semibold text-slate-900">أنواع أسطر السند</h2>
+        <h2 className="text-base font-semibold text-[var(--brand-navy)]">أنواع أسطر السند</h2>
         <p className="mt-1 text-xs text-slate-600">
           تصنيفات عامة لكل نوع سند — تظهر في أسطر السند وتُستخدم في التقارير. يمكن
           إضافتها وتعديلها وتعطيلها. منفصلة عن كود الحساب.
@@ -258,10 +258,10 @@ export function VoucherLineCategoriesSettings({
         return (
           <article
             key={type}
-            className="rounded-xl border border-slate-200 bg-white p-4"
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
           >
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold text-slate-900">
+              <h3 className="font-semibold text-[var(--brand-navy)]">
                 {getVoucherTypeLabel(type)}
               </h3>
               {readOnly ? null : (
@@ -269,60 +269,58 @@ export function VoucherLineCategoriesSettings({
                   type="button"
                   onClick={() => startAdd(type)}
                   disabled={isSaving || Boolean(editingId)}
-                  className="rounded-md border border-blue-300 px-3 py-1.5 text-xs font-medium text-blue-800 disabled:opacity-50"
+                  className="btn btn-sm btn-outline"
                 >
                   + إضافة نوع
                 </button>
               )}
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-right text-slate-700">
-                    <th className="border border-slate-200 p-2">الكود</th>
-                    <th className="border border-slate-200 p-2">الاسم</th>
-                    <th className="border border-slate-200 p-2">ترتيب</th>
-                    <th className="border border-slate-200 p-2">يتطلب عدداً</th>
-                    <th className="border border-slate-200 p-2">الحالة</th>
-                    <th className="border border-slate-200 p-2">إجراء</th>
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="data-table min-w-[640px]">
+                <thead>
+                  <tr>
+                    <th>الكود</th>
+                    <th>الاسم</th>
+                    <th>ترتيب</th>
+                    <th>يتطلب عدداً</th>
+                    <th>الحالة</th>
+                    <th>إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
                     <tr
                       key={row.id}
-                      className={`odd:bg-white even:bg-slate-50/60 ${
+                      className={
                         editingId === row.id ? "ring-2 ring-inset ring-blue-300" : ""
-                      }`}
+                      }
                     >
-                      <td className="border border-slate-100 p-2 font-mono text-xs">
-                        {row.code}
-                      </td>
-                      <td className="border border-slate-100 p-2">{row.name_ar}</td>
-                      <td className="border border-slate-100 p-2 font-mono text-xs">
+                      <td className="font-mono text-xs">{row.code}</td>
+                      <td>{row.name_ar}</td>
+                      <td className="font-mono tabular-nums text-xs">
                         {row.sort_order}
                       </td>
-                      <td className="border border-slate-100 p-2 text-xs text-slate-600">
+                      <td className="text-xs text-slate-600">
                         {row.requires_quantity
                           ? row.quantity_label ?? "العدد"
                           : "—"}
                       </td>
-                      <td className="border border-slate-100 p-2">
+                      <td>
                         {row.is_active ? (
-                          <span className="text-xs text-emerald-700">نشط</span>
+                          <span className="badge badge-success">نشط</span>
                         ) : (
-                          <span className="text-xs text-slate-500">معطّل</span>
+                          <span className="badge badge-muted">معطّل</span>
                         )}
                       </td>
-                      <td className="border border-slate-100 p-2">
+                      <td>
                         {!readOnly && (
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
                               onClick={() => startEdit(row)}
                               disabled={isSaving || Boolean(addingFor)}
-                              className="rounded-md border border-blue-300 px-2 py-1 text-xs text-blue-800 disabled:opacity-50"
+                              className="btn btn-sm btn-outline"
                             >
                               تعديل
                             </button>
@@ -330,7 +328,7 @@ export function VoucherLineCategoriesSettings({
                               type="button"
                               onClick={() => void toggleActive(row)}
                               disabled={isSaving || editingId === row.id}
-                              className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-800 disabled:opacity-50"
+                              className="btn btn-sm btn-outline text-amber-800"
                             >
                               {row.is_active ? "تعطيل" : "تفعيل"}
                             </button>
@@ -341,10 +339,7 @@ export function VoucherLineCategoriesSettings({
                   ))}
                   {rows.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={6}
-                        className="border border-slate-100 p-4 text-center text-slate-500"
-                      >
+                      <td colSpan={6} className="p-4 text-center text-slate-500">
                         لا أنواع معرّفة — مثال للصرف: اطعام، تغذية، انشائية
                       </td>
                     </tr>

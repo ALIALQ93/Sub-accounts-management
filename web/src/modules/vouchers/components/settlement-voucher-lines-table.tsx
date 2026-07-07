@@ -166,10 +166,10 @@ export function SettlementVoucherLinesTable({
   const hasDualSideRows = lines.some((line) => settlementLineHasBothSides(line));
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">أسطر السند</h2>
+          <h2 className="text-lg font-semibold text-[var(--brand-navy)]">أسطر السند</h2>
           <p className="text-xs text-slate-500">
             أدخل المبلغ في عمود المدين أو الدائن لكل سطر (وليس الاثنين معاً).
             يُولَّد سطر مقابل تلقائياً على الحساب الوسيط. يجب توازن مراكز الكلفة
@@ -178,31 +178,34 @@ export function SettlementVoucherLinesTable({
         </div>
         <button
           type="button"
-          className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="btn btn-primary"
           onClick={addLine}
           disabled={readOnly}
         >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 5v14M5 12h14" />
+          </svg>
           إضافة سطر
         </button>
       </div>
 
       {hasDualSideRows && (
-        <p className="mb-3 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-800">
+        <p className="mb-3 rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 p-2 text-xs text-[var(--danger)]">
           لا يمكن تعبئة المدين والدائن في نفس السطر. اختر أحدهما فقط.
         </p>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] border-collapse text-sm">
-          <thead className="bg-slate-50">
-            <tr className="text-right text-slate-700">
-              <th className="border-b border-slate-200 p-2">الحساب</th>
-              <th className="border-b border-slate-200 p-2">مدين</th>
-              <th className="border-b border-slate-200 p-2">دائن</th>
-              <th className="border-b border-slate-200 p-2">مركز الكلفة *</th>
-              <th className="border-b border-slate-200 p-2">نوع السطر</th>
-              <th className="border-b border-slate-200 p-2">الوصف</th>
-              <th className="border-b border-slate-200 p-2">إجراء</th>
+      <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <table className="data-table min-w-[980px]">
+          <thead>
+            <tr>
+              <th>الحساب</th>
+              <th>مدين</th>
+              <th>دائن</th>
+              <th>مركز الكلفة *</th>
+              <th>نوع السطر</th>
+              <th>الوصف</th>
+              <th>إجراء</th>
             </tr>
           </thead>
           <tbody>
@@ -211,11 +214,9 @@ export function SettlementVoucherLinesTable({
               return (
                 <tr
                   key={line.id}
-                  className={`align-top odd:bg-white even:bg-slate-50/60 ${
-                    dualSide ? "bg-rose-50/80" : ""
-                  }`}
+                  className={`align-top ${dualSide ? "bg-rose-50/80" : ""}`}
                 >
-                  <td className="min-w-[240px] border-b border-slate-100 p-2">
+                  <td className="min-w-[240px]">
                     <AccountSearchField
                       accounts={accounts}
                       currencies={currencies}
@@ -232,7 +233,7 @@ export function SettlementVoucherLinesTable({
                       disabled={readOnly}
                     />
                   </td>
-                  <td className="border-b border-slate-100 p-2 font-mono">
+                  <td className="font-mono">
                     <input
                       type="number"
                       value={line.debit_amount || ""}
@@ -244,11 +245,11 @@ export function SettlementVoucherLinesTable({
                       disabled={readOnly}
                       min={0}
                       step={amountStep}
-                      className="w-full min-w-[110px] rounded-md border border-slate-300 px-2 py-1"
+                      className="w-full min-w-[110px] rounded-md border border-slate-300 px-2 py-1 tabular-nums"
                       placeholder="0"
                     />
                   </td>
-                  <td className="border-b border-slate-100 p-2 font-mono">
+                  <td className="font-mono">
                     <input
                       type="number"
                       value={line.credit_amount || ""}
@@ -260,11 +261,11 @@ export function SettlementVoucherLinesTable({
                       disabled={readOnly}
                       min={0}
                       step={amountStep}
-                      className="w-full min-w-[110px] rounded-md border border-slate-300 px-2 py-1"
+                      className="w-full min-w-[110px] rounded-md border border-slate-300 px-2 py-1 tabular-nums"
                       placeholder="0"
                     />
                   </td>
-                  <td className="min-w-[200px] border-b border-slate-100 p-2">
+                  <td className="min-w-[200px]">
                     <CostCenterSearchField
                       costCenters={costCenters}
                       value={line.cost_center_id ?? ""}
@@ -276,7 +277,7 @@ export function SettlementVoucherLinesTable({
                       disabled={readOnly}
                     />
                   </td>
-                  <td className="min-w-[160px] border-b border-slate-100 p-2">
+                  <td className="min-w-[160px]">
                     <VoucherLineCategoryFields
                       categories={lineCategories}
                       categoryId={line.line_category_id ?? ""}
@@ -295,7 +296,7 @@ export function SettlementVoucherLinesTable({
                       }
                     />
                   </td>
-                  <td className="border-b border-slate-100 p-2">
+                  <td>
                     <input
                       value={line.line_description ?? ""}
                       onChange={(event) =>
@@ -306,12 +307,12 @@ export function SettlementVoucherLinesTable({
                       placeholder="وصف السطر"
                     />
                   </td>
-                  <td className="border-b border-slate-100 p-2">
+                  <td>
                     <button
                       type="button"
                       onClick={() => removeLine(line.id)}
                       disabled={readOnly || !allowLineDelete}
-                      className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
+                      className="btn btn-sm btn-outline text-[var(--danger)] disabled:opacity-50"
                     >
                       حذف
                     </button>
@@ -321,10 +322,7 @@ export function SettlementVoucherLinesTable({
             })}
             {lines.length === 0 && (
               <tr>
-                <td
-                  colSpan={7}
-                  className="border-b border-slate-100 p-4 text-center text-slate-500"
-                >
+                <td colSpan={7} className="p-4 text-center text-slate-500">
                   أضف سطراً (حساب + مدين أو دائن + مركز كلفة).
                 </td>
               </tr>
@@ -333,32 +331,32 @@ export function SettlementVoucherLinesTable({
         </table>
       </div>
 
-      <div className="mt-3 grid gap-2 rounded-md bg-blue-50 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-        <p className="font-mono text-blue-900">
+      <div className="mt-3 grid gap-2 rounded-md bg-[var(--brand-navy)]/5 p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <p className="font-mono tabular-nums text-[var(--brand-navy)]">
           إجمالي مدين الأسطر: {formatVoucherAmount(totalDebit, selectedCurrency)}
         </p>
-        <p className="font-mono text-blue-900">
+        <p className="font-mono tabular-nums text-[var(--brand-navy)]">
           إجمالي دائن الأسطر: {formatVoucherAmount(totalCredit, selectedCurrency)}
         </p>
-        <p className="font-mono text-blue-900">
+        <p className="font-mono tabular-nums text-[var(--brand-navy)]">
           مدين الحساب الوسيط (تلقائي):{" "}
           {formatVoucherAmount(totalCredit, selectedCurrency)}
         </p>
-        <p className="font-mono text-blue-900">
+        <p className="font-mono tabular-nums text-[var(--brand-navy)]">
           دائن الحساب الوسيط (تلقائي):{" "}
           {formatVoucherAmount(totalDebit, selectedCurrency)}
         </p>
       </div>
 
       {costCenterBalances.length > 0 && (
-        <div className="mt-3 overflow-x-auto rounded-md border border-slate-200 bg-white">
-          <table className="w-full min-w-[480px] border-collapse text-sm">
-            <thead className="bg-slate-50">
-              <tr className="text-right text-slate-700">
-                <th className="border-b border-slate-200 p-2">مركز الكلفة</th>
-                <th className="border-b border-slate-200 p-2">مدين</th>
-                <th className="border-b border-slate-200 p-2">دائن</th>
-                <th className="border-b border-slate-200 p-2">الفرق</th>
+        <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="data-table min-w-[480px]">
+            <thead>
+              <tr>
+                <th>مركز الكلفة</th>
+                <th>مدين</th>
+                <th>دائن</th>
+                <th>الفرق</th>
               </tr>
             </thead>
             <tbody>
@@ -373,14 +371,14 @@ export function SettlementVoucherLinesTable({
                     key={row.costCenterId ?? "none"}
                     className={balanced ? "text-slate-800" : "bg-amber-50 text-amber-900"}
                   >
-                    <td className="border-b border-slate-100 p-2">{label}</td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                    <td>{label}</td>
+                    <td className="font-mono tabular-nums">
                       {formatVoucherAmount(row.totalDebit, selectedCurrency)}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                    <td className="font-mono tabular-nums">
                       {formatVoucherAmount(row.totalCredit, selectedCurrency)}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                    <td className="font-mono tabular-nums">
                       {balanced
                         ? "✓ متوازن"
                         : formatVoucherAmount(Math.abs(row.difference), selectedCurrency)}

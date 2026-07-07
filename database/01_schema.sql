@@ -919,7 +919,7 @@ as $$
       coalesce(sum(
         case
           when p_from_date is not null and je.entry_date < p_from_date
-            then jel.debit_base_base - jel.credit_base
+            then jel.debit_base - jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as opening_balance,

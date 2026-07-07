@@ -76,6 +76,33 @@ export const warehouseApi = {
     payload: Partial<WarehouseFormValues>,
   ): Promise<Warehouse> {
     const supabase = getSupabaseClient();
+
+    if (payload.branch_id != null) {
+      const { data: current, error: currentError } = await supabase
+        .from("warehouses")
+        .select("branch_id")
+        .eq("id", id)
+        .maybeSingle();
+      throwIfSupabaseError(currentError);
+
+      if (current && current.branch_id !== payload.branch_id) {
+        const { count, error: movementError } = await supabase
+          .from("inventory_movements")
+          .select("id", { count: "exact", head: true })
+          .eq("warehouse_id", id);
+
+        if (!isMissingTable(movementError) && movementError) {
+          throwIfSupabaseError(movementError);
+        }
+
+        if ((count ?? 0) > 0) {
+          throw new Error(
+            "لا يمكن تغيير فرع المستودع بعد تسجيل حركات مخزنية عليه.",
+          );
+        }
+      }
+    }
+
     const patch: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };

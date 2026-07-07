@@ -158,7 +158,7 @@ export default function VoucherSettingsPage() {
   return (
     <main className="flex w-full flex-col gap-4">
       <section>
-        <h1 className="text-xl font-bold text-slate-900">إعدادات السندات</h1>
+        <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">إعدادات السندات</h1>
         <p className="text-xs text-slate-600">
           الترقيم التلقائي وبادئات كل نوع سند.
         </p>
@@ -179,8 +179,8 @@ export default function VoucherSettingsPage() {
             </p>
           )}
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 text-base font-semibold text-slate-900">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-base font-semibold text-[var(--brand-navy)]">
               الترقيم العام
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -216,15 +216,15 @@ export default function VoucherSettingsPage() {
           </section>
 
           <section className="grid gap-4">
-            <h2 className="text-base font-semibold text-slate-900">
+            <h2 className="text-base font-semibold text-[var(--brand-navy)]">
               الافتراضيات لكل نوع سند
             </h2>
             {typeDefaults.map((row) => (
               <article
                 key={row.voucher_type}
-                className="rounded-xl border border-slate-200 bg-white p-4"
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
               >
-                <h3 className="mb-3 font-semibold text-slate-900">
+                <h3 className="mb-3 font-semibold text-[var(--brand-navy)]">
                   {getVoucherTypeLabel(row.voucher_type)}
                 </h3>
                 <div className="grid gap-3 md:grid-cols-3">
@@ -307,21 +307,21 @@ export default function VoucherSettingsPage() {
           </section>
 
           <section className="grid gap-4">
-            <h2 className="text-base font-semibold text-slate-900">
+            <h2 className="text-base font-semibold text-[var(--brand-navy)]">
               ترقيم كل نوع سند
             </h2>
             {sequences.map((row) => (
               <article
                 key={row.voucher_type}
-                className="rounded-xl border border-slate-200 bg-white p-4"
+                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="font-semibold text-slate-900">
+                  <h3 className="font-semibold text-[var(--brand-navy)]">
                     {getVoucherTypeLabel(row.voucher_type)}
                   </h3>
                   <p className="text-xs text-slate-500">
                     الرقم التالي:{" "}
-                    <span className="font-mono font-medium text-blue-900">
+                    <span className="font-mono font-medium tabular-nums text-[var(--brand-navy)]">
                       {previews[row.voucher_type] || "—"}
                     </span>
                   </p>
@@ -372,8 +372,8 @@ export default function VoucherSettingsPage() {
                     تضمين السنة
                   </label>
                   <div className="text-sm text-slate-600">
-                    <p>آخر رقم: {row.last_number}</p>
-                    <p>سنة التسلسل: {row.sequence_year}</p>
+                    <p className="tabular-nums">آخر رقم: {row.last_number}</p>
+                    <p className="tabular-nums">سنة التسلسل: {row.sequence_year}</p>
                   </div>
                 </div>
               </article>
@@ -386,7 +386,7 @@ export default function VoucherSettingsPage() {
                 type="button"
                 onClick={() => void onSave()}
                 disabled={isSaving}
-                className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="btn btn-primary"
               >
                 حفظ الإعدادات
               </button>

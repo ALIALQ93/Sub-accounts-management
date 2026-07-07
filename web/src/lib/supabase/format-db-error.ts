@@ -58,6 +58,18 @@ export function formatDbError(message: string | null | undefined): string {
     return "لا يمكن عكس سند عكسي — استخدم السند الأصلي إن كان لا يزال مرحّلاً.";
   }
 
+  if (/Cannot change warehouse branch after inventory movements exist/i.test(raw)) {
+    return "لا يمكن تغيير فرع المستودع بعد تسجيل حركات مخزنية عليه.";
+  }
+
+  if (/Circular material category hierarchy is not allowed/i.test(raw)) {
+    return "لا يمكن جعل التصنيف أباً لأحد أسلافه — تسلسل دائري غير مسموح.";
+  }
+
+  if (/Material category cannot be parent of itself/i.test(raw)) {
+    return "لا يمكن أن يكون التصنيف أباً لنفسه.";
+  }
+
   if (/Invoice settlement vouchers cannot be reversed automatically/i.test(raw)) {
     return "لا يمكن عكس سند إغلاق الحركات تلقائياً — راجع إعداد قاعدة البيانات.";
   }

@@ -129,6 +129,7 @@ database/setup_all.sql
 | `patch_reverse_voucher_rpc.sql` | `reverse_posted_voucher()` — عكس ذرّي | **#27 — تدقيق** |
 | `patch_voucher_atomic_ops.sql` | استبدال أسطر/تخصيصات + استيراد حسابات ذرّي | **#28 — تدقيق** |
 | `patch_reverse_invoice_settlement.sql` | عكس سندات invoice + إصلاح ترحيل المقاصة | **#29 — تدقيق** |
+| `patch_audit_remaining.sql` | دوران تصنيفات المواد + قفل فرع المستودع | **#30 — تدقيق** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

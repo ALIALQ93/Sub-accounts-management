@@ -1,6 +1,6 @@
 "use client";
 
-import { generateAccountCode } from "@/modules/accounts/utils/generate-account-code";
+import { createAccountWithGeneratedCode } from "@/modules/accounts/utils/create-account-with-code";
 import type { PartyFormValues, PartySettings } from "@/modules/parties/types";
 import {
   generateCustomerCode,
@@ -36,13 +36,9 @@ async function createLinkedAccount(
     throw new Error("حساب الأب لا يملك عملة — اختر حساباً آخر.");
   }
 
-  const code = generateAccountCode(parent, allAccounts);
-
-  return voucherApi.createAccount({
-    code,
+  return createAccountWithGeneratedCode(parent, allAccounts, {
     name_ar: partyName.trim(),
     name_en: null,
-    parent_id: parent.id,
     currency_id: parent.currency_id,
     is_postable: true,
     is_active: true,

@@ -466,7 +466,7 @@ export function SettlementVoucherForm({
 
   if (isLoading || isLoadingAccounts) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-700">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700 shadow-sm">
         جاري تحميل سند التصفية...
       </div>
     );
@@ -479,7 +479,7 @@ export function SettlementVoucherForm({
         voucherId={voucherId || initialVoucherId || ""}
         status={status}
       />
-      <div className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+      <div className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-900 shadow-sm">
         <p className="font-semibold">سند تصفية</p>
         <p className="mt-0.5 opacity-90">
           تسوية بين حسابات عبر حساب وسيط — أدخل المبلغ في عمود المدين أو الدائن
@@ -489,9 +489,9 @@ export function SettlementVoucherForm({
 
       <VoucherAdminPostedNotice visible={canEditPosted} />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-bold text-slate-900">
+          <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">
             {initialMode === "create" ? "سند تصفية جديد" : "تعديل سند تصفية"}
           </h1>
           <StatusChip status={status} />
@@ -590,18 +590,18 @@ export function SettlementVoucherForm({
         readOnly={readOnly || isSaving}
       />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <p className="font-mono text-blue-900">
+          <p className="font-mono tabular-nums text-[var(--brand-navy)]">
             مدين الأسطر: {formatVoucherAmount(totalUserDebit, selectedCurrency)}
           </p>
-          <p className="font-mono text-blue-900">
+          <p className="font-mono tabular-nums text-[var(--brand-navy)]">
             دائن الأسطر: {formatVoucherAmount(totalUserCredit, selectedCurrency)}
           </p>
-          <p className="font-mono text-blue-900">
+          <p className="font-mono tabular-nums text-[var(--brand-navy)]">
             مدين الوسيط: {formatVoucherAmount(totalUserCredit, selectedCurrency)}
           </p>
-          <p className="font-mono text-blue-900">
+          <p className="font-mono tabular-nums text-[var(--brand-navy)]">
             دائن الوسيط: {formatVoucherAmount(totalUserDebit, selectedCurrency)}
           </p>
         </div>
@@ -619,7 +619,7 @@ export function SettlementVoucherForm({
                 void saveVoucher("posted").finally(() => setIsSaving(false));
               }}
               disabled={isSaving}
-              className="rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="btn bg-amber-700 text-white shadow-sm hover:bg-amber-600"
             >
               حفظ التعديلات (مدير)
             </button>
@@ -633,7 +633,7 @@ export function SettlementVoucherForm({
                   void saveVoucher("draft").finally(() => setIsSaving(false));
                 }}
                 disabled={isSaving}
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm disabled:opacity-50"
+                className="btn btn-outline"
               >
                 حفظ مسودة
               </button>
@@ -671,7 +671,7 @@ export function SettlementVoucherForm({
                   })().finally(() => setIsSaving(false));
                 }}
                 disabled={isSaving || (autoPostEnabled && !canPost)}
-                className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-800 disabled:opacity-50"
+                className="btn btn-outline text-amber-800"
               >
                 {getApproveButtonLabel(autoPostEnabled)}
               </button>
@@ -699,12 +699,12 @@ export function SettlementVoucherForm({
                 })().finally(() => setIsSaving(false));
               }}
               disabled={!canPost || isSaving}
-              className="rounded-md bg-blue-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+              className="btn btn-primary"
             >
               ترحيل
             </button>
           )}
-          <Link href="/vouchers" className="rounded-md border border-slate-300 px-4 py-2 text-sm">
+          <Link href="/vouchers" className="btn btn-outline">
             قائمة السندات
           </Link>
           {journalEntryId && (
