@@ -108,19 +108,19 @@ alter table public.company_settlement_accounts enable row level security;
 
 drop policy if exists "branches_select_all" on public.branches;
 create policy "branches_select_all" on public.branches
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "branches_insert_all" on public.branches;
 create policy "branches_insert_all" on public.branches
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 
 drop policy if exists "branches_update_all" on public.branches;
 create policy "branches_update_all" on public.branches
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "company_settlement_accounts_select_all" on public.company_settlement_accounts;
 create policy "company_settlement_accounts_select_all" on public.company_settlement_accounts
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "company_settlement_accounts_update_admin" on public.company_settlement_accounts;
 create policy "company_settlement_accounts_update_admin" on public.company_settlement_accounts

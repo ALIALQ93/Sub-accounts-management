@@ -185,10 +185,28 @@ export function getVisibleTree(
 export function getParentOptions(
   accounts: Account[],
   excludeId?: string,
+  accountsWithMovements?: ReadonlySet<string>,
 ): Account[] {
   return accounts
     .filter((account) => account.is_active && account.id !== excludeId)
     .sort((a, b) => a.code.localeCompare(b.code, "ar"));
+}
+
+export function formatParentOptionLabel(
+  account: Account,
+  accountsWithMovements?: ReadonlySet<string>,
+): string {
+  const indent = "\u00A0".repeat(((account.level ?? 1) - 1) * 2);
+  const movementHint =
+    accountsWithMovements?.has(account.id) ? " — عليه حركة" : "";
+  return `${indent}${account.code} — ${account.name_ar}${movementHint}`;
+}
+
+export function accountHasJournalMovements(
+  accountId: string,
+  accountsWithMovements?: ReadonlySet<string>,
+): boolean {
+  return accountsWithMovements?.has(accountId) ?? false;
 }
 
 export function isRootAccount(account: Account): boolean {

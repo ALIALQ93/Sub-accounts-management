@@ -54,12 +54,12 @@ export function Modal({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/45"
+        className="absolute inset-0 bg-[var(--brand-navy)]/50 backdrop-blur-sm animate-[overlay-in_0.2s_ease-out]"
         aria-label="إغلاق"
         onClick={onClose}
       />
       <div
-        className={`relative z-10 max-h-[92vh] w-full ${SIZE_CLASS[size]} overflow-y-auto rounded-xl bg-white p-6 shadow-2xl md:p-8`}
+        className={`relative z-10 max-h-[92vh] w-full ${SIZE_CLASS[size]} animate-[dialog-in_0.24s_cubic-bezier(0.16,1,0.3,1)] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xl md:p-8`}
       >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -73,9 +73,12 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            aria-label="إغلاق"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-800"
           >
-            ✕
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
         {children}

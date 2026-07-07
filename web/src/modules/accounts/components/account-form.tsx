@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { AccountFormValues } from "@/modules/accounts/types";
 import { getDefaultCurrencyId } from "@/modules/accounts/utils/compute-account-balances";
-import { isRootAccount } from "@/modules/accounts/utils/account-tree";
+import { isRootAccount, formatParentOptionLabel } from "@/modules/accounts/utils/account-tree";
 import { previewAccountCode } from "@/modules/accounts/utils/generate-account-code";
 import type { Currency } from "@/modules/currencies/types";
 import type { Account } from "@/modules/vouchers/types";
@@ -11,6 +11,7 @@ import type { Account } from "@/modules/vouchers/types";
 interface AccountFormProps {
   parentAccounts: Account[];
   allAccounts: Account[];
+  accountsWithMovements?: ReadonlySet<string>;
   currencies: Currency[];
   presetParentId?: string;
   isSaving: boolean;
@@ -31,6 +32,7 @@ const EMPTY_FORM: AccountFormValues = {
 export function AccountForm({
   parentAccounts,
   allAccounts,
+  accountsWithMovements,
   currencies,
   presetParentId,
   isSaving,
@@ -151,11 +153,16 @@ export function AccountForm({
             <option value="">اختر الحساب الأب</option>
             {parentAccounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {"\u00A0".repeat(((account.level ?? 1) - 1) * 2)}
-                {account.code} — {account.name_ar}
+                {formatParentOptionLabel(account, accountsWithMovements)}
               </option>
             ))}
           </select>
+          {selectedParent && accountsWithMovements?.has(selectedParent.id) && (
+            <span className="text-xs text-amber-700">
+              تحذير: الحساب الأب عليه حركة — لن يُقبل إضافة فرع إلا بعد إزالة
+              الحركات.
+            </span>
+          )}
         </label>
 
         <label className="grid gap-1 text-sm sm:col-span-2">

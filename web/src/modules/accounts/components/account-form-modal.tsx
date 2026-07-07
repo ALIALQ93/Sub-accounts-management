@@ -11,6 +11,7 @@ interface AccountFormModalProps {
   formKey: number;
   parentAccounts: Account[];
   allAccounts: Account[];
+  accountsWithMovements?: ReadonlySet<string>;
   currencies: Currency[];
   presetParentId?: string;
   isSaving: boolean;
@@ -24,6 +25,7 @@ export function AccountFormModal({
   formKey,
   parentAccounts,
   allAccounts,
+  accountsWithMovements,
   currencies,
   presetParentId,
   isSaving,
@@ -50,6 +52,7 @@ export function AccountFormModal({
         key={formKey}
         parentAccounts={parentAccounts}
         allAccounts={allAccounts}
+        accountsWithMovements={accountsWithMovements}
         currencies={currencies}
         presetParentId={presetParentId}
         isSaving={isSaving}

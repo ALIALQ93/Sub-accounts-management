@@ -158,13 +158,13 @@ create policy "company_settings_insert_admin" on public.company_settings
 
 drop policy if exists "party_settings_select_all" on public.party_settings;
 create policy "party_settings_select_all" on public.party_settings
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "party_settings_insert_all" on public.party_settings;
 create policy "party_settings_insert_all" on public.party_settings
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "party_settings_update_all" on public.party_settings;
 create policy "party_settings_update_all" on public.party_settings
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- مزامنة مستخدمي auth الحاليين
 do $$

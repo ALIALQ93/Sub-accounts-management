@@ -56,19 +56,25 @@ export default function AccountsPage() {
   );
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [cardAccount, setCardAccount] = useState<AccountTreeNode | null>(null);
+  const [accountsWithMovements, setAccountsWithMovements] = useState<Set<string>>(
+    new Set(),
+  );
   const [connection, setConnection] = useState<SupabaseConnectionStatus | null>(
     null,
   );
 
   const reloadAll = async () => {
-    const [accountsData, currenciesData, balancesData] = await Promise.all([
-      voucherApi.listAllAccounts(),
-      currencyApi.listCurrencies(),
-      currencyApi.listDirectBalances().catch(() => [] as AccountDirectBalance[]),
-    ]);
+    const [accountsData, currenciesData, balancesData, movementIds] =
+      await Promise.all([
+        voucherApi.listAllAccounts(),
+        currencyApi.listCurrencies(),
+        currencyApi.listDirectBalances().catch(() => [] as AccountDirectBalance[]),
+        voucherApi.listAccountIdsWithJournalMovements(),
+      ]);
     setAccounts(accountsData);
     setCurrencies(currenciesData);
     setDirectBalances(balancesData);
+    setAccountsWithMovements(movementIds);
     return accountsData;
   };
 
@@ -77,7 +83,7 @@ export default function AccountsPage() {
 
     const load = async () => {
       try {
-        const [data, connectionStatus, currenciesData, balancesData] =
+        const [data, connectionStatus, currenciesData, balancesData, movementIds] =
           await Promise.all([
             voucherApi.listAllAccounts(),
             voucherApi.checkSupabaseConnection(),
@@ -85,11 +91,13 @@ export default function AccountsPage() {
             currencyApi.listDirectBalances().catch(
               () => [] as AccountDirectBalance[],
             ),
+            voucherApi.listAccountIdsWithJournalMovements(),
           ]);
         if (!cancelled) {
           setAccounts(data);
           setCurrencies(currenciesData);
           setDirectBalances(balancesData);
+          setAccountsWithMovements(movementIds);
           setConnection(connectionStatus);
           const { tree } = getVisibleTree(data, "", "all");
           setExpandedIds(new Set(collectExpandableIds(tree)));
@@ -416,6 +424,7 @@ export default function AccountsPage() {
       <AccountBulkImportModal
         open={isBulkImportOpen}
         accounts={accounts}
+        accountsWithMovements={accountsWithMovements}
         currencies={currencies}
         isSaving={isSaving}
         onClose={() => setIsBulkImportOpen(false)}
@@ -431,6 +440,7 @@ export default function AccountsPage() {
         formKey={formKey}
         parentAccounts={parentOptions}
         allAccounts={accounts}
+        accountsWithMovements={accountsWithMovements}
         currencies={currencies}
         presetParentId={presetParentId}
         isSaving={isSaving}
@@ -443,6 +453,7 @@ export default function AccountsPage() {
         open={isEditModalOpen}
         account={editingAccount}
         accountsById={accountsById}
+        accountsWithMovements={accountsWithMovements}
         currencies={currencies}
         isSaving={isSaving}
         error={editError}
@@ -522,6 +533,7 @@ export default function AccountsPage() {
             <AccountTreeTable
               rows={rows}
               accountsById={accountsById}
+              accountsWithMovements={accountsWithMovements}
               displayBalances={displayBalances}
               expandedIds={expandedIds}
               isSaving={isSaving}

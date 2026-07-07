@@ -6,6 +6,7 @@ import type { AccountTreeNode } from "@/modules/accounts/types";
 import {
   getStatementLabel,
   getStatementType,
+  accountHasJournalMovements,
   isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
 import type { Currency } from "@/modules/currencies/types";
@@ -23,6 +24,7 @@ interface AccountEditModalProps {
   open: boolean;
   account: AccountTreeNode | null;
   accountsById: Map<string, Account>;
+  accountsWithMovements?: ReadonlySet<string>;
   currencies: Currency[];
   isSaving: boolean;
   error: string;
@@ -33,6 +35,7 @@ interface AccountEditModalProps {
 interface AccountEditFormProps {
   account: AccountTreeNode;
   accountsById: Map<string, Account>;
+  accountsWithMovements?: ReadonlySet<string>;
   currencies: Currency[];
   isSaving: boolean;
   error: string;
@@ -43,6 +46,7 @@ interface AccountEditFormProps {
 function AccountEditForm({
   account,
   accountsById,
+  accountsWithMovements,
   currencies,
   isSaving,
   error,
@@ -61,7 +65,12 @@ function AccountEditForm({
 
   const hasChildren = account.childCount > 0;
   const rootAccount = isRootAccount(account);
-  const canTogglePostable = !hasChildren && !rootAccount;
+  const hasMovements = accountHasJournalMovements(
+    account.id,
+    accountsWithMovements,
+  );
+  const canTogglePostable =
+    !hasChildren && !rootAccount && !(account.is_postable && hasMovements);
   const statementType = getStatementType(account, accountsById);
   const parent = account.parent_id
     ? accountsById.get(account.parent_id)
@@ -179,6 +188,11 @@ function AccountEditForm({
                 (حساب رئيسي — ثابت كحساب أب)
               </span>
             )}
+            {hasMovements && account.is_postable && (
+              <span className="mr-2 text-xs text-amber-700">
+                (عليه حركة — لا يمكن تحويله إلى حساب أب)
+              </span>
+            )}
           </span>
         </label>
       </div>
@@ -234,6 +248,7 @@ export function AccountEditModal({
   open,
   account,
   accountsById,
+  accountsWithMovements,
   currencies,
   isSaving,
   error,
@@ -253,6 +268,7 @@ export function AccountEditModal({
         key={account.id}
         account={account}
         accountsById={accountsById}
+        accountsWithMovements={accountsWithMovements}
         currencies={currencies}
         isSaving={isSaving}
         error={error}

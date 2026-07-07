@@ -87,6 +87,8 @@ drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, 
 drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
 drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
 drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
+drop function if exists public.account_has_journal_movements(uuid) cascade;
+drop function if exists public.get_account_ids_with_journal_movements() cascade;
 drop function if exists public.get_inventory_balance(date, uuid, uuid, uuid, uuid, boolean) cascade;
 drop function if exists public.get_inventory_movement_ledger(date, date, uuid, uuid, uuid) cascade;
 drop function if exists public.post_stock_adjustment(uuid, uuid, numeric, uuid, uuid, date, text, uuid) cascade;

@@ -101,7 +101,7 @@ alter table public.inventory_reservations enable row level security;
 
 drop policy if exists "inventory_reservations_all" on public.inventory_reservations;
 create policy "inventory_reservations_all" on public.inventory_reservations
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop trigger if exists trg_inventory_reservations_updated_at on public.inventory_reservations;
 create trigger trg_inventory_reservations_updated_at
@@ -180,7 +180,7 @@ begin
 end;
 $$;
 
-grant execute on function public.sync_invoice_reservations(uuid) to anon, authenticated;
+grant execute on function public.sync_invoice_reservations(uuid) to authenticated;
 
 -- تحرير الحجز عند الترحيل
 create or replace function public.release_invoice_reservations(p_invoice_id uuid, p_status varchar)
@@ -196,4 +196,4 @@ begin
 end;
 $$;
 
-grant execute on function public.release_invoice_reservations(uuid, varchar) to anon, authenticated;
+grant execute on function public.release_invoice_reservations(uuid, varchar) to authenticated;

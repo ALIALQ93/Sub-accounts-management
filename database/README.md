@@ -122,6 +122,8 @@ database/setup_all.sql
 | `patch_inventory_reports.sql` | رصيد مخزون + دفتر حركة + `post_stock_adjustment` | بعد period_enforcement |
 | `patch_period_enforcement.sql` | قفل الفترة + مقاصة CC/فرع في ترحيل السند | بعد accounting_periods |
 | `patch_inventory_phase2.sql` | تسوية مجمّعة + تحليل نواقص/راكد | بعد inventory_reports |
+| `patch_inventory_phase7.sql` | تقرير مبيعات تفصيلي | #23 |
+| `patch_audit_fixes.sql` | RLS (authenticated فقط) + أرصدة base + دورة حياة الحساب | **#24 — أمني/محاسبي** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

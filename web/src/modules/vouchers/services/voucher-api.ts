@@ -345,6 +345,20 @@ export const voucherApi = {
     return (data ?? []) as Account[];
   },
 
+  async listAccountIdsWithJournalMovements(): Promise<Set<string>> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "get_account_ids_with_journal_movements",
+    );
+    if (error?.code === "42883" || error?.code === "PGRST202") {
+      return new Set<string>();
+    }
+    throwIfSupabaseError(error);
+    return new Set(
+      (data ?? []).map((row: { account_id: string }) => String(row.account_id)),
+    );
+  },
+
   async createAccount(payload: Partial<Account>): Promise<Account> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase

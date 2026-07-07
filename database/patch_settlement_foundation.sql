@@ -95,7 +95,7 @@ alter table public.voucher_netting_lines enable row level security;
 
 drop policy if exists "voucher_netting_lines_all" on public.voucher_netting_lines;
 create policy "voucher_netting_lines_all" on public.voucher_netting_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 -- ---------------------------------------------------------------------------
 -- إعادة بناء open_items_view (تخصيصات موسّعة — نفس المنطق)

@@ -57,12 +57,12 @@ alter table public.voucher_attachments enable row level security;
 
 drop policy if exists "voucher_attachments_select_all" on public.voucher_attachments;
 create policy "voucher_attachments_select_all" on public.voucher_attachments
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "voucher_attachments_insert_all" on public.voucher_attachments;
 create policy "voucher_attachments_insert_all" on public.voucher_attachments
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 
 drop policy if exists "voucher_attachments_delete_all" on public.voucher_attachments;
 create policy "voucher_attachments_delete_all" on public.voucher_attachments
-  for delete to anon, authenticated using (true);
+  for delete to authenticated using (true);

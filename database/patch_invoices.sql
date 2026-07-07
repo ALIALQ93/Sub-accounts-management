@@ -482,8 +482,8 @@ begin
 end;
 $$;
 
-grant execute on function public.peek_invoice_no(uuid) to anon, authenticated;
-grant execute on function public.reserve_invoice_no(uuid) to anon, authenticated;
+grant execute on function public.peek_invoice_no(uuid) to authenticated;
+grant execute on function public.reserve_invoice_no(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- محفزات: إنشاء شروط + تسلسل عند نمط جديد
@@ -643,74 +643,74 @@ alter table public.inventory_movements enable row level security;
 -- أنماط الفواتير
 drop policy if exists "invoice_patterns_select_all" on public.invoice_patterns;
 create policy "invoice_patterns_select_all" on public.invoice_patterns
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoice_patterns_insert_all" on public.invoice_patterns;
 create policy "invoice_patterns_insert_all" on public.invoice_patterns
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoice_patterns_update_all" on public.invoice_patterns;
 create policy "invoice_patterns_update_all" on public.invoice_patterns
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- جداول مساعدة للأنماط
 drop policy if exists "invoice_pattern_sequences_select_all" on public.invoice_pattern_sequences;
 create policy "invoice_pattern_sequences_select_all" on public.invoice_pattern_sequences
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoice_pattern_sequences_insert_all" on public.invoice_pattern_sequences;
 create policy "invoice_pattern_sequences_insert_all" on public.invoice_pattern_sequences
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoice_pattern_sequences_update_all" on public.invoice_pattern_sequences;
 create policy "invoice_pattern_sequences_update_all" on public.invoice_pattern_sequences
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_pattern_conditions_select_all" on public.invoice_pattern_conditions;
 create policy "invoice_pattern_conditions_select_all" on public.invoice_pattern_conditions
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoice_pattern_conditions_insert_all" on public.invoice_pattern_conditions;
 create policy "invoice_pattern_conditions_insert_all" on public.invoice_pattern_conditions
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoice_pattern_conditions_update_all" on public.invoice_pattern_conditions;
 create policy "invoice_pattern_conditions_update_all" on public.invoice_pattern_conditions
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_pattern_allowed_materials_all" on public.invoice_pattern_allowed_materials;
 create policy "invoice_pattern_allowed_materials_all" on public.invoice_pattern_allowed_materials
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_pattern_allowed_categories_all" on public.invoice_pattern_allowed_categories;
 create policy "invoice_pattern_allowed_categories_all" on public.invoice_pattern_allowed_categories
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 -- الفواتير وأسطرها
 drop policy if exists "invoices_select_all" on public.invoices;
 create policy "invoices_select_all" on public.invoices
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoices_insert_all" on public.invoices;
 create policy "invoices_insert_all" on public.invoices
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoices_update_all" on public.invoices;
 create policy "invoices_update_all" on public.invoices
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_material_lines_all" on public.invoice_material_lines;
 create policy "invoice_material_lines_all" on public.invoice_material_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_account_lines_all" on public.invoice_account_lines;
 create policy "invoice_account_lines_all" on public.invoice_account_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 -- المناقلة والمخزون
 drop policy if exists "inventory_transfers_all" on public.inventory_transfers;
 create policy "inventory_transfers_all" on public.inventory_transfers
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "inventory_transfer_lines_all" on public.inventory_transfer_lines;
 create policy "inventory_transfer_lines_all" on public.inventory_transfer_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "inventory_movements_select_all" on public.inventory_movements;
 create policy "inventory_movements_select_all" on public.inventory_movements
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "inventory_movements_insert_all" on public.inventory_movements;
 create policy "inventory_movements_insert_all" on public.inventory_movements
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);

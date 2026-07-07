@@ -104,6 +104,8 @@ drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, 
 drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
 drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
 drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
+drop function if exists public.account_has_journal_movements(uuid) cascade;
+drop function if exists public.get_account_ids_with_journal_movements() cascade;
 drop function if exists public.get_inventory_balance(date, uuid, uuid, uuid, uuid, boolean) cascade;
 drop function if exists public.get_inventory_movement_ledger(date, date, uuid, uuid, uuid) cascade;
 drop function if exists public.post_stock_adjustment(uuid, uuid, numeric, uuid, uuid, date, text, uuid) cascade;
@@ -484,9 +486,9 @@ with (security_invoker = true)
 as
 select
   jel.account_id,
-  coalesce(sum(jel.debit), 0)::numeric(18, 4) as debit,
-  coalesce(sum(jel.credit), 0)::numeric(18, 4) as credit,
-  coalesce(sum(jel.debit - jel.credit), 0)::numeric(18, 4) as balance
+  coalesce(sum(jel.debit_base), 0)::numeric(18, 4) as debit,
+  coalesce(sum(jel.credit_base), 0)::numeric(18, 4) as credit,
+  coalesce(sum(jel.debit_base - jel.credit_base), 0)::numeric(18, 4) as balance
 from public.journal_entry_lines jel
 inner join public.journal_entries je on je.id = jel.journal_entry_id
 where je.status = 'posted'
@@ -630,8 +632,8 @@ begin
 end;
 $$;
 
-grant execute on function public.peek_voucher_no(varchar) to anon, authenticated;
-grant execute on function public.reserve_voucher_no(varchar) to anon, authenticated;
+grant execute on function public.peek_voucher_no(varchar) to authenticated;
+grant execute on function public.reserve_voucher_no(varchar) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- قواعد العمل: دليل الحسابات
@@ -675,7 +677,13 @@ begin
     where id = new.parent_id;
 
     if v_parent_is_postable then
-      raise exception 'Parent account must be non-postable.';
+      if exists (
+        select 1
+        from public.journal_entry_lines l
+        where l.account_id = new.parent_id
+      ) then
+        raise exception 'Parent account has journal entries and cannot have child accounts.';
+      end if;
     end if;
 
     new.level := coalesce((select level + 1 from public.accounts where id = new.parent_id), 1);
@@ -690,6 +698,16 @@ begin
 
     if v_has_children and new.is_postable then
       raise exception 'Parent account cannot be postable.';
+    end if;
+
+    if old.is_postable = true and new.is_postable = false then
+      if exists (
+        select 1
+        from public.journal_entry_lines l
+        where l.account_id = old.id
+      ) then
+        raise exception 'Cannot change postable account to parent while it has journal entries.';
+      end if;
     end if;
   end if;
 
@@ -1039,7 +1057,7 @@ as $$
       coalesce(sum(
         case
           when p_from_date is not null and je.entry_date < p_from_date
-            then jel.debit - jel.credit
+            then jel.debit_base_base - jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as opening_balance,
@@ -1047,7 +1065,7 @@ as $$
         case
           when (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.debit
+            then jel.debit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_debit,
@@ -1055,7 +1073,7 @@ as $$
         case
           when (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.credit
+            then jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_credit
@@ -2041,87 +2059,87 @@ alter table public.voucher_attachments enable row level security;
 -- currencies
 drop policy if exists "currencies_select_all" on public.currencies;
 create policy "currencies_select_all" on public.currencies
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "currencies_insert_all" on public.currencies;
 create policy "currencies_insert_all" on public.currencies
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "currencies_update_all" on public.currencies;
 create policy "currencies_update_all" on public.currencies
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- currency_rate_history (قراءة فقط من الواجهة — الإدراج عبر دوال SQL)
 drop policy if exists "currency_rate_history_select_all" on public.currency_rate_history;
 create policy "currency_rate_history_select_all" on public.currency_rate_history
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "currency_rate_history_insert_all" on public.currency_rate_history;
 create policy "currency_rate_history_insert_all" on public.currency_rate_history
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 
 -- accounts
 drop policy if exists "accounts_select_all" on public.accounts;
 create policy "accounts_select_all" on public.accounts
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "accounts_insert_all" on public.accounts;
 create policy "accounts_insert_all" on public.accounts
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "accounts_update_all" on public.accounts;
 create policy "accounts_update_all" on public.accounts
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- cost_centers
 drop policy if exists "cost_centers_select_all" on public.cost_centers;
 create policy "cost_centers_select_all" on public.cost_centers
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "cost_centers_insert_all" on public.cost_centers;
 create policy "cost_centers_insert_all" on public.cost_centers
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "cost_centers_update_all" on public.cost_centers;
 create policy "cost_centers_update_all" on public.cost_centers
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- journal_entries
 drop policy if exists "journal_entries_select_all" on public.journal_entries;
 create policy "journal_entries_select_all" on public.journal_entries
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "journal_entries_insert_all" on public.journal_entries;
 create policy "journal_entries_insert_all" on public.journal_entries
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "journal_entries_update_all" on public.journal_entries;
 create policy "journal_entries_update_all" on public.journal_entries
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- journal_entry_lines
 drop policy if exists "journal_entry_lines_select_all" on public.journal_entry_lines;
 create policy "journal_entry_lines_select_all" on public.journal_entry_lines
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "journal_entry_lines_insert_all" on public.journal_entry_lines;
 create policy "journal_entry_lines_insert_all" on public.journal_entry_lines
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "journal_entry_lines_update_all" on public.journal_entry_lines;
 create policy "journal_entry_lines_update_all" on public.journal_entry_lines
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- customers
 drop policy if exists "customers_select_all" on public.customers;
 create policy "customers_select_all" on public.customers
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "customers_insert_all" on public.customers;
 create policy "customers_insert_all" on public.customers
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "customers_update_all" on public.customers;
 create policy "customers_update_all" on public.customers
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- vendors
 drop policy if exists "vendors_select_all" on public.vendors;
 create policy "vendors_select_all" on public.vendors
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "vendors_insert_all" on public.vendors;
 create policy "vendors_insert_all" on public.vendors
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "vendors_update_all" on public.vendors;
 create policy "vendors_update_all" on public.vendors
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- profiles
 drop policy if exists "profiles_select" on public.profiles;
@@ -2205,107 +2223,107 @@ create policy "company_settings_insert_admin" on public.company_settings
 -- party_settings
 drop policy if exists "party_settings_select_all" on public.party_settings;
 create policy "party_settings_select_all" on public.party_settings
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "party_settings_insert_all" on public.party_settings;
 create policy "party_settings_insert_all" on public.party_settings
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "party_settings_update_all" on public.party_settings;
 create policy "party_settings_update_all" on public.party_settings
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- voucher_settings
 drop policy if exists "voucher_settings_select_all" on public.voucher_settings;
 create policy "voucher_settings_select_all" on public.voucher_settings
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "voucher_settings_insert_all" on public.voucher_settings;
 create policy "voucher_settings_insert_all" on public.voucher_settings
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "voucher_settings_update_all" on public.voucher_settings;
 create policy "voucher_settings_update_all" on public.voucher_settings
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- voucher_number_sequences
 drop policy if exists "voucher_number_sequences_select_all" on public.voucher_number_sequences;
 create policy "voucher_number_sequences_select_all" on public.voucher_number_sequences
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "voucher_number_sequences_insert_all" on public.voucher_number_sequences;
 create policy "voucher_number_sequences_insert_all" on public.voucher_number_sequences
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "voucher_number_sequences_update_all" on public.voucher_number_sequences;
 create policy "voucher_number_sequences_update_all" on public.voucher_number_sequences
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- voucher_type_defaults
 drop policy if exists "voucher_type_defaults_select_all" on public.voucher_type_defaults;
 create policy "voucher_type_defaults_select_all" on public.voucher_type_defaults
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "voucher_type_defaults_insert_all" on public.voucher_type_defaults;
 create policy "voucher_type_defaults_insert_all" on public.voucher_type_defaults
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "voucher_type_defaults_update_all" on public.voucher_type_defaults;
 create policy "voucher_type_defaults_update_all" on public.voucher_type_defaults
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- voucher_line_categories
 drop policy if exists "voucher_line_categories_select_all" on public.voucher_line_categories;
 create policy "voucher_line_categories_select_all" on public.voucher_line_categories
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "voucher_line_categories_insert_all" on public.voucher_line_categories;
 create policy "voucher_line_categories_insert_all" on public.voucher_line_categories
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "voucher_line_categories_update_all" on public.voucher_line_categories;
 create policy "voucher_line_categories_update_all" on public.voucher_line_categories
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- vouchers
 drop policy if exists "vouchers_select_all" on public.vouchers;
 create policy "vouchers_select_all" on public.vouchers
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "vouchers_insert_all" on public.vouchers;
 create policy "vouchers_insert_all" on public.vouchers
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "vouchers_update_all" on public.vouchers;
 create policy "vouchers_update_all" on public.vouchers
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- voucher_lines
 drop policy if exists "voucher_lines_select_all" on public.voucher_lines;
 create policy "voucher_lines_select_all" on public.voucher_lines
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "voucher_lines_insert_all" on public.voucher_lines;
 create policy "voucher_lines_insert_all" on public.voucher_lines
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "voucher_lines_update_all" on public.voucher_lines;
 create policy "voucher_lines_update_all" on public.voucher_lines
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 drop policy if exists "voucher_lines_delete_all" on public.voucher_lines;
 create policy "voucher_lines_delete_all" on public.voucher_lines
-  for delete to anon, authenticated using (true);
+  for delete to authenticated using (true);
 
 -- voucher_allocations
 drop policy if exists "voucher_allocations_select_all" on public.voucher_allocations;
 create policy "voucher_allocations_select_all" on public.voucher_allocations
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "voucher_allocations_insert_all" on public.voucher_allocations;
 create policy "voucher_allocations_insert_all" on public.voucher_allocations
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "voucher_allocations_update_all" on public.voucher_allocations;
 create policy "voucher_allocations_update_all" on public.voucher_allocations
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 drop policy if exists "voucher_allocations_delete_all" on public.voucher_allocations;
 create policy "voucher_allocations_delete_all" on public.voucher_allocations
-  for delete to anon, authenticated using (true);
+  for delete to authenticated using (true);
 
 -- voucher_attachments
 drop policy if exists "voucher_attachments_select_all" on public.voucher_attachments;
 create policy "voucher_attachments_select_all" on public.voucher_attachments
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "voucher_attachments_insert_all" on public.voucher_attachments;
 create policy "voucher_attachments_insert_all" on public.voucher_attachments
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "voucher_attachments_delete_all" on public.voucher_attachments;
 create policy "voucher_attachments_delete_all" on public.voucher_attachments
-  for delete to anon, authenticated using (true);
+  for delete to authenticated using (true);
 
 -- ---------------------------------------------------------------------------
 -- مزامنة مستخدمي Supabase Auth الموجودين (إن وُجدوا قبل التثبيت)
@@ -2447,19 +2465,19 @@ alter table public.company_settlement_accounts enable row level security;
 
 drop policy if exists "branches_select_all" on public.branches;
 create policy "branches_select_all" on public.branches
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "branches_insert_all" on public.branches;
 create policy "branches_insert_all" on public.branches
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 
 drop policy if exists "branches_update_all" on public.branches;
 create policy "branches_update_all" on public.branches
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "company_settlement_accounts_select_all" on public.company_settlement_accounts;
 create policy "company_settlement_accounts_select_all" on public.company_settlement_accounts
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "company_settlement_accounts_update_admin" on public.company_settlement_accounts;
 create policy "company_settlement_accounts_update_admin" on public.company_settlement_accounts
@@ -2763,43 +2781,43 @@ alter table public.material_units enable row level security;
 
 drop policy if exists "material_categories_select_all" on public.material_categories;
 create policy "material_categories_select_all" on public.material_categories
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "material_categories_insert_all" on public.material_categories;
 create policy "material_categories_insert_all" on public.material_categories
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "material_categories_update_all" on public.material_categories;
 create policy "material_categories_update_all" on public.material_categories
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "warehouses_select_all" on public.warehouses;
 create policy "warehouses_select_all" on public.warehouses
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "warehouses_insert_all" on public.warehouses;
 create policy "warehouses_insert_all" on public.warehouses
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "warehouses_update_all" on public.warehouses;
 create policy "warehouses_update_all" on public.warehouses
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "materials_select_all" on public.materials;
 create policy "materials_select_all" on public.materials
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "materials_insert_all" on public.materials;
 create policy "materials_insert_all" on public.materials
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "materials_update_all" on public.materials;
 create policy "materials_update_all" on public.materials
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "material_units_select_all" on public.material_units;
 create policy "material_units_select_all" on public.material_units
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "material_units_insert_all" on public.material_units;
 create policy "material_units_insert_all" on public.material_units
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "material_units_update_all" on public.material_units;
 create policy "material_units_update_all" on public.material_units
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- =============================================================================
 -- BEGIN patch_company_inventory.sql
@@ -2954,7 +2972,7 @@ drop policy if exists "company_inventory_settings_select_all"
   on public.company_inventory_settings;
 create policy "company_inventory_settings_select_all"
   on public.company_inventory_settings
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "company_inventory_settings_update_admin"
   on public.company_inventory_settings;
@@ -3722,8 +3740,8 @@ begin
 end;
 $$;
 
-grant execute on function public.peek_invoice_no(uuid) to anon, authenticated;
-grant execute on function public.reserve_invoice_no(uuid) to anon, authenticated;
+grant execute on function public.peek_invoice_no(uuid) to authenticated;
+grant execute on function public.reserve_invoice_no(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- محفزات: إنشاء شروط + تسلسل عند نمط جديد
@@ -3883,77 +3901,77 @@ alter table public.inventory_movements enable row level security;
 -- أنماط الفواتير
 drop policy if exists "invoice_patterns_select_all" on public.invoice_patterns;
 create policy "invoice_patterns_select_all" on public.invoice_patterns
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoice_patterns_insert_all" on public.invoice_patterns;
 create policy "invoice_patterns_insert_all" on public.invoice_patterns
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoice_patterns_update_all" on public.invoice_patterns;
 create policy "invoice_patterns_update_all" on public.invoice_patterns
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 -- جداول مساعدة للأنماط
 drop policy if exists "invoice_pattern_sequences_select_all" on public.invoice_pattern_sequences;
 create policy "invoice_pattern_sequences_select_all" on public.invoice_pattern_sequences
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoice_pattern_sequences_insert_all" on public.invoice_pattern_sequences;
 create policy "invoice_pattern_sequences_insert_all" on public.invoice_pattern_sequences
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoice_pattern_sequences_update_all" on public.invoice_pattern_sequences;
 create policy "invoice_pattern_sequences_update_all" on public.invoice_pattern_sequences
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_pattern_conditions_select_all" on public.invoice_pattern_conditions;
 create policy "invoice_pattern_conditions_select_all" on public.invoice_pattern_conditions
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoice_pattern_conditions_insert_all" on public.invoice_pattern_conditions;
 create policy "invoice_pattern_conditions_insert_all" on public.invoice_pattern_conditions
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoice_pattern_conditions_update_all" on public.invoice_pattern_conditions;
 create policy "invoice_pattern_conditions_update_all" on public.invoice_pattern_conditions
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_pattern_allowed_materials_all" on public.invoice_pattern_allowed_materials;
 create policy "invoice_pattern_allowed_materials_all" on public.invoice_pattern_allowed_materials
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_pattern_allowed_categories_all" on public.invoice_pattern_allowed_categories;
 create policy "invoice_pattern_allowed_categories_all" on public.invoice_pattern_allowed_categories
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 -- الفواتير وأسطرها
 drop policy if exists "invoices_select_all" on public.invoices;
 create policy "invoices_select_all" on public.invoices
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "invoices_insert_all" on public.invoices;
 create policy "invoices_insert_all" on public.invoices
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "invoices_update_all" on public.invoices;
 create policy "invoices_update_all" on public.invoices
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_material_lines_all" on public.invoice_material_lines;
 create policy "invoice_material_lines_all" on public.invoice_material_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "invoice_account_lines_all" on public.invoice_account_lines;
 create policy "invoice_account_lines_all" on public.invoice_account_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 -- المناقلة والمخزون
 drop policy if exists "inventory_transfers_all" on public.inventory_transfers;
 create policy "inventory_transfers_all" on public.inventory_transfers
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "inventory_transfer_lines_all" on public.inventory_transfer_lines;
 create policy "inventory_transfer_lines_all" on public.inventory_transfer_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "inventory_movements_select_all" on public.inventory_movements;
 create policy "inventory_movements_select_all" on public.inventory_movements
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "inventory_movements_insert_all" on public.inventory_movements;
 create policy "inventory_movements_insert_all" on public.inventory_movements
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 
 -- =============================================================================
 -- BEGIN patch_invoice_seeds.sql
@@ -4152,15 +4170,15 @@ alter table public.sales_reps enable row level security;
 
 drop policy if exists "sales_reps_select_all" on public.sales_reps;
 create policy "sales_reps_select_all" on public.sales_reps
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "sales_reps_insert_all" on public.sales_reps;
 create policy "sales_reps_insert_all" on public.sales_reps
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 
 drop policy if exists "sales_reps_update_all" on public.sales_reps;
 create policy "sales_reps_update_all" on public.sales_reps
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop trigger if exists trg_sales_reps_updated_at on public.sales_reps;
 create trigger trg_sales_reps_updated_at
@@ -4278,7 +4296,7 @@ alter table public.inventory_reservations enable row level security;
 
 drop policy if exists "inventory_reservations_all" on public.inventory_reservations;
 create policy "inventory_reservations_all" on public.inventory_reservations
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 drop trigger if exists trg_inventory_reservations_updated_at on public.inventory_reservations;
 create trigger trg_inventory_reservations_updated_at
@@ -4357,7 +4375,7 @@ begin
 end;
 $$;
 
-grant execute on function public.sync_invoice_reservations(uuid) to anon, authenticated;
+grant execute on function public.sync_invoice_reservations(uuid) to authenticated;
 
 -- تحرير الحجز عند الترحيل
 create or replace function public.release_invoice_reservations(p_invoice_id uuid, p_status varchar)
@@ -4373,7 +4391,7 @@ begin
 end;
 $$;
 
-grant execute on function public.release_invoice_reservations(uuid, varchar) to anon, authenticated;
+grant execute on function public.release_invoice_reservations(uuid, varchar) to authenticated;
 
 -- =============================================================================
 -- BEGIN patch_settlement_foundation.sql
@@ -4475,7 +4493,7 @@ alter table public.voucher_netting_lines enable row level security;
 
 drop policy if exists "voucher_netting_lines_all" on public.voucher_netting_lines;
 create policy "voucher_netting_lines_all" on public.voucher_netting_lines
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 -- ---------------------------------------------------------------------------
 -- إعادة بناء open_items_view (تخصيصات موسّعة — نفس المنطق)
@@ -5734,7 +5752,7 @@ as $$
       coalesce(sum(
         case
           when coalesce(je.is_opening_entry, false)
-            then jel.debit - jel.credit
+            then jel.debit_base_base - jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as opening_entry_balance,
@@ -5743,7 +5761,7 @@ as $$
           when not coalesce(je.is_opening_entry, false)
             and p_from_date is not null
             and je.entry_date < p_from_date
-            then jel.debit - jel.credit
+            then jel.debit_base_base - jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as opening_balance,
@@ -5752,7 +5770,7 @@ as $$
           when not coalesce(je.is_opening_entry, false)
             and (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.debit
+            then jel.debit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_debit,
@@ -5761,7 +5779,7 @@ as $$
           when not coalesce(je.is_opening_entry, false)
             and (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.credit
+            then jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_credit
@@ -5838,7 +5856,7 @@ alter table public.accounting_periods enable row level security;
 
 drop policy if exists "accounting_periods_all" on public.accounting_periods;
 create policy "accounting_periods_all" on public.accounting_periods
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 create or replace function public.accounting_periods_set_updated_at()
 returns trigger
@@ -7852,6 +7870,151 @@ $$;
 
 comment on function public.get_sales_lines_report is
   'أسطر فواتير مبيعات/مرتجع مبيعات المرحّلة';
+
+-- =============================================================================
+-- BEGIN patch_audit_fixes.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_audit_fixes.sql — إصلاحات تدقيق أمني ومحاسبي (#24)
+-- =============================================================================
+-- 1) RLS: authenticated فقط (يُطبَّق عبر 02_rls.sql المحدَّث — هذا الملف للقواعد المحاسبية)
+-- 2) account_direct_balances + get_trial_balance: debit_base / credit_base
+-- 3) دورة حياة الحساب: ورقة↔أب مشروطة بعدم وجود حركة
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- عرض الأرصدة — عملة أساس
+-- ---------------------------------------------------------------------------
+
+create or replace view public.account_direct_balances
+with (security_invoker = true)
+as
+select
+  jel.account_id,
+  coalesce(sum(jel.debit_base), 0)::numeric(18, 4) as debit,
+  coalesce(sum(jel.credit_base), 0)::numeric(18, 4) as credit,
+  coalesce(sum(jel.debit_base - jel.credit_base), 0)::numeric(18, 4) as balance
+from public.journal_entry_lines jel
+inner join public.journal_entries je on je.id = jel.journal_entry_id
+where je.status = 'posted'
+group by jel.account_id;
+
+-- ---------------------------------------------------------------------------
+-- مساعد: هل الحساب عليه حركة قيد؟
+-- ---------------------------------------------------------------------------
+
+create or replace function public.account_has_journal_movements(p_account_id uuid)
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.journal_entry_lines l
+    where l.account_id = p_account_id
+  );
+$$;
+
+grant execute on function public.account_has_journal_movements(uuid) to authenticated;
+
+create or replace function public.get_account_ids_with_journal_movements()
+returns table (account_id uuid)
+language sql
+stable
+set search_path = public
+as $$
+  select distinct l.account_id
+  from public.journal_entry_lines l;
+$$;
+
+grant execute on function public.get_account_ids_with_journal_movements() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- قواعد التسلسل الهرمي للحسابات
+-- ---------------------------------------------------------------------------
+
+create or replace function public.accounts_apply_hierarchy_rules()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_parent_is_postable boolean;
+  v_has_children boolean;
+begin
+  if new.parent_id is not null then
+    if new.parent_id = new.id then
+      raise exception 'Account cannot be parent of itself.';
+    end if;
+
+    if tg_op = 'UPDATE' then
+      if exists (
+        with recursive descendants as (
+          select id, parent_id
+          from public.accounts
+          where parent_id = old.id
+          union all
+          select a.id, a.parent_id
+          from public.accounts a
+          inner join descendants d on a.parent_id = d.id
+        )
+        select 1
+        from descendants
+        where id = new.parent_id
+      ) then
+        raise exception 'Circular hierarchy is not allowed.';
+      end if;
+    end if;
+
+    select is_postable
+    into v_parent_is_postable
+    from public.accounts
+    where id = new.parent_id;
+
+    if v_parent_is_postable then
+      if exists (
+        select 1
+        from public.journal_entry_lines l
+        where l.account_id = new.parent_id
+      ) then
+        raise exception 'Parent account has journal entries and cannot have child accounts.';
+      end if;
+    end if;
+
+    new.level := coalesce((select level + 1 from public.accounts where id = new.parent_id), 1);
+  else
+    new.level := 1;
+  end if;
+
+  if tg_op = 'UPDATE' then
+    select exists (
+      select 1 from public.accounts c where c.parent_id = old.id
+    ) into v_has_children;
+
+    if v_has_children and new.is_postable then
+      raise exception 'Parent account cannot be postable.';
+    end if;
+
+    if old.is_postable = true and new.is_postable = false then
+      if exists (
+        select 1
+        from public.journal_entry_lines l
+        where l.account_id = old.id
+      ) then
+        raise exception 'Cannot change postable account to parent while it has journal entries.';
+      end if;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- ميزان المراجعة — يُعاد من patch_trial_balance_opening.sql إن وُجد
+-- (لا نكرر هنا لتجنب تعارض التوقيع)
+-- ---------------------------------------------------------------------------
 
 -- =============================================================================
 -- 06_storage.sql — Supabase Storage (شعار الشركة + مرفقات السندات مستقبلاً)

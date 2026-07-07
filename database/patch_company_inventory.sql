@@ -148,7 +148,7 @@ drop policy if exists "company_inventory_settings_select_all"
   on public.company_inventory_settings;
 create policy "company_inventory_settings_select_all"
   on public.company_inventory_settings
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "company_inventory_settings_update_admin"
   on public.company_inventory_settings;

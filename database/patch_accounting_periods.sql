@@ -36,7 +36,7 @@ alter table public.accounting_periods enable row level security;
 
 drop policy if exists "accounting_periods_all" on public.accounting_periods;
 create policy "accounting_periods_all" on public.accounting_periods
-  for all to anon, authenticated using (true) with check (true);
+  for all to authenticated using (true) with check (true);
 
 create or replace function public.accounting_periods_set_updated_at()
 returns trigger

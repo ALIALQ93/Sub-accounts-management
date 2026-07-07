@@ -277,40 +277,40 @@ alter table public.material_units enable row level security;
 
 drop policy if exists "material_categories_select_all" on public.material_categories;
 create policy "material_categories_select_all" on public.material_categories
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "material_categories_insert_all" on public.material_categories;
 create policy "material_categories_insert_all" on public.material_categories
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "material_categories_update_all" on public.material_categories;
 create policy "material_categories_update_all" on public.material_categories
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "warehouses_select_all" on public.warehouses;
 create policy "warehouses_select_all" on public.warehouses
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "warehouses_insert_all" on public.warehouses;
 create policy "warehouses_insert_all" on public.warehouses
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "warehouses_update_all" on public.warehouses;
 create policy "warehouses_update_all" on public.warehouses
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "materials_select_all" on public.materials;
 create policy "materials_select_all" on public.materials
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "materials_insert_all" on public.materials;
 create policy "materials_insert_all" on public.materials
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "materials_update_all" on public.materials;
 create policy "materials_update_all" on public.materials
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop policy if exists "material_units_select_all" on public.material_units;
 create policy "material_units_select_all" on public.material_units
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 drop policy if exists "material_units_insert_all" on public.material_units;
 create policy "material_units_insert_all" on public.material_units
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 drop policy if exists "material_units_update_all" on public.material_units;
 create policy "material_units_update_all" on public.material_units
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);

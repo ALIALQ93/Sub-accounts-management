@@ -344,9 +344,9 @@ with (security_invoker = true)
 as
 select
   jel.account_id,
-  coalesce(sum(jel.debit), 0)::numeric(18, 4) as debit,
-  coalesce(sum(jel.credit), 0)::numeric(18, 4) as credit,
-  coalesce(sum(jel.debit - jel.credit), 0)::numeric(18, 4) as balance
+  coalesce(sum(jel.debit_base), 0)::numeric(18, 4) as debit,
+  coalesce(sum(jel.credit_base), 0)::numeric(18, 4) as credit,
+  coalesce(sum(jel.debit_base - jel.credit_base), 0)::numeric(18, 4) as balance
 from public.journal_entry_lines jel
 inner join public.journal_entries je on je.id = jel.journal_entry_id
 where je.status = 'posted'
@@ -490,8 +490,8 @@ begin
 end;
 $$;
 
-grant execute on function public.peek_voucher_no(varchar) to anon, authenticated;
-grant execute on function public.reserve_voucher_no(varchar) to anon, authenticated;
+grant execute on function public.peek_voucher_no(varchar) to authenticated;
+grant execute on function public.reserve_voucher_no(varchar) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- قواعد العمل: دليل الحسابات
@@ -535,7 +535,13 @@ begin
     where id = new.parent_id;
 
     if v_parent_is_postable then
-      raise exception 'Parent account must be non-postable.';
+      if exists (
+        select 1
+        from public.journal_entry_lines l
+        where l.account_id = new.parent_id
+      ) then
+        raise exception 'Parent account has journal entries and cannot have child accounts.';
+      end if;
     end if;
 
     new.level := coalesce((select level + 1 from public.accounts where id = new.parent_id), 1);
@@ -550,6 +556,16 @@ begin
 
     if v_has_children and new.is_postable then
       raise exception 'Parent account cannot be postable.';
+    end if;
+
+    if old.is_postable = true and new.is_postable = false then
+      if exists (
+        select 1
+        from public.journal_entry_lines l
+        where l.account_id = old.id
+      ) then
+        raise exception 'Cannot change postable account to parent while it has journal entries.';
+      end if;
     end if;
   end if;
 
@@ -899,7 +915,7 @@ as $$
       coalesce(sum(
         case
           when p_from_date is not null and je.entry_date < p_from_date
-            then jel.debit - jel.credit
+            then jel.debit_base_base - jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as opening_balance,
@@ -907,7 +923,7 @@ as $$
         case
           when (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.debit
+            then jel.debit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_debit,
@@ -915,7 +931,7 @@ as $$
         case
           when (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.credit
+            then jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_credit

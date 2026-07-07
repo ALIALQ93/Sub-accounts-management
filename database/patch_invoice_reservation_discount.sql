@@ -62,15 +62,15 @@ alter table public.sales_reps enable row level security;
 
 drop policy if exists "sales_reps_select_all" on public.sales_reps;
 create policy "sales_reps_select_all" on public.sales_reps
-  for select to anon, authenticated using (true);
+  for select to authenticated using (true);
 
 drop policy if exists "sales_reps_insert_all" on public.sales_reps;
 create policy "sales_reps_insert_all" on public.sales_reps
-  for insert to anon, authenticated with check (true);
+  for insert to authenticated with check (true);
 
 drop policy if exists "sales_reps_update_all" on public.sales_reps;
 create policy "sales_reps_update_all" on public.sales_reps
-  for update to anon, authenticated using (true) with check (true);
+  for update to authenticated using (true) with check (true);
 
 drop trigger if exists trg_sales_reps_updated_at on public.sales_reps;
 create trigger trg_sales_reps_updated_at

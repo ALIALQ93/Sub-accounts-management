@@ -7,8 +7,8 @@
 
 drop policy if exists "voucher_lines_delete_all" on public.voucher_lines;
 create policy "voucher_lines_delete_all" on public.voucher_lines
-  for delete to anon, authenticated using (true);
+  for delete to authenticated using (true);
 
 drop policy if exists "voucher_allocations_delete_all" on public.voucher_allocations;
 create policy "voucher_allocations_delete_all" on public.voucher_allocations
-  for delete to anon, authenticated using (true);
+  for delete to authenticated using (true);

@@ -20,6 +20,7 @@ import type { Account } from "@/modules/vouchers/types";
 interface AccountBulkImportModalProps {
   open: boolean;
   accounts: Account[];
+  accountsWithMovements?: ReadonlySet<string>;
   currencies: Currency[];
   isSaving: boolean;
   onClose: () => void;
@@ -35,6 +36,7 @@ function createStarterRows(): BulkAccountImportRow[] {
 export function AccountBulkImportModal({
   open,
   accounts,
+  accountsWithMovements,
   currencies,
   isSaving,
   onClose,
@@ -166,7 +168,12 @@ export function AccountBulkImportModal({
       return;
     }
 
-    const validated = validateBulkAccountRows(nonEmptyRows, accounts, currencies);
+    const validated = validateBulkAccountRows(
+      nonEmptyRows,
+      accounts,
+      currencies,
+      accountsWithMovements,
+    );
     setValidatedRows(validated);
     setRows(validated);
 
@@ -188,6 +195,7 @@ export function AccountBulkImportModal({
       sourceRows.filter((row) => row.name_ar.trim() || row.parent_code.trim()),
       accounts,
       currencies,
+      accountsWithMovements,
     );
     setValidatedRows(validated);
     setRows(validated);

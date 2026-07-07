@@ -62,7 +62,7 @@ as $$
       coalesce(sum(
         case
           when coalesce(je.is_opening_entry, false)
-            then jel.debit - jel.credit
+            then jel.debit_base_base - jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as opening_entry_balance,
@@ -71,7 +71,7 @@ as $$
           when not coalesce(je.is_opening_entry, false)
             and p_from_date is not null
             and je.entry_date < p_from_date
-            then jel.debit - jel.credit
+            then jel.debit_base_base - jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as opening_balance,
@@ -80,7 +80,7 @@ as $$
           when not coalesce(je.is_opening_entry, false)
             and (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.debit
+            then jel.debit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_debit,
@@ -89,7 +89,7 @@ as $$
           when not coalesce(je.is_opening_entry, false)
             and (p_from_date is null or je.entry_date >= p_from_date)
             and (p_to_date is null or je.entry_date <= p_to_date)
-            then jel.credit
+            then jel.credit_base
           else 0
         end
       ), 0)::numeric(18, 2) as period_credit

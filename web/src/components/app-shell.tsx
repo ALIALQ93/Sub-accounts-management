@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full flex-col bg-[var(--background)] text-[var(--foreground)]">
-      <header className="app-top-nav shrink-0 border-b border-[var(--brand-border)] bg-[var(--brand-navy)] shadow-md">
+      <header className="app-top-nav relative shrink-0 border-b border-[var(--brand-gold)]/30 bg-gradient-to-l from-[var(--brand-navy)] via-[var(--brand-navy-light)] to-[var(--brand-navy)] shadow-md after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-gradient-to-l after:from-transparent after:via-[var(--brand-gold)]/50 after:to-transparent">
         <div className="flex items-center gap-3 border-b border-white/10 px-3 py-2">
           <div className="flex shrink-0 items-center gap-2">
             <CompanyLogo
@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <button
                     type="button"
                     onClick={() => void onSignOut()}
-                    className="justify-self-end text-[10px] text-[var(--brand-gold-light)] hover:underline"
+                    className="justify-self-end rounded-md border border-white/15 px-2 py-0.5 text-[10px] font-medium text-[var(--brand-gold-light)] transition hover:border-[var(--brand-gold)]/40 hover:bg-white/10"
                   >
                     خروج
                   </button>
@@ -126,13 +126,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <QuickShortcutsBar />
 
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--brand-border)] bg-white px-4 py-2 shadow-sm">
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
-            {APP_BRANDING.productNameAr}
-          </p>
-          <p className="text-sm font-semibold text-[var(--brand-navy)]">
-            {activeLabel}
-          </p>
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="h-8 w-1 rounded-full bg-gradient-to-b from-[var(--brand-gold)] to-[var(--brand-gold-light)]"
+          />
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+              {APP_BRANDING.productNameAr}
+            </p>
+            <p className="text-sm font-semibold text-[var(--brand-navy)]">
+              {activeLabel}
+            </p>
+          </div>
         </div>
         <p className="hidden text-[10px] text-slate-400 md:block">
           القوائم تُفتح في تبويب متصفح منفصل

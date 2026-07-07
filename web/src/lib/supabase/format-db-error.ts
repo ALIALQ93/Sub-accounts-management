@@ -25,6 +25,14 @@ export function formatDbError(message: string | null | undefined): string {
     return "قيمة التسوية صفر لأحد الأسطر — تحقق من التكلفة أو الكمية.";
   }
 
+  if (/Parent account has journal entries and cannot have child accounts/i.test(raw)) {
+    return "لا يمكن إضافة فرع — الحساب الأب عليه حركة محاسبية. أزل الحركات أولاً أو اختر حساباً آخر.";
+  }
+
+  if (/Cannot change postable account to parent while it has journal entries/i.test(raw)) {
+    return "لا يمكن تحويل الحساب إلى «حساب أب» — عليه حركة محاسبية مسجّلة.";
+  }
+
   return raw;
 }
 

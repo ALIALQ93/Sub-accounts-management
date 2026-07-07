@@ -5,6 +5,7 @@ import type { AccountTreeNode, FlatAccountRow } from "@/modules/accounts/types";
 import {
   getStatementLabel,
   getStatementType,
+  accountHasJournalMovements,
   isRootAccount,
 } from "@/modules/accounts/utils/account-tree";
 import type { AccountDisplayBalance } from "@/modules/currencies/types";
@@ -13,6 +14,7 @@ import { formatCurrencyAmount } from "@/modules/currencies/utils/convert-amount"
 interface AccountTreeTableProps {
   rows: FlatAccountRow[];
   accountsById: Map<string, Account>;
+  accountsWithMovements?: ReadonlySet<string>;
   displayBalances: Map<string, AccountDisplayBalance>;
   expandedIds: Set<string>;
   isSaving: boolean;
@@ -29,6 +31,7 @@ interface AccountTreeTableProps {
 export function AccountTreeTable({
   rows,
   accountsById,
+  accountsWithMovements,
   displayBalances,
   expandedIds,
   isSaving,
@@ -70,6 +73,10 @@ export function AccountTreeTable({
             const statementType = getStatementType(node, accountsById);
             const rootAccount = isRootAccount(node);
             const balance = displayBalances.get(node.id);
+            const parentHasMovements = accountHasJournalMovements(
+              node.id,
+              accountsWithMovements,
+            );
 
             const fmt = (value: number) =>
               balance
@@ -148,6 +155,11 @@ export function AccountTreeTable({
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
                           {node.is_postable ? "مرحّل" : "أب"}
                         </span>
+                        {parentHasMovements && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
+                            عليه حركة
+                          </span>
+                        )}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[11px] ${
                             node.is_active
@@ -181,6 +193,11 @@ export function AccountTreeTable({
                         label="+ فرع"
                         tone="emerald"
                         disabled={isSaving || !node.is_active}
+                        title={
+                          parentHasMovements
+                            ? "عليه حركة — سيُرفض إذا لم تُزَل الحركات"
+                            : undefined
+                        }
                         onClick={() => onAddChild(node)}
                       />
                     )}
@@ -220,11 +237,13 @@ function ActionButton({
   label,
   tone = "slate",
   disabled,
+  title,
   onClick,
 }: {
   label: string;
   tone?: "slate" | "blue" | "emerald" | "amber";
   disabled?: boolean;
+  title?: string;
   onClick: () => void;
 }) {
   const toneClass = {
@@ -239,6 +258,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`rounded-md border px-2 py-1 text-[11px] font-medium disabled:opacity-50 ${toneClass}`}
     >
       {label}

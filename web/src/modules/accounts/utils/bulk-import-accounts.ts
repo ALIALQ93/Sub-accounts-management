@@ -114,6 +114,7 @@ export function validateBulkAccountRows(
   rows: BulkAccountImportRow[],
   accounts: Account[],
   currencies: Currency[],
+  accountsWithMovements?: ReadonlySet<string>,
 ): BulkAccountImportRow[] {
   const activeCurrencies = currencies.filter((currency) => currency.is_active);
   const currencyByCode = new Map(
@@ -166,6 +167,10 @@ export function validateBulkAccountRows(
       const parent = accountByCode.get(parentCode)!;
       if (!parent.is_active) {
         errors.push("الحساب الأب غير نشط.");
+      } else if (accountsWithMovements?.has(parent.id)) {
+        errors.push(
+          `الحساب الأب «${parentCode}» عليه حركة محاسبية — لا يمكن إضافة فرع تحته.`,
+        );
       }
     }
 
