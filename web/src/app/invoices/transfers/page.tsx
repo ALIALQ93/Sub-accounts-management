@@ -62,22 +62,22 @@ export default function TransfersPage() {
 
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">مناقلات المخزون</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">مناقلات المخزون</h1>
           <p className="text-xs text-slate-600">
             مستند مناقلة ثم فاتورة إخراج عند الشحن وفاتورة إدخال عند الاستلام.
           </p>
         </div>
         <PermissionGate permission="invoices.create">
-          <Link
-            href="/invoices/transfers/new"
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            + مناقلة جديدة
+          <Link href="/invoices/transfers/new" className="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            مناقلة جديدة
           </Link>
         </PermissionGate>
       </section>
 
-      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
         {isLoading ? (
           <p className="text-sm text-slate-600">جاري التحميل...</p>
         ) : (

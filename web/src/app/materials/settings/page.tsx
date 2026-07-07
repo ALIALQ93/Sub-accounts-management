@@ -96,10 +96,10 @@ export default function InventorySettingsPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">إعدادات الجرد والتكلفة</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">إعدادات الجرد والتكلفة</h1>
       <MaterialsNav />
 
-      <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="text-sm text-slate-600">
           تُختار قبل أول عملية مخزنية مرحّلة — تُقفَل تلقائياً بعد الترحيل الأول.
         </p>
@@ -197,14 +197,16 @@ export default function InventorySettingsPage() {
               <span>فصل التكلفة لكل مركز كلف</span>
             </label>
 
-            {error && <p className="text-sm text-rose-700">{error}</p>}
-            {success && <p className="text-sm text-emerald-700">{success}</p>}
+            {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+            {success && (
+              <p className="text-sm text-[var(--success)]">{success}</p>
+            )}
 
             {canEdit && !locked && (
               <button
                 type="submit"
                 disabled={isSaving}
-                className="w-fit rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="btn btn-primary w-fit"
               >
                 {isSaving ? "جاري الحفظ..." : "حفظ الإعدادات"}
               </button>

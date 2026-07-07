@@ -103,10 +103,10 @@ export default function WarehousesPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">المستودعات</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">المستودعات</h1>
       <MaterialsNav />
 
-      <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">
             كل مستودع تابع لفرع واحد — يُستخدم في الفواتير والمناقلات.
@@ -116,8 +116,11 @@ export default function WarehousesPage() {
               type="button"
               onClick={openCreate}
               disabled={isSaving || branches.length === 0}
-              className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="btn btn-primary"
             >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
               مستودع جديد
             </button>
           )}
@@ -134,47 +137,47 @@ export default function WarehousesPage() {
         )}
 
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
 
         {!isLoading && !error && warehouses.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">الرمز</th>
-                  <th className="border-b border-slate-200 p-2">الاسم</th>
-                  <th className="border-b border-slate-200 p-2">الفرع</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  {canEdit && <th className="border-b border-slate-200 p-2">إجراء</th>}
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[720px]">
+              <thead>
+                <tr>
+                  <th>الرمز</th>
+                  <th>الاسم</th>
+                  <th>الفرع</th>
+                  <th>الحالة</th>
+                  {canEdit && <th>إجراء</th>}
                 </tr>
               </thead>
               <tbody>
                 {warehouses.map((warehouse) => (
-                  <tr key={warehouse.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {warehouse.warehouse_code}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">{warehouse.name_ar}</td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                  <tr key={warehouse.id}>
+                    <td className="font-mono">{warehouse.warehouse_code}</td>
+                    <td>{warehouse.name_ar}</td>
+                    <td className="text-xs">
                       {warehouse.branch_code
                         ? `${warehouse.branch_code} — ${warehouse.branch_name_ar}`
                         : "—"}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td>
                       {warehouse.is_active ? (
-                        <span className="text-emerald-700">نشط</span>
+                        <span className="badge badge-success">نشط</span>
                       ) : (
-                        <span className="text-slate-500">معطّل</span>
+                        <span className="badge badge-muted">معطّل</span>
                       )}
                     </td>
                     {canEdit && (
-                      <td className="border-b border-slate-100 p-2">
+                      <td>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => openEdit(warehouse)}
                             disabled={isSaving}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                            className="btn btn-sm btn-outline"
                           >
                             تعديل
                           </button>
@@ -182,7 +185,7 @@ export default function WarehousesPage() {
                             type="button"
                             onClick={() => void toggleActive(warehouse)}
                             disabled={isSaving}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                            className="btn btn-sm btn-outline"
                           >
                             {warehouse.is_active ? "تعطيل" : "تفعيل"}
                           </button>

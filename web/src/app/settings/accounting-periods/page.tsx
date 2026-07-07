@@ -97,18 +97,17 @@ export default function AccountingPeriodsSettingsPage() {
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">الفترات المحاسبية</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">الفترات المحاسبية</h1>
           <p className="mt-1 text-sm text-slate-600">
             تعريف فترات السنة المالية — يتطلب{" "}
             <code className="text-xs">patch_accounting_periods.sql</code>
           </p>
         </div>
         {canEdit && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white"
-          >
+          <button type="button" onClick={openCreate} className="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
             فترة جديدة
           </button>
         )}
@@ -116,57 +115,51 @@ export default function AccountingPeriodsSettingsPage() {
 
       <SettingsNav />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
         {!isLoading && !error && periods.length === 0 && (
           <p className="text-sm text-slate-600">لا توجد فترات بعد.</p>
         )}
         {!isLoading && !error && periods.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">الرمز</th>
-                  <th className="border-b border-slate-200 p-2">الاسم</th>
-                  <th className="border-b border-slate-200 p-2">السنة</th>
-                  <th className="border-b border-slate-200 p-2">من</th>
-                  <th className="border-b border-slate-200 p-2">إلى</th>
-                  <th className="border-b border-slate-200 p-2">الفرع</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  <th className="border-b border-slate-200 p-2">إجراء</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[860px]">
+              <thead>
+                <tr>
+                  <th>الرمز</th>
+                  <th>الاسم</th>
+                  <th>السنة</th>
+                  <th>من</th>
+                  <th>إلى</th>
+                  <th>الفرع</th>
+                  <th>الحالة</th>
+                  <th>إجراء</th>
                 </tr>
               </thead>
               <tbody>
                 {periods.map((period) => (
-                  <tr key={period.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {period.period_code}
+                  <tr key={period.id}>
+                    <td className="font-mono">{period.period_code}</td>
+                    <td>{period.name_ar}</td>
+                    <td className="tabular-nums">{period.fiscal_year}</td>
+                    <td className="tabular-nums">{period.start_date}</td>
+                    <td className="tabular-nums">{period.end_date}</td>
+                    <td>{period.branch_code ?? "الكل"}</td>
+                    <td>
+                      {period.status === "open" ? (
+                        <span className="badge badge-success">مفتوحة</span>
+                      ) : (
+                        <span className="badge badge-muted">مقفلة</span>
+                      )}
                     </td>
-                    <td className="border-b border-slate-100 p-2">{period.name_ar}</td>
-                    <td className="border-b border-slate-100 p-2">{period.fiscal_year}</td>
-                    <td className="border-b border-slate-100 p-2">{period.start_date}</td>
-                    <td className="border-b border-slate-100 p-2">{period.end_date}</td>
-                    <td className="border-b border-slate-100 p-2">
-                      {period.branch_code ?? "الكل"}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs ${
-                          period.status === "open"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-slate-200 text-slate-700"
-                        }`}
-                      >
-                        {period.status === "open" ? "مفتوحة" : "مقفلة"}
-                      </span>
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
+                    <td>
                       {canEdit ? (
                         <button
                           type="button"
                           onClick={() => openEdit(period)}
-                          className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                          className="btn btn-sm btn-outline"
                         >
                           تعديل
                         </button>

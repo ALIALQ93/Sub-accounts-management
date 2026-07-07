@@ -128,6 +128,7 @@ database/setup_all.sql
 | `patch_voucher_line_cc_optional.sql` | علم `cc_optional` بدل مطابقة نص «تصفية —%» | **#26 — تدقيق** |
 | `patch_reverse_voucher_rpc.sql` | `reverse_posted_voucher()` — عكس ذرّي | **#27 — تدقيق** |
 | `patch_voucher_atomic_ops.sql` | استبدال أسطر/تخصيصات + استيراد حسابات ذرّي | **#28 — تدقيق** |
+| `patch_reverse_invoice_settlement.sql` | عكس سندات invoice + إصلاح ترحيل المقاصة | **#29 — تدقيق** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

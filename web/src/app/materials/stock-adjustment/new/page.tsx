@@ -182,7 +182,7 @@ export default function StockAdjustmentPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">تسوية جردية</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">تسوية جردية</h1>
       <MaterialsNav />
 
       <p className="mt-4 text-sm text-slate-600">
@@ -205,7 +205,7 @@ export default function StockAdjustmentPage() {
       {!isLoading && (
         <form
           onSubmit={onSubmit}
-          className="mt-4 flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4"
+          className="mt-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         >
           <div className="grid gap-3 md:grid-cols-2">
             <label className="grid gap-1 text-sm">
@@ -274,7 +274,7 @@ export default function StockAdjustmentPage() {
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
               <p>
                 الرصيد النظامي:{" "}
-                <span className="font-mono font-semibold">
+                <span className="font-mono font-semibold tabular-nums">
                   {isLookingUp
                     ? "..."
                     : systemQty != null
@@ -286,11 +286,11 @@ export default function StockAdjustmentPage() {
                 <p className="mt-1">
                   الفرق:{" "}
                   <span
-                    className={`font-mono font-semibold ${
+                    className={`font-mono font-semibold tabular-nums ${
                       delta > 0
-                        ? "text-emerald-700"
+                        ? "text-[var(--success)]"
                         : delta < 0
-                          ? "text-rose-700"
+                          ? "text-[var(--danger)]"
                           : "text-slate-700"
                     }`}
                   >
@@ -337,9 +337,9 @@ export default function StockAdjustmentPage() {
             </label>
           </div>
 
-          {error && <p className="text-sm text-rose-700">{error}</p>}
+          {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
           {success && (
-            <div className="text-sm text-emerald-800">
+            <div className="text-sm text-[var(--success)]">
               <p>{success}</p>
               {lastJournalId && (
                 <DocumentActionLinks
@@ -354,7 +354,7 @@ export default function StockAdjustmentPage() {
             <button
               type="submit"
               disabled={isSaving || isLookingUp}
-              className="w-fit rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="btn btn-primary w-fit"
             >
               {isSaving ? "جاري الترحيل..." : "ترحيل التسوية"}
             </button>

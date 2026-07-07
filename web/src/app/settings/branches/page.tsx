@@ -101,10 +101,10 @@ export default function BranchesSettingsPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">الفروع</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">الفروع</h1>
       <SettingsNav />
 
-      <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">
             تعريف فروع المنشأة — مرتبطة بالفواتير والقيود والمستودعات.
@@ -114,8 +114,11 @@ export default function BranchesSettingsPage() {
               type="button"
               onClick={openCreate}
               disabled={isSaving}
-              className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="btn btn-primary"
             >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
               فرع جديد
             </button>
           )}
@@ -123,7 +126,7 @@ export default function BranchesSettingsPage() {
 
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
         {!isLoading && error && (
-          <p className="text-sm text-rose-700">{error}</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         )}
         {!isLoading && !error && branches.length === 0 && (
           <p className="text-sm text-slate-600">
@@ -134,26 +137,22 @@ export default function BranchesSettingsPage() {
         )}
 
         {!isLoading && !error && branches.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">الرمز</th>
-                  <th className="border-b border-slate-200 p-2">الاسم</th>
-                  <th className="border-b border-slate-200 p-2">النوع</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  {canEdit && (
-                    <th className="border-b border-slate-200 p-2">إجراء</th>
-                  )}
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[720px]">
+              <thead>
+                <tr>
+                  <th>الرمز</th>
+                  <th>الاسم</th>
+                  <th>النوع</th>
+                  <th>الحالة</th>
+                  {canEdit && <th>إجراء</th>}
                 </tr>
               </thead>
               <tbody>
                 {branches.map((branch) => (
-                  <tr key={branch.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {branch.branch_code}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
+                  <tr key={branch.id}>
+                    <td className="font-mono">{branch.branch_code}</td>
+                    <td>
                       {branch.name_ar}
                       {branch.name_en && (
                         <span className="block text-xs text-slate-500">
@@ -161,24 +160,24 @@ export default function BranchesSettingsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td className="text-xs">
                       {branch.is_head_office ? "رئيسي" : "فرع"}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td>
                       {branch.is_active ? (
-                        <span className="text-emerald-700">نشط</span>
+                        <span className="badge badge-success">نشط</span>
                       ) : (
-                        <span className="text-slate-500">معطّل</span>
+                        <span className="badge badge-muted">معطّل</span>
                       )}
                     </td>
                     {canEdit && (
-                      <td className="border-b border-slate-100 p-2">
+                      <td>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => openEdit(branch)}
                             disabled={isSaving}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                            className="btn btn-sm btn-outline"
                           >
                             تعديل
                           </button>
@@ -186,7 +185,7 @@ export default function BranchesSettingsPage() {
                             type="button"
                             onClick={() => void toggleActive(branch)}
                             disabled={isSaving}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                            className="btn btn-sm btn-outline"
                           >
                             {branch.is_active ? "تعطيل" : "تفعيل"}
                           </button>

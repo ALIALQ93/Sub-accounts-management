@@ -120,7 +120,7 @@ export default function CompanySettingsPage() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">بيانات الشركة</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">بيانات الشركة</h1>
         <p className="mt-1 text-sm text-slate-600">
           الإعدادات العامة التي تظهر في التقارير والمستندات.
         </p>
@@ -139,7 +139,7 @@ export default function CompanySettingsPage() {
       {!isLoading && (
         <form
           onSubmit={(event) => void onSave(event)}
-          className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4"
+          className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         >
           <LogoUploadField
             companyName={form.legal_name_ar || "شركتي"}
@@ -278,12 +278,12 @@ export default function CompanySettingsPage() {
           )}
 
           {error && (
-            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <p className="rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 px-3 py-2 text-sm text-[var(--danger)]">
               {error}
             </p>
           )}
           {success && (
-            <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            <p className="rounded-md border border-[var(--success)]/25 bg-[var(--success)]/8 px-3 py-2 text-sm text-[var(--success)]">
               {success}
             </p>
           )}
@@ -292,7 +292,7 @@ export default function CompanySettingsPage() {
             <button
               type="submit"
               disabled={isSaving}
-              className="justify-self-start rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="btn btn-primary justify-self-start"
             >
               {isSaving ? "جاري الحفظ..." : "حفظ الإعدادات"}
             </button>

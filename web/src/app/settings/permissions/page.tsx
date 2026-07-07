@@ -86,7 +86,7 @@ export default function PermissionsHubPage() {
   if (!canManage) {
     return (
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-slate-900">الصلاحيات</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">الصلاحيات</h1>
         <SettingsNav />
         <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           لا تملك صلاحية إدارة الصلاحيات التفصيلية.
@@ -98,7 +98,7 @@ export default function PermissionsHubPage() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">الصلاحيات التفصيلية</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">الصلاحيات التفصيلية</h1>
         <p className="mt-1 text-sm text-slate-600">
           تحكم دقيق بصلاحيات كل مستخدم — عرض، إنشاء، تعديل، ترحيل، وإعدادات لكل
           قسم.
@@ -107,8 +107,8 @@ export default function PermissionsHubPage() {
 
       <SettingsNav />
 
-      <section className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-        <p className="font-medium text-slate-900">كيف يعمل النظام؟</p>
+      <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        <p className="font-medium text-[var(--brand-navy)]">كيف يعمل النظام؟</p>
         <ul className="mt-2 list-disc space-y-1 pr-5 text-xs leading-6">
           <li>
             <strong>مدير النظام</strong> يملك كل الصلاحيات ({ALL_PERMISSION_KEYS.length}{" "}
@@ -123,48 +123,46 @@ export default function PermissionsHubPage() {
       </section>
 
       {error && (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 px-3 py-2 text-sm text-[var(--danger)]">
           {error}
         </p>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
         {isLoading ? (
           <p className="text-sm text-slate-600">جاري التحميل...</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border border-slate-200 p-2">المستخدم</th>
-                  <th className="border border-slate-200 p-2">الدور</th>
-                  <th className="border border-slate-200 p-2">صلاحيات مخصّصة</th>
-                  <th className="border border-slate-200 p-2">الفعّالة</th>
-                  <th className="border border-slate-200 p-2">إجراء</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[820px]">
+              <thead>
+                <tr>
+                  <th>المستخدم</th>
+                  <th>الدور</th>
+                  <th>صلاحيات مخصّصة</th>
+                  <th>الفعّالة</th>
+                  <th>إجراء</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(({ profile, storedCount, effectiveCount }) => (
-                  <tr key={profile.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border border-slate-100 p-2">
+                  <tr key={profile.id}>
+                    <td>
                       <p className="font-medium">{profile.full_name_ar}</p>
                       <p className="text-xs text-slate-500" dir="ltr">
                         {profile.email}
                       </p>
                     </td>
-                    <td className="border border-slate-100 p-2">
-                      {ROLE_LABELS[profile.role]}
-                    </td>
-                    <td className="border border-slate-100 p-2">
+                    <td>{ROLE_LABELS[profile.role]}</td>
+                    <td>
                       {storedCount > 0 ? `${storedCount} محددة` : "قالب الدور"}
                     </td>
-                    <td className="border border-slate-100 p-2">
+                    <td className="tabular-nums">
                       {effectiveCount} / {ALL_PERMISSION_KEYS.length}
                     </td>
-                    <td className="border border-slate-100 p-2">
+                    <td>
                       <Link
                         href={`/settings/users/${profile.id}/permissions`}
-                        className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                        className="btn btn-sm btn-outline text-[var(--brand-navy)]"
                       >
                         تعديل الصلاحيات
                       </Link>
@@ -173,10 +171,7 @@ export default function PermissionsHubPage() {
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="border border-slate-100 p-6 text-center text-slate-500"
-                    >
+                    <td colSpan={5} className="p-6 text-center text-slate-500">
                       لا يوجد مستخدمون.
                     </td>
                   </tr>
@@ -187,8 +182,8 @@ export default function PermissionsHubPage() {
         )}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-900">فهرس الصلاحيات</h2>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-[var(--brand-navy)]">فهرس الصلاحيات</h2>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {ALL_PERMISSION_KEYS.map((key) => (
             <div

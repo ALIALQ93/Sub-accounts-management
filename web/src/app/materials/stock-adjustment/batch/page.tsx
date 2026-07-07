@@ -185,7 +185,7 @@ export default function BatchStockAdjustmentPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl">
-      <h1 className="mb-1 text-2xl font-bold text-slate-900">تسوية جرد مجمّعة</h1>
+      <h1 className="mb-1 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">تسوية جرد مجمّعة</h1>
       <p className="mb-4 text-sm text-slate-600">
         عدة مواد في{" "}
         <strong>قيد واحد</strong> — يدعم مستودعات من فروع مختلفة (سطور القيد
@@ -204,7 +204,7 @@ export default function BatchStockAdjustmentPage() {
       {!isLoading && (
         <form
           onSubmit={onSubmit}
-          className="mt-4 flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4"
+          className="mt-4 flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         >
           <div className="grid gap-3 md:grid-cols-3">
             <label className="grid gap-1 text-sm">
@@ -219,17 +219,17 @@ export default function BatchStockAdjustmentPage() {
             </label>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">المادة</th>
-                  <th className="border-b border-slate-200 p-2">المستودع</th>
-                  <th className="border-b border-slate-200 p-2">الفرع</th>
-                  <th className="border-b border-slate-200 p-2">نظامي</th>
-                  <th className="border-b border-slate-200 p-2">فعلي</th>
-                  <th className="border-b border-slate-200 p-2">فرق</th>
-                  <th className="border-b border-slate-200 p-2" />
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[880px]">
+              <thead>
+                <tr>
+                  <th>المادة</th>
+                  <th>المستودع</th>
+                  <th>الفرع</th>
+                  <th>نظامي</th>
+                  <th>فعلي</th>
+                  <th>فرق</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -241,8 +241,8 @@ export default function BatchStockAdjustmentPage() {
                       : null;
                   const warehouse = warehouseById.get(line.warehouseId);
                   return (
-                    <tr key={line.key} className="odd:bg-white even:bg-slate-50/60">
-                      <td className="border-b border-slate-100 p-2">
+                    <tr key={line.key}>
+                      <td>
                         <select
                           value={line.materialId}
                           onChange={(e) => {
@@ -263,7 +263,7 @@ export default function BatchStockAdjustmentPage() {
                           ))}
                         </select>
                       </td>
-                      <td className="border-b border-slate-100 p-2">
+                      <td>
                         <select
                           value={line.warehouseId}
                           onChange={(e) => {
@@ -284,13 +284,13 @@ export default function BatchStockAdjustmentPage() {
                           ))}
                         </select>
                       </td>
-                      <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                      <td className="font-mono text-xs">
                         {warehouse?.branch_code ?? "—"}
                       </td>
-                      <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                      <td className="font-mono text-xs tabular-nums">
                         {line.systemQty == null ? "—" : line.systemQty.toFixed(4)}
                       </td>
-                      <td className="border-b border-slate-100 p-2">
+                      <td>
                         <input
                           type="number"
                           min={0}
@@ -300,13 +300,13 @@ export default function BatchStockAdjustmentPage() {
                             updateLine(line.key, { countedQty: e.target.value })
                           }
                           disabled={isSaving}
-                          className="w-full rounded border border-slate-300 px-2 py-1 font-mono"
+                          className="w-full rounded border border-slate-300 px-2 py-1 font-mono tabular-nums"
                         />
                       </td>
-                      <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                      <td className="font-mono text-xs tabular-nums">
                         {delta == null ? "—" : delta.toFixed(4)}
                       </td>
-                      <td className="border-b border-slate-100 p-2">
+                      <td>
                         <button
                           type="button"
                           onClick={() =>
@@ -315,7 +315,7 @@ export default function BatchStockAdjustmentPage() {
                             )
                           }
                           disabled={isSaving || lines.length <= 1}
-                          className="text-xs text-rose-700"
+                          className="text-xs text-[var(--danger)] disabled:opacity-40"
                         >
                           حذف
                         </button>
@@ -331,7 +331,7 @@ export default function BatchStockAdjustmentPage() {
             type="button"
             onClick={() => setLines((current) => [...current, newLine()])}
             disabled={isSaving}
-            className="w-fit rounded-md border border-slate-300 px-3 py-1.5 text-xs"
+            className="btn btn-sm btn-outline w-fit"
           >
             + سطر
           </button>
@@ -384,9 +384,9 @@ export default function BatchStockAdjustmentPage() {
             </p>
           )}
 
-          {error && <p className="text-sm text-rose-700">{error}</p>}
+          {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
           {success && (
-            <div className="text-sm text-emerald-800">
+            <div className="text-sm text-[var(--success)]">
               <p>{success}</p>
               {lastJournalId && (
                 <DocumentActionLinks
@@ -401,7 +401,7 @@ export default function BatchStockAdjustmentPage() {
             <button
               type="submit"
               disabled={isSaving}
-              className="w-fit rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="btn btn-primary w-fit"
             >
               {isSaving ? "جاري الترحيل..." : "ترحيل التسوية المجمّعة"}
             </button>

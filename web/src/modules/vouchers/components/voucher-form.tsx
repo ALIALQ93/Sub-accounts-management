@@ -364,9 +364,13 @@ export function VoucherForm({
     if (!voucherId) return;
 
     const confirmed = window.confirm(
-      "عكس السند يُنشئ سنداً عكسياً جديداً ويُرحّله تلقائياً.\n\n" +
-        "هذه العملية لا رجعة فيها وتُسجّل حركة مالية جديدة.\n\n" +
-        "هل تريد المتابعة؟",
+      settlementMode === "invoice"
+        ? "عكس سند إغلاق الحركات يُنشئ سنداً عكسياً ويُلغي السند الحالي.\n\n" +
+            "ستُعاد الحركات/الفواتير المخصّصة إلى قائمة الحركات المفتوحة.\n\n" +
+            "هل تريد المتابعة؟"
+        : "عكس السند يُنشئ سنداً عكسياً جديداً ويُرحّله تلقائياً.\n\n" +
+            "هذه العملية لا رجعة فيها وتُسجّل حركة مالية جديدة.\n\n" +
+            "هل تريد المتابعة؟",
     );
     if (!confirmed) return;
 
@@ -703,16 +707,7 @@ export function VoucherForm({
             <button
               type="button"
               onClick={onReverse}
-              disabled={
-                status !== "posted" ||
-                isSaving ||
-                settlementMode === "invoice"
-              }
-              title={
-                settlementMode === "invoice"
-                  ? "عكس سند إغلاق الحركات غير مدعوم تلقائياً"
-                  : undefined
-              }
+              disabled={status !== "posted" || isSaving}
               className="rounded-md border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
             >
               عكس

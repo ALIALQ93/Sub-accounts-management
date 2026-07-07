@@ -113,7 +113,7 @@ export default function UsersSettingsPage() {
   if (!canViewUsers) {
     return (
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
-        <h1 className="text-2xl font-bold text-slate-900">المستخدمون</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">المستخدمون</h1>
         <SettingsNav />
         <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           لا تملك صلاحية عرض المستخدمين.
@@ -126,10 +126,10 @@ export default function UsersSettingsPage() {
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 md:p-6">
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">المستخدمون</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">المستخدمون</h1>
           <p className="mt-1 text-sm text-slate-600">
             إدارة حسابات الدخول — الصلاحيات التفصيلية من قسم{" "}
-            <Link href="/settings/permissions" className="text-blue-900 underline">
+            <Link href="/settings/permissions" className="text-[var(--brand-navy)] underline">
               الصلاحيات
             </Link>
             .
@@ -142,9 +142,12 @@ export default function UsersSettingsPage() {
               setFormError("");
               setIsModalOpen(true);
             }}
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+            className="btn btn-primary"
           >
-            + إضافة مستخدم
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            إضافة مستخدم
           </button>
         )}
       </section>
@@ -152,41 +155,41 @@ export default function UsersSettingsPage() {
       <SettingsNav />
 
       {loadError && (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 px-3 py-2 text-sm text-[var(--danger)]">
           {loadError}
         </p>
       )}
       {success && (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="rounded-md border border-[var(--success)]/25 bg-[var(--success)]/8 px-3 py-2 text-sm text-[var(--success)]">
           {success}
         </p>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
         {isLoading ? (
           <p className="text-sm text-slate-600">جاري تحميل المستخدمين...</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border border-slate-200 p-2">الاسم</th>
-                  <th className="border border-slate-200 p-2">البريد</th>
-                  <th className="border border-slate-200 p-2">الصلاحية</th>
-                  <th className="border border-slate-200 p-2">الحالة</th>
-                  <th className="border border-slate-200 p-2">إجراءات</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[760px]">
+              <thead>
+                <tr>
+                  <th>الاسم</th>
+                  <th>البريد</th>
+                  <th>الصلاحية</th>
+                  <th>الحالة</th>
+                  <th>إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {profiles.map((profile) => (
-                  <tr key={profile.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border border-slate-100 p-2 font-medium">
+                  <tr key={profile.id}>
+                    <td className="font-medium">
                       {profile.full_name_ar}
                     </td>
-                    <td className="border border-slate-100 p-2" dir="ltr">
+                    <td dir="ltr">
                       {profile.email}
                     </td>
-                    <td className="border border-slate-100 p-2">
+                    <td>
                       <select
                         value={profile.role}
                         disabled={isSaving || !canManageUsers || profile.id === currentProfile?.id}
@@ -204,23 +207,19 @@ export default function UsersSettingsPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="border border-slate-100 p-2">
+                    <td>
                       {profile.is_active ? (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
-                          نشط
-                        </span>
+                        <span className="badge badge-success">نشط</span>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                          معطّل
-                        </span>
+                        <span className="badge badge-muted">معطّل</span>
                       )}
                     </td>
-                    <td className="border border-slate-100 p-2">
+                    <td>
                       <div className="flex flex-wrap gap-1">
                         {canManagePermissions && (
                           <Link
                             href={`/settings/users/${profile.id}/permissions`}
-                            className="rounded-md border border-violet-300 px-2 py-1 text-xs font-medium text-violet-800 hover:bg-violet-50"
+                            className="btn btn-sm btn-outline text-violet-800"
                           >
                             الصلاحيات
                           </Link>
@@ -234,7 +233,7 @@ export default function UsersSettingsPage() {
                                 is_active: !profile.is_active,
                               })
                             }
-                            className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                            className="btn btn-sm btn-outline text-amber-700"
                           >
                             {profile.is_active ? "تعطيل" : "تفعيل"}
                           </button>
@@ -248,7 +247,7 @@ export default function UsersSettingsPage() {
                 ))}
                 {profiles.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="border border-slate-100 p-6 text-center text-slate-500">
+                    <td colSpan={5} className="p-6 text-center text-slate-500">
                       لا يوجد مستخدمون — أنشئ أول مستخدم من Supabase Auth أو اضغط «إضافة مستخدم».
                     </td>
                   </tr>
@@ -345,24 +344,20 @@ export default function UsersSettingsPage() {
           </label>
 
           {formError && (
-            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+            <p className="rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 px-3 py-2 text-sm text-[var(--danger)]">
               {formError}
             </p>
           )}
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
+            <button type="submit" disabled={isSaving} className="btn btn-primary">
               {isSaving ? "جاري الإنشاء..." : "إنشاء"}
             </button>
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
               disabled={isSaving}
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700"
+              className="btn btn-outline"
             >
               إلغاء
             </button>

@@ -346,16 +346,16 @@ function CurrencyRow({
   const [effectiveFrom, setEffectiveFrom] = useState(defaultEffectiveFrom);
 
   return (
-    <tr className="odd:bg-white even:bg-slate-50/60">
-      <td className="border-b border-slate-100 p-2 font-mono">{currency.code}</td>
-      <td className="border-b border-slate-100 p-2">
+    <tr>
+      <td className="font-mono">{currency.code}</td>
+      <td>
         {currency.name_ar}
         <span className="mr-2 text-xs text-slate-500" dir="ltr">
           {currency.name_en}
         </span>
       </td>
-      <td className="border-b border-slate-100 p-2">{currency.symbol}</td>
-      <td className="border-b border-slate-100 p-2">
+      <td>{currency.symbol}</td>
+      <td>
         {currency.is_base ? (
           "1 (أساس)"
         ) : (
@@ -363,12 +363,12 @@ function CurrencyRow({
             value={rate}
             onChange={(event) => setRate(event.target.value)}
             disabled={!canEdit || isSaving}
-            className="w-28 rounded-md border border-slate-300 px-2 py-1 font-mono text-sm disabled:bg-slate-50"
+            className="w-28 rounded-md border border-slate-300 px-2 py-1 font-mono text-sm tabular-nums disabled:bg-slate-50"
             dir="ltr"
           />
         )}
       </td>
-      <td className="border-b border-slate-100 p-2">
+      <td>
         {currency.is_base ? (
           "—"
         ) : (
@@ -381,22 +381,16 @@ function CurrencyRow({
           />
         )}
       </td>
-      <td className="border-b border-slate-100 p-2">
+      <td>
         {currency.is_base ? (
-          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-800">
-            أساس
-          </span>
+          <span className="badge badge-info">أساس</span>
         ) : currency.is_active ? (
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
-            مفعّلة
-          </span>
+          <span className="badge badge-success">مفعّلة</span>
         ) : (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-            غير مفعّلة
-          </span>
+          <span className="badge badge-muted">غير مفعّلة</span>
         )}
       </td>
-      <td className="border-b border-slate-100 p-2">
+      <td>
         {canEdit ? (
           <div className="flex flex-wrap gap-2">
             {!currency.is_base && !baseCurrencyLocked && (
@@ -404,7 +398,7 @@ function CurrencyRow({
                 type="button"
                 onClick={() => onSetAsBase(currency)}
                 disabled={isSaving}
-                className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-800 disabled:opacity-50"
+                className="btn btn-sm btn-outline text-[var(--brand-navy)]"
               >
                 تعيين كأساس
               </button>
@@ -415,7 +409,7 @@ function CurrencyRow({
                   type="button"
                   onClick={() => onSaveRate(currency, rate, effectiveFrom)}
                   disabled={isSaving}
-                  className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                  className="btn btn-sm btn-outline text-[var(--brand-navy)]"
                 >
                   حفظ السعر
                 </button>
@@ -423,7 +417,7 @@ function CurrencyRow({
                   type="button"
                   onClick={() => onToggleActive(currency)}
                   disabled={isSaving}
-                  className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                  className="btn btn-sm btn-outline text-amber-700"
                 >
                   {currency.is_active ? "تعطيل" : "تفعيل"}
                 </button>

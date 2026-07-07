@@ -51,13 +51,13 @@ export default function OpenMovementsPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl p-6">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">الحركات المفتوحة</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">الحركات المفتوحة</h1>
       <p className="mb-4 text-sm text-slate-600">
         من <code className="text-xs">open_items_view</code> — رصيد مفتوح حقيقي بعد
         خصم التخصيصات المرحّلة
       </p>
 
-      <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-3">
           <input
             value={query}
@@ -82,62 +82,53 @@ export default function OpenMovementsPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
         {!isLoading && !error && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">رقم القيد</th>
-                  <th className="border-b border-slate-200 p-2">التاريخ</th>
-                  <th className="border-b border-slate-200 p-2">الحساب</th>
-                  <th className="border-b border-slate-200 p-2">CC</th>
-                  <th className="border-b border-slate-200 p-2">الفرع</th>
-                  <th className="border-b border-slate-200 p-2">جانب</th>
-                  <th className="border-b border-slate-200 p-2">استحقاق</th>
-                  <th className="border-b border-slate-200 p-2">المفتوح</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[1100px]">
+              <thead>
+                <tr>
+                  <th>رقم القيد</th>
+                  <th>التاريخ</th>
+                  <th>الحساب</th>
+                  <th>CC</th>
+                  <th>الفرع</th>
+                  <th>جانب</th>
+                  <th>استحقاق</th>
+                  <th>المفتوح</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredItems.map((item) => (
-                  <tr
-                    key={item.target_journal_line_id}
-                    className="odd:bg-white even:bg-slate-50/60"
-                  >
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {item.entry_no}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
-                      {item.entry_date ?? "—"}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
+                  <tr key={item.target_journal_line_id}>
+                    <td className="font-mono">{item.entry_no}</td>
+                    <td className="tabular-nums">{item.entry_date ?? "—"}</td>
+                    <td>
                       <span className="font-mono">{item.account_code ?? "—"}</span>
                       {item.account_name ? (
                         <span className="ms-1 text-slate-600">{item.account_name}</span>
                       ) : null}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {item.cost_center_code ?? "—"}
-                    </td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
-                      {item.branch_code ?? "—"}
-                    </td>
-                    <td className="border-b border-slate-100 p-2">
+                    <td className="font-mono">{item.cost_center_code ?? "—"}</td>
+                    <td className="font-mono">{item.branch_code ?? "—"}</td>
+                    <td>
                       {item.open_side === "debit"
                         ? "مدين"
                         : item.open_side === "credit"
                           ? "دائن"
                           : "—"}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td className="text-xs">
                       {item.due_date ?? "—"}
                       {item.is_overdue ? (
-                        <span className="ms-1 text-rose-700">متأخر</span>
+                        <span className="ms-1 text-[var(--danger)]">متأخر</span>
                       ) : null}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                    <td className="font-mono tabular-nums">
                       {item.open_amount.toFixed(2)}
                     </td>
                   </tr>
@@ -145,10 +136,7 @@ export default function OpenMovementsPage() {
 
                 {filteredItems.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="border-b border-slate-100 p-4 text-center text-slate-500"
-                    >
+                    <td colSpan={8} className="p-4 text-center text-slate-500">
                       لا توجد نتائج.
                     </td>
                   </tr>

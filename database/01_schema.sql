@@ -1282,7 +1282,9 @@ declare
   v_vendor_active boolean;
 begin
   if TG_OP = 'UPDATE' and new.status = 'posted' and old.status = 'posted' then
-    if not public.is_admin() and not public.is_force_voucher_delete() then
+    if not public.is_admin()
+      and not public.is_force_voucher_delete()
+      and not public.is_force_voucher_reverse() then
       raise exception 'Posted voucher cannot be modified. Use reversal instead.';
     end if;
   end if;
@@ -1602,7 +1604,7 @@ declare
   v_rate numeric(18,6);
 begin
   if old.status = 'posted' then
-    if public.is_force_voucher_delete() then
+    if public.is_force_voucher_delete() or public.is_force_voucher_reverse() then
       return new;
     end if;
 
@@ -1767,6 +1769,14 @@ begin
 end;
 $$;
 
+create or replace function public.is_force_voucher_reverse()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce(current_setting('app.force_voucher_reverse', true), '') = 'on';
+$$;
+
 create or replace function public.reverse_posted_voucher(p_voucher_id uuid)
 returns uuid
 language plpgsql
@@ -1778,6 +1788,7 @@ declare
   v_new_id uuid;
   v_new_no varchar(40);
   v_suffix text;
+  v_reversal_mode varchar(20);
 begin
   if not public.has_permission('vouchers.edit') then
     raise exception 'Permission denied: vouchers.edit required.';
@@ -1788,14 +1799,22 @@ begin
     raise exception 'Voucher not found.';
   end if;
 
+  if v_src.status = 'cancelled' then
+    raise exception 'Voucher is already cancelled.';
+  end if;
+
   if v_src.status <> 'posted' then
     raise exception 'Only posted vouchers can be reversed.';
   end if;
 
-  if v_src.settlement_mode = 'invoice' then
-    raise exception
-      'Invoice settlement vouchers cannot be reversed automatically.';
+  if v_src.voucher_no like 'RV-%' then
+    raise exception 'Cannot reverse a reversal voucher.';
   end if;
+
+  v_reversal_mode := case
+    when v_src.settlement_mode = 'invoice' then 'account'
+    else v_src.settlement_mode
+  end;
 
   v_suffix := right(
     floor(extract(epoch from clock_timestamp()) * 1000)::bigint::text,
@@ -1805,6 +1824,8 @@ begin
   if length(v_new_no) > 40 then
     v_new_no := left(v_new_no, 40);
   end if;
+
+  perform set_config('app.force_voucher_reverse', 'on', true);
 
   insert into public.vouchers (
     voucher_no,
@@ -1823,7 +1844,7 @@ begin
   values (
     v_new_no,
     v_src.voucher_type,
-    v_src.settlement_mode,
+    v_reversal_mode,
     current_date,
     'عكس السند ' || v_src.voucher_no,
     'approved',
@@ -1860,11 +1881,53 @@ begin
   from public.voucher_lines vl
   where vl.voucher_id = p_voucher_id;
 
+  insert into public.voucher_netting_lines (
+    voucher_id,
+    netting_kind,
+    from_cc_id,
+    to_cc_id,
+    from_branch_id,
+    to_branch_id,
+    amount,
+    currency_id,
+    includes_cash,
+    inter_account_id,
+    note
+  )
+  select
+    v_new_id,
+    vnl.netting_kind,
+    vnl.to_cc_id,
+    vnl.from_cc_id,
+    vnl.to_branch_id,
+    vnl.from_branch_id,
+    vnl.amount,
+    vnl.currency_id,
+    vnl.includes_cash,
+    vnl.inter_account_id,
+    coalesce('عكس: ' || nullif(trim(vnl.note), ''), vnl.note)
+  from public.voucher_netting_lines vnl
+  where vnl.voucher_id = p_voucher_id
+    and vnl.amount > 0;
+
   update public.vouchers
   set status = 'posted', updated_at = now()
   where id = v_new_id;
 
+  update public.vouchers
+  set
+    status = 'cancelled',
+    description = trim(both from coalesce(description, '') || ' — مُعكوس بـ ' || v_new_no),
+    updated_at = now()
+  where id = p_voucher_id;
+
+  perform set_config('app.force_voucher_reverse', 'off', true);
+
   return v_new_id;
+exception
+  when others then
+    perform set_config('app.force_voucher_reverse', 'off', true);
+    raise;
 end;
 $$;
 

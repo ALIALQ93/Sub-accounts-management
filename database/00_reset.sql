@@ -76,6 +76,7 @@ drop function if exists public.reverse_posted_voucher(uuid) cascade;
 drop function if exists public.replace_voucher_lines(uuid, jsonb) cascade;
 drop function if exists public.replace_voucher_allocations(uuid, jsonb) cascade;
 drop function if exists public.bulk_create_accounts(jsonb) cascade;
+drop function if exists public.is_force_voucher_reverse() cascade;
 drop function if exists public.is_force_voucher_delete() cascade;
 drop function if exists public.voucher_lines_prevent_delete_when_posted() cascade;
 drop function if exists public.voucher_attachments_validate() cascade;

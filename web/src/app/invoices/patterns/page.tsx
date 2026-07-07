@@ -47,22 +47,22 @@ export default function InvoicePatternsPage() {
 
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">أنماط الفواتير</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">أنماط الفواتير</h1>
           <p className="text-xs text-slate-600">
             تعريف أنماط المبيعات والمشتريات والمناقلة وغيرها — كل نمط له ترقيم وسلوك مستقل.
           </p>
         </div>
         <PermissionGate permission="invoices.settings">
-          <Link
-            href="/invoices/patterns/new"
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            + نمط جديد
+          <Link href="/invoices/patterns/new" className="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            نمط جديد
           </Link>
         </PermissionGate>
       </section>
 
-      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
         {isLoading && (
           <p className="text-sm text-slate-600">جاري تحميل الأنماط...</p>
         )}

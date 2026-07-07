@@ -50,8 +50,16 @@ export function formatDbError(message: string | null | undefined): string {
     return "يمكن عكس السندات المرحلة فقط.";
   }
 
+  if (/Voucher is already cancelled/i.test(raw)) {
+    return "السند مُلغى مسبقاً ولا يمكن عكسه.";
+  }
+
+  if (/Cannot reverse a reversal voucher/i.test(raw)) {
+    return "لا يمكن عكس سند عكسي — استخدم السند الأصلي إن كان لا يزال مرحّلاً.";
+  }
+
   if (/Invoice settlement vouchers cannot be reversed automatically/i.test(raw)) {
-    return "لا يمكن عكس سند إغلاق حركات/فواتير تلقائياً — التخصيصات المرتبطة لن تُعاد لفتح الحركات. أنشئ سنداً عكسياً يدوياً أو تواصل مع المسؤول.";
+    return "لا يمكن عكس سند إغلاق الحركات تلقائياً — راجع إعداد قاعدة البيانات.";
   }
 
   return raw;

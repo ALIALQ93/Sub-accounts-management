@@ -155,7 +155,7 @@ export default function WarehouseLimitsPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl">
-      <h1 className="mb-1 text-2xl font-bold text-slate-900">حدود المخزون per مستودع</h1>
+      <h1 className="mb-1 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">حدود المخزون per مستودع</h1>
       <p className="mb-4 text-sm text-slate-600">
         يتفوّق على حدّ بطاقة المادة في تقرير النواقص — اترك الحقل فارغاً أو صفراً
         للاعتماد على بطاقة المادة فقط.
@@ -167,7 +167,7 @@ export default function WarehouseLimitsPage() {
       )}
 
       {!isLoading && (
-        <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+        <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <label className="mb-4 grid max-w-md gap-1 text-sm">
             <span className="font-medium">المستودع</span>
             <select
@@ -193,25 +193,22 @@ export default function WarehouseLimitsPage() {
           )}
 
           {selectedWarehouse && drafts.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] border-collapse text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-right text-slate-700">
-                    <th className="border-b border-slate-200 p-2">المادة</th>
-                    <th className="border-b border-slate-200 p-2">حد أدنى (وحدة أساس)</th>
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="data-table min-w-[640px]">
+                <thead>
+                  <tr>
+                    <th>المادة</th>
+                    <th>حد أدنى (وحدة أساس)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {drafts.map((row) => (
-                    <tr
-                      key={row.materialId}
-                      className="odd:bg-white even:bg-slate-50/60"
-                    >
-                      <td className="border-b border-slate-100 p-2">
+                    <tr key={row.materialId}>
+                      <td>
                         <span className="font-mono text-xs">{row.materialCode}</span>
                         <span className="block text-xs">{row.materialName}</span>
                       </td>
-                      <td className="border-b border-slate-100 p-2">
+                      <td>
                         <input
                           type="number"
                           min={0}
@@ -221,7 +218,7 @@ export default function WarehouseLimitsPage() {
                             updateDraft(row.materialId, e.target.value)
                           }
                           disabled={!canEdit || isSaving || tableMissing}
-                          className="w-full max-w-[160px] rounded border border-slate-300 px-2 py-1 font-mono"
+                          className="w-full max-w-[160px] rounded border border-slate-300 px-2 py-1 font-mono tabular-nums"
                           placeholder="بطاقة المادة"
                         />
                       </td>
@@ -232,15 +229,19 @@ export default function WarehouseLimitsPage() {
             </div>
           )}
 
-          {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
-          {success && <p className="mt-3 text-sm text-emerald-800">{success}</p>}
+          {error && (
+            <p className="mt-3 text-sm text-[var(--danger)]">{error}</p>
+          )}
+          {success && (
+            <p className="mt-3 text-sm text-[var(--success)]">{success}</p>
+          )}
 
           {canEdit && !tableMissing && drafts.length > 0 && (
             <button
               type="button"
               onClick={() => void onSave()}
               disabled={isSaving}
-              className="mt-4 rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="btn btn-primary mt-4"
             >
               {isSaving ? "جاري الحفظ..." : "حفظ حدود المستودع"}
             </button>
