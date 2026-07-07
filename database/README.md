@@ -124,6 +124,10 @@ database/setup_all.sql
 | `patch_inventory_phase2.sql` | تسوية مجمّعة + تحليل نواقص/راكد | بعد inventory_reports |
 | `patch_inventory_phase7.sql` | تقرير مبيعات تفصيلي | #23 |
 | `patch_audit_fixes.sql` | RLS (authenticated فقط) + أرصدة base + دورة حياة الحساب | **#24 — أمني/محاسبي** |
+| `patch_voucher_allocation_cap.sql` | حد التخصيص على مستوى DB + قفل عند الترحيل | **#25 — race condition** |
+| `patch_voucher_line_cc_optional.sql` | علم `cc_optional` بدل مطابقة نص «تصفية —%» | **#26 — تدقيق** |
+| `patch_reverse_voucher_rpc.sql` | `reverse_posted_voucher()` — عكس ذرّي | **#27 — تدقيق** |
+| `patch_voucher_atomic_ops.sql` | استبدال أسطر/تخصيصات + استيراد حسابات ذرّي | **#28 — تدقيق** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

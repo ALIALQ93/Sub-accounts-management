@@ -26,26 +26,26 @@ export interface AlertNotification {
 
 export const NOTIFICATION_META: Record<
   NotificationType,
-  { title: string; icon: string; accent: string }
+  { title: string; iconPath: string; accent: string }
 > = {
   success: {
     title: "تم بنجاح",
-    icon: "✓",
+    iconPath: "M20 6L9 17l-5-5",
     accent: "border-emerald-400 bg-emerald-50 text-emerald-950",
   },
   error: {
     title: "خطأ",
-    icon: "✕",
+    iconPath: "M18 6L6 18M6 6l12 12",
     accent: "border-rose-400 bg-rose-50 text-rose-950",
   },
   warning: {
     title: "تنبيه",
-    icon: "!",
+    iconPath: "M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z",
     accent: "border-amber-400 bg-amber-50 text-amber-950",
   },
   info: {
     title: "معلومة",
-    icon: "i",
+    iconPath: "M12 16v-4M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
     accent: "border-blue-300 bg-blue-50 text-blue-950",
   },
 };

@@ -43,19 +43,21 @@ export function NotificationAlertDialog({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px]"
+        className="absolute inset-0 bg-[var(--brand-navy)]/50 backdrop-blur-sm animate-[overlay-in_0.2s_ease-out]"
         aria-label="إغلاق"
         onClick={onDismiss}
       />
       <div
-        className={`relative z-10 w-full max-w-md rounded-2xl border-2 p-5 shadow-2xl ${meta.accent}`}
+        className={`relative z-10 w-full max-w-md animate-[dialog-in_0.24s_cubic-bezier(0.16,1,0.3,1)] rounded-2xl border-2 p-5 shadow-xl ${meta.accent}`}
       >
         <div className="flex items-start gap-3">
           <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/80 text-lg font-bold shadow-sm"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/80 shadow-sm"
             aria-hidden
           >
-            {meta.icon}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d={meta.iconPath} />
+            </svg>
           </span>
           <div className="min-w-0 flex-1">
             <h2

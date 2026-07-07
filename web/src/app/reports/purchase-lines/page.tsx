@@ -138,7 +138,7 @@ export default function PurchaseLinesReportPage() {
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="no-print flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">تقرير المشتريات التفصيلي</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">تقرير المشتريات التفصيلي</h1>
           <p className="mt-1 text-sm text-slate-600">
             أسطر فواتير مشتريات ومرتجع مشتريات وبضاعة أول المدة — مرحّلة فقط.
           </p>
@@ -282,12 +282,14 @@ export default function PurchaseLinesReportPage() {
         </section>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="mb-3 hidden text-lg font-bold print:block">
           تقرير المشتريات التفصيلي
         </h2>
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
         {!isLoading && !error && filtered.length === 0 && (
           <p className="text-sm text-slate-600">
             لا توجد أسطر مطابقة — أو شغّل{" "}
@@ -295,20 +297,20 @@ export default function PurchaseLinesReportPage() {
           </p>
         )}
         {!isLoading && !error && filtered.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">فاتورة</th>
-                  <th className="border-b border-slate-200 p-2">تاريخ</th>
-                  <th className="border-b border-slate-200 p-2">النوع</th>
-                  <th className="border-b border-slate-200 p-2">مورد</th>
-                  <th className="border-b border-slate-200 p-2">مادة</th>
-                  <th className="border-b border-slate-200 p-2">مستودع</th>
-                  <th className="border-b border-slate-200 p-2">كمية</th>
-                  <th className="border-b border-slate-200 p-2">سعر</th>
-                  <th className="border-b border-slate-200 p-2">خصم</th>
-                  <th className="border-b border-slate-200 p-2">مبلغ</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[1080px]">
+              <thead>
+                <tr>
+                  <th>فاتورة</th>
+                  <th>تاريخ</th>
+                  <th>النوع</th>
+                  <th>مورد</th>
+                  <th>مادة</th>
+                  <th>مستودع</th>
+                  <th>كمية</th>
+                  <th>سعر</th>
+                  <th>خصم</th>
+                  <th>مبلغ</th>
                 </tr>
               </thead>
               <tbody>
@@ -366,9 +368,11 @@ export default function PurchaseLinesReportPage() {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--brand-navy)]">
+        {value}
+      </p>
     </div>
   );
 }

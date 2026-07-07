@@ -132,7 +132,9 @@ export default function ReportsHubPage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">التقارير</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+          التقارير
+        </h1>
         <p className="mt-1 text-sm text-slate-600">
           تقارير محاسبية وتشغيلية. افتح أي تقرير في تبويب جديد لمقارنة فترتين أو
           سندين.
@@ -143,9 +145,9 @@ export default function ReportsHubPage() {
 
       <InventoryShortageAlert />
 
-      <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+      <section className="rounded-xl border border-[var(--info)]/25 bg-[var(--info)]/8 p-4 text-sm text-[var(--info)]">
         <p className="font-semibold">مقارنة في تبويبين</p>
-        <p className="mt-1 opacity-90">
+        <p className="mt-1 text-slate-600">
           بجانب أزرار «فتح» ستجد زر ↗ — يفتح السند أو التقرير في تبويب متصفح
           منفصل. مثلاً: افتح ميزان مراجعة يناير في تبويب، ومارس في آخر، ثم
           قارن يدوياً.
@@ -153,7 +155,7 @@ export default function ReportsHubPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">متاح الآن</h2>
+        <h2 className="mb-3 text-lg font-semibold text-[var(--brand-navy)]">متاح الآن</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {available.map((report) => (
             <ReportCardView key={report.title} report={report} />
@@ -162,7 +164,7 @@ export default function ReportsHubPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">قريباً</h2>
+        <h2 className="mb-3 text-lg font-semibold text-[var(--brand-navy)]">قريباً</h2>
         <div className="grid gap-4 md:grid-cols-2">
           {upcoming.map((report) => (
             <ReportCardView key={report.title} report={report} />
@@ -179,10 +181,8 @@ function ReportCardView({ report }: { report: ReportCard }) {
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold text-slate-900">{report.title}</h3>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs ${
-            report.status === "available"
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-slate-100 text-slate-600"
+          className={`badge ${
+            report.status === "available" ? "badge-success" : "badge-muted"
           }`}
         >
           {report.phase}
@@ -191,17 +191,14 @@ function ReportCardView({ report }: { report: ReportCard }) {
       <p className="text-sm text-slate-600">{report.description}</p>
       {report.href && report.status === "available" && (
         <div className="mt-4 flex flex-wrap gap-2">
-          <Link
-            href={report.href}
-            className="rounded-md bg-blue-900 px-3 py-1.5 text-sm font-medium text-white"
-          >
+          <Link href={report.href} className="btn btn-sm btn-primary">
             فتح
           </Link>
           <Link
             href={report.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700"
+            className="btn btn-sm btn-outline"
             title="فتح في تبويب جديد"
           >
             ↗ تبويب جديد
@@ -212,7 +209,7 @@ function ReportCardView({ report }: { report: ReportCard }) {
   );
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
       {body}
     </article>
   );

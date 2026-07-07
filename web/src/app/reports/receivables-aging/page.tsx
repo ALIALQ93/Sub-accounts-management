@@ -91,7 +91,9 @@ export default function ReceivablesAgingPage() {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">أعمار الذمم</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+          أعمار الذمم
+        </h1>
         <p className="mt-1 text-sm text-slate-600">
           حركات مفتوحة من <code className="text-xs">open_items_view</code> —
           حسب تاريخ الاستحقاق. مرتبط بفواتير آجل وإغلاق الحركات.
@@ -100,7 +102,7 @@ export default function ReceivablesAgingPage() {
 
       <ReportsNav active="receivables-aging" />
 
-      <section className="flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">نوع الطرف</span>
           <select
@@ -139,26 +141,26 @@ export default function ReceivablesAgingPage() {
         {BUCKET_ORDER.map((bucket) => (
           <div
             key={bucket}
-            className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
           >
             <p className="text-xs text-slate-600">{BUCKET_LABELS[bucket]}</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-slate-900">
+            <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-slate-900">
               {bucketTotals[bucket].toFixed(2)}
             </p>
           </div>
         ))}
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 sm:col-span-2 lg:col-span-1">
-          <p className="text-xs text-blue-800">الإجمالي</p>
-          <p className="mt-1 font-mono text-lg font-semibold text-blue-950">
+        <div className="rounded-xl border border-[var(--brand-navy)]/20 bg-[var(--brand-navy)]/5 p-3 shadow-sm sm:col-span-2 lg:col-span-1">
+          <p className="text-xs text-[var(--brand-navy)]">الإجمالي</p>
+          <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--brand-navy)]">
             {grandTotal.toFixed(2)}
           </p>
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
         {!isLoading && error && (
-          <p className="text-sm text-rose-700">{error}</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         )}
         {!isLoading && !error && filteredRows.length === 0 && (
           <p className="text-sm text-slate-600">
@@ -167,19 +169,17 @@ export default function ReceivablesAgingPage() {
           </p>
         )}
         {!isLoading && !error && filteredRows.length > 0 && viewMode === "by-party" && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">الطرف</th>
-                  <th className="border-b border-slate-200 p-2">النوع</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[960px]">
+              <thead>
+                <tr>
+                  <th>الطرف</th>
+                  <th>النوع</th>
                   {BUCKET_ORDER.map((bucket) => (
-                    <th key={bucket} className="border-b border-slate-200 p-2">
-                      {BUCKET_LABELS[bucket]}
-                    </th>
+                    <th key={bucket}>{BUCKET_LABELS[bucket]}</th>
                   ))}
-                  <th className="border-b border-slate-200 p-2">الإجمالي</th>
-                  <th className="border-b border-slate-200 p-2">حركات</th>
+                  <th>الإجمالي</th>
+                  <th>حركات</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,18 +221,18 @@ export default function ReceivablesAgingPage() {
           </div>
         )}
         {!isLoading && !error && filteredRows.length > 0 && viewMode === "detail" && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">القيد</th>
-                  <th className="border-b border-slate-200 p-2">الطرف</th>
-                  <th className="border-b border-slate-200 p-2">الحساب</th>
-                  <th className="border-b border-slate-200 p-2">CC</th>
-                  <th className="border-b border-slate-200 p-2">الاستحقاق</th>
-                  <th className="border-b border-slate-200 p-2">الفئة</th>
-                  <th className="border-b border-slate-200 p-2">المفتوح</th>
-                  <th className="border-b border-slate-200 p-2">فاتورة</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[960px]">
+              <thead>
+                <tr>
+                  <th>القيد</th>
+                  <th>الطرف</th>
+                  <th>الحساب</th>
+                  <th>CC</th>
+                  <th>الاستحقاق</th>
+                  <th>الفئة</th>
+                  <th>المفتوح</th>
+                  <th>فاتورة</th>
                 </tr>
               </thead>
               <tbody>

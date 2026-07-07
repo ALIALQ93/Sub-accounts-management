@@ -457,7 +457,9 @@ export function splitSettlementVoucherLines(
   );
 
   const userLines = dbLines
-    .filter((line) => line.account_id !== clearingAccountId)
+    .filter(
+      (line) => line.account_id !== clearingAccountId && !line.cc_optional,
+    )
     .map(dbLineToSettlementUserLine);
 
   return { clearingAccountId, userLines };
@@ -501,6 +503,7 @@ function pushClearingDbLine(
     cost_center_id: null,
     line_category_id: null,
     category_quantity: null,
+    cc_optional: true,
   });
 }
 
@@ -535,7 +538,7 @@ export function buildSettlementVoucherLinesForSave(
         clearingAccountId,
         oppositeSide("debit"),
         debit,
-        description ? `تصفية — ${description}` : "تصفية — مدين",
+        description || "سطر تصفية — مدين",
       );
     }
 
@@ -546,7 +549,7 @@ export function buildSettlementVoucherLinesForSave(
         clearingAccountId,
         oppositeSide("credit"),
         credit,
-        description ? `تصفية — ${description}` : "تصفية — دائن",
+        description || "سطر تصفية — دائن",
       );
     }
   }

@@ -60,28 +60,32 @@ export default function MaterialsPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl">
-      <h1 className="mb-4 text-2xl font-bold text-slate-900">المواد والمستودعات</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+        المواد والمستودعات
+      </h1>
       <MaterialsNav />
 
       <InventoryShortageAlert />
 
-      <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">
-            بطاقات المواد — وحدات القياس والأسعار per الوحدة الأساسية.
+            بطاقات المواد — وحدات القياس والأسعار حسب الوحدة الأساسية.
           </p>
           {canCreate && (
-            <Link
-              href="/materials/new"
-              className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white"
-            >
+            <Link href="/materials/new" className="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
               مادة جديدة
             </Link>
           )}
         </div>
 
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
         {!isLoading && !error && materials.length === 0 && (
           <p className="text-sm text-slate-600">
             لا توجد مواد — شغّل <code className="text-xs">setup_all.sql</code> أو أضف
@@ -90,61 +94,59 @@ export default function MaterialsPage() {
         )}
 
         {!isLoading && !error && materials.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">الرمز</th>
-                  <th className="border-b border-slate-200 p-2">الاسم</th>
-                  <th className="border-b border-slate-200 p-2">الصنف</th>
-                  <th className="border-b border-slate-200 p-2">شراء</th>
-                  <th className="border-b border-slate-200 p-2">بيع</th>
-                  <th className="border-b border-slate-200 p-2">حد أدنى</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  {(canEdit || canCreate) && (
-                    <th className="border-b border-slate-200 p-2">إجراء</th>
-                  )}
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[880px]">
+              <thead>
+                <tr>
+                  <th>الرمز</th>
+                  <th>الاسم</th>
+                  <th>الصنف</th>
+                  <th>شراء</th>
+                  <th>بيع</th>
+                  <th>حد أدنى</th>
+                  <th>الحالة</th>
+                  {(canEdit || canCreate) && <th>إجراء</th>}
                 </tr>
               </thead>
               <tbody>
                 {materials.map((material) => (
-                  <tr key={material.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                  <tr key={material.id}>
+                    <td className="font-mono text-slate-600">
                       {material.material_code}
                     </td>
-                    <td className="border-b border-slate-100 p-2">
+                    <td className="font-medium text-slate-900">
                       {material.name_ar}
                       {material.name_en && (
-                        <span className="block text-xs text-slate-500">
+                        <span className="block text-xs font-normal text-slate-500">
                           {material.name_en}
                         </span>
                       )}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td className="text-xs text-slate-600">
                       {material.category_name_ar ?? "—"}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs tabular-nums">
                       {material.purchase_price.toFixed(4)}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs tabular-nums">
                       {material.sale_price.toFixed(4)}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs tabular-nums">
                       {material.min_stock > 0 ? material.min_stock.toFixed(4) : "—"}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td>
                       {material.is_active ? (
-                        <span className="text-emerald-700">نشطة</span>
+                        <span className="badge badge-success">نشطة</span>
                       ) : (
-                        <span className="text-slate-500">معطّلة</span>
+                        <span className="badge badge-muted">معطّلة</span>
                       )}
                     </td>
                     {(canEdit || canCreate) && (
-                      <td className="border-b border-slate-100 p-2">
-                        <div className="flex flex-wrap gap-2">
+                      <td>
+                        <div className="flex flex-wrap gap-1.5">
                           <Link
                             href={`/materials/${material.id}`}
-                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                            className="btn btn-sm btn-outline"
                           >
                             {canEdit ? "تعديل" : "عرض"}
                           </Link>
@@ -153,7 +155,7 @@ export default function MaterialsPage() {
                               type="button"
                               onClick={() => void toggleActive(material)}
                               disabled={isSaving}
-                              className="rounded border border-slate-300 px-2 py-1 text-xs"
+                              className="btn btn-sm btn-outline text-[var(--warning)]"
                             >
                               {material.is_active ? "تعطيل" : "تفعيل"}
                             </button>

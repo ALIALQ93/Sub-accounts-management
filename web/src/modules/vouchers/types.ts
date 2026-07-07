@@ -33,6 +33,7 @@ export interface VoucherLine {
   cost_center_id?: string | null;
   line_category_id?: string | null;
   category_quantity?: number | null;
+  cc_optional?: boolean;
 }
 
 export interface VoucherLineCategory {

@@ -163,7 +163,7 @@ export default function CurrenciesPage() {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-4">
       <section>
-        <h1 className="text-2xl font-bold text-slate-900">العملات</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">العملات</h1>
         <p className="mt-1 text-sm text-slate-600">
           العملة الأساسية سعرها = 1. كل تعديل لسعر الصرف يُسجَّل تاريخياً
           بتاريخ سريان — للتقارير والسندات القديمة.
@@ -171,7 +171,7 @@ export default function CurrenciesPage() {
       </section>
 
       {baseCurrency && (
-        <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+        <section className="rounded-xl border border-[var(--brand-navy)]/20 bg-[var(--brand-navy)]/5 p-4 text-sm text-[var(--brand-navy)]">
           العملة الأساسية الحالية:{" "}
           <strong>
             {baseCurrency.code} — {baseCurrency.name_ar}
@@ -197,31 +197,31 @@ export default function CurrenciesPage() {
       )}
 
       {error && (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 px-3 py-2 text-sm text-[var(--danger)]">
           {error}
         </p>
       )}
       {success && (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="rounded-md border border-[var(--success)]/25 bg-[var(--success)]/8 px-3 py-2 text-sm text-[var(--success)]">
           {success}
         </p>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
 
         {!isLoading && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">الكود</th>
-                  <th className="border-b border-slate-200 p-2">الاسم</th>
-                  <th className="border-b border-slate-200 p-2">الرمز</th>
-                  <th className="border-b border-slate-200 p-2">سعر مقابل الأساس</th>
-                  <th className="border-b border-slate-200 p-2">ساري من</th>
-                  <th className="border-b border-slate-200 p-2">الحالة</th>
-                  <th className="border-b border-slate-200 p-2">إجراء</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[920px]">
+              <thead>
+                <tr>
+                  <th>الكود</th>
+                  <th>الاسم</th>
+                  <th>الرمز</th>
+                  <th>سعر مقابل الأساس</th>
+                  <th>ساري من</th>
+                  <th>الحالة</th>
+                  <th>إجراء</th>
                 </tr>
               </thead>
               <tbody>
@@ -244,10 +244,10 @@ export default function CurrenciesPage() {
         )}
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">السجل التاريخي للأسعار</h2>
+            <h2 className="text-lg font-semibold text-[var(--brand-navy)]">السجل التاريخي للأسعار</h2>
             <p className="text-xs text-slate-500">
               كل تغيير لسعر الصرف أو للعملة الأساسية — مع السعر السابق والجديد.
             </p>
@@ -274,42 +274,42 @@ export default function CurrenciesPage() {
         ) : rateHistory.length === 0 ? (
           <p className="text-sm text-slate-500">لا توجد سجلات بعد.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">التاريخ</th>
-                  <th className="border-b border-slate-200 p-2">العملة</th>
-                  <th className="border-b border-slate-200 p-2">السعر السابق</th>
-                  <th className="border-b border-slate-200 p-2">السعر الجديد</th>
-                  <th className="border-b border-slate-200 p-2">المصدر</th>
-                  <th className="border-b border-slate-200 p-2">ملاحظة</th>
-                  <th className="border-b border-slate-200 p-2">وقت التسجيل</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[880px]">
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>العملة</th>
+                  <th>السعر السابق</th>
+                  <th>السعر الجديد</th>
+                  <th>المصدر</th>
+                  <th>ملاحظة</th>
+                  <th>وقت التسجيل</th>
                 </tr>
               </thead>
               <tbody>
                 {rateHistory.map((entry) => (
-                  <tr key={entry.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                  <tr key={entry.id}>
+                    <td className="font-mono tabular-nums">
                       {entry.effective_from}
                     </td>
-                    <td className="border-b border-slate-100 p-2">
+                    <td>
                       <span className="font-mono">{entry.currency_code}</span>
                       <span className="mr-2 text-slate-600">{entry.currency_name_ar}</span>
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                    <td className="font-mono tabular-nums">
                       {entry.previous_rate == null ? "—" : entry.previous_rate}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono">
+                    <td className="font-mono tabular-nums">
                       {entry.exchange_rate}
                     </td>
-                    <td className="border-b border-slate-100 p-2">
+                    <td>
                       {getCurrencyRateChangeSourceLabel(entry.change_source)}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-slate-600">
+                    <td className="text-slate-600">
                       {entry.note ?? "—"}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs text-slate-500">
+                    <td className="font-mono text-xs text-slate-500">
                       {new Date(entry.created_at).toLocaleString("ar-IQ")}
                     </td>
                   </tr>

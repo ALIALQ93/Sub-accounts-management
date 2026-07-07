@@ -303,23 +303,22 @@ export default function TrialBalancePage() {
     <main className="mx-auto w-full max-w-7xl p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">ميزان المراجعة</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+            ميزان المراجعة
+          </h1>
           <p className="mt-1 text-xs text-slate-600">
             حسابات مرحّلة — عمود افتتاحي منفصل عن حركة الفترة — فلاتر عملة
             وحساب ومركز كلفة وفترة محاسبية.
           </p>
         </div>
-        <OpenInNewTabLink
-          href={shareHref}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
+        <OpenInNewTabLink href={shareHref} className="btn btn-sm btn-outline">
           ↗ نسخة في تبويب جديد
         </OpenInNewTabLink>
       </div>
 
       <ReportsNav active="trial-balance" />
 
-      <section className="mb-4 mt-4 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="mb-4 mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           <input
             value={query}
@@ -460,7 +459,7 @@ export default function TrialBalancePage() {
             type="button"
             onClick={() => void applyFilters()}
             disabled={isLoading}
-            className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="btn btn-primary"
           >
             تطبيق
           </button>
@@ -468,7 +467,7 @@ export default function TrialBalancePage() {
             type="button"
             onClick={() => void resetFilters()}
             disabled={isLoading}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+            className="btn btn-outline"
           >
             إعادة ضبط
           </button>
@@ -482,28 +481,26 @@ export default function TrialBalancePage() {
         </p>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
         {!isLoading && !error && (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] border-collapse text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-right text-slate-700">
-                    <th className="border-b border-slate-200 p-2">كود</th>
-                    <th className="border-b border-slate-200 p-2">اسم الحساب</th>
-                    <th className="border-b border-slate-200 p-2">عملة</th>
-                    {showOpeningEntry && (
-                      <th className="border-b border-slate-200 p-2">رصيد افتتاحي</th>
-                    )}
-                    {showMovementOpening && (
-                      <th className="border-b border-slate-200 p-2">رصيد سابق</th>
-                    )}
-                    <th className="border-b border-slate-200 p-2">مدين الفترة</th>
-                    <th className="border-b border-slate-200 p-2">دائن الفترة</th>
-                    <th className="border-b border-slate-200 p-2">رصيد ختامي</th>
-                    <th className="border-b border-slate-200 p-2">إجراء</th>
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="data-table min-w-[1100px]">
+                <thead>
+                  <tr>
+                    <th>كود</th>
+                    <th>اسم الحساب</th>
+                    <th>عملة</th>
+                    {showOpeningEntry && <th>رصيد افتتاحي</th>}
+                    {showMovementOpening && <th>رصيد سابق</th>}
+                    <th>مدين الفترة</th>
+                    <th>دائن الفترة</th>
+                    <th>رصيد ختامي</th>
+                    <th>إجراء</th>
                   </tr>
                 </thead>
                 <tbody>

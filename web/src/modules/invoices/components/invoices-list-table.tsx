@@ -13,51 +13,43 @@ interface InvoicesListTableProps {
 export function InvoicesListTable({ items, canEdit }: InvoicesListTableProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="w-full min-w-[900px] border-collapse text-sm">
-        <thead className="bg-slate-50">
-          <tr className="text-right text-slate-700">
-            <th className="border border-slate-200 p-2">رقم الفاتورة</th>
-            <th className="border border-slate-200 p-2">التاريخ</th>
-            <th className="border border-slate-200 p-2">النمط</th>
-            <th className="border border-slate-200 p-2">النوع</th>
-            <th className="border border-slate-200 p-2">الفرع</th>
-            <th className="border border-slate-200 p-2">الطرف</th>
-            <th className="border border-slate-200 p-2">التسوية</th>
-            <th className="border border-slate-200 p-2">الحالة</th>
-            <th className="border border-slate-200 p-2">إجراءات</th>
+      <table className="data-table min-w-[900px]">
+        <thead>
+          <tr>
+            <th>رقم الفاتورة</th>
+            <th>التاريخ</th>
+            <th>النمط</th>
+            <th>النوع</th>
+            <th>الفرع</th>
+            <th>الطرف</th>
+            <th>التسوية</th>
+            <th>الحالة</th>
+            <th>إجراءات</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={item.id} className="odd:bg-white even:bg-slate-50/60">
-              <td className="border border-slate-100 p-2 font-mono" dir="ltr">
+            <tr key={item.id}>
+              <td className="font-mono font-medium text-slate-900" dir="ltr">
                 {item.invoice_no}
               </td>
-              <td className="border border-slate-100 p-2">{item.invoice_date}</td>
-              <td className="border border-slate-100 p-2">
-                {item.pattern_name_ar ?? "—"}
-              </td>
-              <td className="border border-slate-100 p-2">
+              <td className="tabular-nums text-slate-600">{item.invoice_date}</td>
+              <td>{item.pattern_name_ar ?? "—"}</td>
+              <td>
                 {item.commercial_kind
                   ? getCommercialKindLabel(item.commercial_kind)
                   : "—"}
               </td>
-              <td className="border border-slate-100 p-2">
-                {item.branch_name_ar ?? "—"}
-              </td>
-              <td className="border border-slate-100 p-2">
-                {item.party_name_ar ?? "—"}
-              </td>
-              <td className="border border-slate-100 p-2">
-                {item.settlement_mode === "cash" ? "نقدي" : "آجل"}
-              </td>
-              <td className="border border-slate-100 p-2">
+              <td className="text-slate-600">{item.branch_name_ar ?? "—"}</td>
+              <td>{item.party_name_ar ?? "—"}</td>
+              <td>{item.settlement_mode === "cash" ? "نقدي" : "آجل"}</td>
+              <td>
                 <InvoiceStatusChip status={item.status} />
               </td>
-              <td className="border border-slate-100 p-2">
+              <td>
                 <Link
                   href={`/invoices/${item.id}`}
-                  className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700"
+                  className="btn btn-sm btn-outline"
                 >
                   {canEdit && item.status === "draft" ? "تعديل" : "عرض"}
                 </Link>
@@ -67,10 +59,7 @@ export function InvoicesListTable({ items, canEdit }: InvoicesListTableProps) {
 
           {items.length === 0 && (
             <tr>
-              <td
-                colSpan={9}
-                className="border border-slate-100 p-6 text-center text-slate-500"
-              >
+              <td colSpan={9} className="p-8 text-center text-slate-500">
                 لا توجد فواتير بعد.
               </td>
             </tr>

@@ -27,10 +27,12 @@ export function NotificationToasts({ toasts, onDismiss }: NotificationToastsProp
           >
             <div className="flex items-start gap-3">
               <span
-                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/75 text-sm font-bold"
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/75 shadow-sm"
                 aria-hidden
               >
-                {meta.icon}
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d={meta.iconPath} />
+                </svg>
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{toast.title}</p>

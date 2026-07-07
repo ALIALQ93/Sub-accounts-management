@@ -170,11 +170,16 @@ export const materialApi = {
     throwIfSupabaseError(error);
 
     const material = mapMaterial(row as unknown as Material);
-    await this.createMaterialUnit(material.id, {
-      ...baseUnit,
-      is_base_unit: true,
-      factor_to_base: 1,
-    });
+    try {
+      await this.createMaterialUnit(material.id, {
+        ...baseUnit,
+        is_base_unit: true,
+        factor_to_base: 1,
+      });
+    } catch (unitError) {
+      await supabase.from("materials").delete().eq("id", material.id);
+      throw unitError;
+    }
     return material;
   },
 

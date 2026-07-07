@@ -121,7 +121,7 @@ export default function InventoryMovementsReportPage() {
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">ملخص حركات المخزون</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">ملخص حركات المخزون</h1>
           <p className="mt-1 text-sm text-slate-600">
             مجمّع per نوع حركة ونوع فاتورة (مبيعات، مشتريات، مناقلة، تسوية…).
           </p>
@@ -233,9 +233,11 @@ export default function InventoryMovementsReportPage() {
         </section>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
         {!isLoading && !error && rows.length === 0 && (
           <p className="text-sm text-slate-600">
             لا توجد حركات في الفترة — أو شغّل{" "}
@@ -243,45 +245,44 @@ export default function InventoryMovementsReportPage() {
           </p>
         )}
         {!isLoading && !error && rows.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">نوع الفاتورة/المصدر</th>
-                  <th className="border-b border-slate-200 p-2">نوع الحركة</th>
-                  <th className="border-b border-slate-200 p-2">مصدر السجل</th>
-                  <th className="border-b border-slate-200 p-2">عدد</th>
-                  <th className="border-b border-slate-200 p-2">وارد</th>
-                  <th className="border-b border-slate-200 p-2">صادر</th>
-                  <th className="border-b border-slate-200 p-2">قيمة</th>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="data-table min-w-[880px]">
+              <thead>
+                <tr>
+                  <th>نوع الفاتورة/المصدر</th>
+                  <th>نوع الحركة</th>
+                  <th>مصدر السجل</th>
+                  <th>عدد</th>
+                  <th>وارد</th>
+                  <th>صادر</th>
+                  <th>قيمة</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr
                     key={`${row.commercial_kind}-${row.movement_kind}-${row.source_type}`}
-                    className="odd:bg-white even:bg-slate-50/60"
                   >
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td className="text-xs">
                       {COMMERCIAL_KIND_LABELS[row.commercial_kind] ??
                         row.commercial_kind}
                     </td>
-                    <td className="border-b border-slate-100 p-2 text-xs">
+                    <td className="text-xs">
                       {MOVEMENT_KIND_LABELS[row.movement_kind] ?? row.movement_kind}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs text-slate-500">
                       {row.source_type}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs tabular-nums">
                       {row.movement_count}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs tabular-nums">
                       {row.quantity_in_base.toFixed(4)}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs tabular-nums">
                       {row.quantity_out_base.toFixed(4)}
                     </td>
-                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                    <td className="font-mono text-xs tabular-nums">
                       {row.total_value.toFixed(2)}
                     </td>
                   </tr>
@@ -297,9 +298,11 @@ export default function InventoryMovementsReportPage() {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--brand-navy)]">
+        {value}
+      </p>
     </div>
   );
 }

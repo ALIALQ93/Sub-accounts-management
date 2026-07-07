@@ -233,7 +233,7 @@ export function PartyFormModal({
         )}
 
         {error && (
-          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <p className="rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 px-3 py-2 text-sm text-[var(--danger)]">
             {error}
           </p>
         )}
@@ -242,15 +242,21 @@ export function PartyFormModal({
           <button
             type="submit"
             disabled={isSaving}
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--brand-navy)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--brand-navy-light)] disabled:opacity-60"
           >
+            {isSaving && (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className="animate-spin" aria-hidden>
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            )}
             {isSaving ? "جاري الحفظ..." : mode === "create" ? "إضافة" : "حفظ التعديل"}
           </button>
           <button
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60"
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
           >
             إلغاء
           </button>

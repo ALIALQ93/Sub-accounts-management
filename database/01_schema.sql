@@ -301,8 +301,12 @@ create table public.voucher_lines (
   cost_center_id uuid null references public.cost_centers(id) on delete restrict,
   line_category_id uuid null references public.voucher_line_categories(id) on delete restrict,
   category_quantity numeric(18, 4) null check (category_quantity is null or category_quantity >= 0),
+  cc_optional boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+comment on column public.voucher_lines.cc_optional is
+  'عند true يُعفى السطر من إلزامية مركز الكلفة (مثلاً أسطر حساب التصفية المقابلة)';
 
 create index idx_voucher_lines_category_id on public.voucher_lines(line_category_id);
 
@@ -1150,7 +1154,7 @@ begin
       where vl.voucher_id = p_voucher_id
         and vl.cost_center_id is null
         and vl.amount > 0
-        and coalesce(vl.line_description, '') not like 'تصفية —%'
+        and not coalesce(vl.cc_optional, false)
     ) then
       raise exception 'Settlement voucher lines require a cost center.';
     end if;
@@ -1366,6 +1370,149 @@ begin
 end;
 $$;
 
+-- ---------------------------------------------------------------------------
+-- حد التخصيص — منع تجاوز المبلغ المفتوح (race-safe عند الترحيل)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.validate_allocation_row_capacity(
+  p_voucher_id uuid,
+  p_target_journal_line_id uuid,
+  p_applied_amount numeric,
+  p_exclude_allocation_id uuid default null,
+  p_lock_line boolean default false
+)
+returns void
+language plpgsql
+as $$
+declare
+  v_original numeric(18, 2);
+  v_posted numeric(18, 2);
+  v_voucher_line_total numeric(18, 2);
+begin
+  if p_applied_amount < 0 then
+    raise exception 'Applied allocation amount cannot be negative.';
+  end if;
+
+  if p_applied_amount = 0 and p_exclude_allocation_id is null then
+    raise exception 'Applied allocation amount must be positive.';
+  end if;
+
+  if p_lock_line then
+    select abs(jel.debit - jel.credit)::numeric(18, 2)
+    into v_original
+    from public.journal_entry_lines jel
+    inner join public.journal_entries je on je.id = jel.journal_entry_id
+    where jel.id = p_target_journal_line_id
+      and je.status = 'posted'
+    for update of jel;
+  else
+    select abs(jel.debit - jel.credit)::numeric(18, 2)
+    into v_original
+    from public.journal_entry_lines jel
+    inner join public.journal_entries je on je.id = jel.journal_entry_id
+    where jel.id = p_target_journal_line_id
+      and je.status = 'posted';
+  end if;
+
+  if v_original is null then
+    raise exception 'Target journal line is not a posted entry line.';
+  end if;
+
+  select coalesce(sum(va.applied_amount), 0)::numeric(18, 2)
+  into v_posted
+  from public.voucher_allocations va
+  inner join public.vouchers v on v.id = va.voucher_id
+  where va.target_journal_line_id = p_target_journal_line_id
+    and v.status = 'posted'
+    and v.id <> p_voucher_id;
+
+  select
+    coalesce(sum(va.applied_amount), 0)::numeric(18, 2) + p_applied_amount
+  into v_voucher_line_total
+  from public.voucher_allocations va
+  where va.voucher_id = p_voucher_id
+    and va.target_journal_line_id = p_target_journal_line_id
+    and (p_exclude_allocation_id is null or va.id <> p_exclude_allocation_id);
+
+  if v_posted + v_voucher_line_total > v_original + 0.01 then
+    raise exception
+      'Allocation total (%) exceeds original amount (%) for journal line. Remaining open: %.',
+      v_posted + v_voucher_line_total,
+      v_original,
+      greatest(v_original - v_posted, 0);
+  end if;
+end;
+$$;
+
+create or replace function public.validate_voucher_allocations_capacity(
+  p_voucher_id uuid,
+  p_lock_lines boolean default false
+)
+returns void
+language plpgsql
+as $$
+declare
+  r record;
+  v_original numeric(18, 2);
+  v_posted numeric(18, 2);
+begin
+  for r in
+    select
+      va.target_journal_line_id,
+      sum(va.applied_amount)::numeric(18, 2) as line_total
+    from public.voucher_allocations va
+    where va.voucher_id = p_voucher_id
+    group by va.target_journal_line_id
+  loop
+    if r.line_total <= 0 then
+      raise exception 'Applied allocation amount must be positive.';
+    end if;
+
+    if p_lock_lines then
+      select abs(jel.debit - jel.credit)::numeric(18, 2)
+      into v_original
+      from public.journal_entry_lines jel
+      inner join public.journal_entries je on je.id = jel.journal_entry_id
+      where jel.id = r.target_journal_line_id
+        and je.status = 'posted'
+      for update of jel;
+    else
+      select abs(jel.debit - jel.credit)::numeric(18, 2)
+      into v_original
+      from public.journal_entry_lines jel
+      inner join public.journal_entries je on je.id = jel.journal_entry_id
+      where jel.id = r.target_journal_line_id
+        and je.status = 'posted';
+    end if;
+
+    if v_original is null then
+      raise exception 'Target journal line is not a posted entry line.';
+    end if;
+
+    select coalesce(sum(va.applied_amount), 0)::numeric(18, 2)
+    into v_posted
+    from public.voucher_allocations va
+    inner join public.vouchers v on v.id = va.voucher_id
+    where va.target_journal_line_id = r.target_journal_line_id
+      and v.status = 'posted'
+      and v.id <> p_voucher_id;
+
+    if v_posted + r.line_total > v_original + 0.01 then
+      raise exception
+        'Allocation total (%) exceeds original amount (%) for journal line. Remaining open: %.',
+        v_posted + r.line_total,
+        v_original,
+        greatest(v_original - v_posted, 0);
+    end if;
+  end loop;
+end;
+$$;
+
+grant execute on function public.validate_allocation_row_capacity(uuid, uuid, numeric, uuid, boolean)
+  to authenticated;
+grant execute on function public.validate_voucher_allocations_capacity(uuid, boolean)
+  to authenticated;
+
 create or replace function public.voucher_allocations_validate()
 returns trigger
 language plpgsql
@@ -1392,6 +1539,25 @@ begin
   if v_settlement_mode <> 'invoice' then
     raise exception 'Voucher allocations are allowed only for invoice settlement mode.';
   end if;
+
+  if TG_OP = 'UPDATE'
+    and old.target_journal_line_id is distinct from new.target_journal_line_id then
+    perform public.validate_allocation_row_capacity(
+      new.voucher_id,
+      old.target_journal_line_id,
+      0,
+      old.id,
+      false
+    );
+  end if;
+
+  perform public.validate_allocation_row_capacity(
+    new.voucher_id,
+    new.target_journal_line_id,
+    new.applied_amount,
+    case when TG_OP = 'UPDATE' then old.id else null end,
+    false
+  );
 
   return new;
 end;
@@ -1464,6 +1630,10 @@ begin
   end if;
 
   if new.status = 'posted' and old.status <> 'posted' then
+    if old.status <> 'approved' then
+      raise exception 'Voucher must be approved before posting.';
+    end if;
+
     v_rate := coalesce(nullif(new.exchange_rate, 0), 1);
 
     select
@@ -1490,6 +1660,8 @@ begin
       if v_allocation_count = 0 then
         raise exception 'Invoice settlement voucher requires allocation rows.';
       end if;
+
+      perform public.validate_voucher_allocations_capacity(new.id, true);
     end if;
 
     if new.voucher_type = 'settlement' then
@@ -1499,7 +1671,7 @@ begin
         where vl.voucher_id = new.id
           and vl.cost_center_id is null
           and vl.amount > 0
-          and coalesce(vl.line_description, '') not like 'تصفية —%'
+          and not coalesce(vl.cc_optional, false)
       ) then
         raise exception 'Settlement voucher lines require a cost center.';
       end if;
@@ -1594,6 +1766,304 @@ begin
   return new;
 end;
 $$;
+
+create or replace function public.reverse_posted_voucher(p_voucher_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_src public.vouchers%rowtype;
+  v_new_id uuid;
+  v_new_no varchar(40);
+  v_suffix text;
+begin
+  if not public.has_permission('vouchers.edit') then
+    raise exception 'Permission denied: vouchers.edit required.';
+  end if;
+
+  select * into v_src from public.vouchers where id = p_voucher_id;
+  if not found then
+    raise exception 'Voucher not found.';
+  end if;
+
+  if v_src.status <> 'posted' then
+    raise exception 'Only posted vouchers can be reversed.';
+  end if;
+
+  if v_src.settlement_mode = 'invoice' then
+    raise exception
+      'Invoice settlement vouchers cannot be reversed automatically.';
+  end if;
+
+  v_suffix := right(
+    floor(extract(epoch from clock_timestamp()) * 1000)::bigint::text,
+    6
+  );
+  v_new_no := 'RV-' || v_src.voucher_no || '-' || v_suffix;
+  if length(v_new_no) > 40 then
+    v_new_no := left(v_new_no, 40);
+  end if;
+
+  insert into public.vouchers (
+    voucher_no,
+    voucher_type,
+    settlement_mode,
+    voucher_date,
+    description,
+    status,
+    customer_id,
+    vendor_id,
+    currency_id,
+    exchange_rate,
+    cost_center_id,
+    branch_id
+  )
+  values (
+    v_new_no,
+    v_src.voucher_type,
+    v_src.settlement_mode,
+    current_date,
+    'عكس السند ' || v_src.voucher_no,
+    'approved',
+    v_src.customer_id,
+    v_src.vendor_id,
+    v_src.currency_id,
+    v_src.exchange_rate,
+    v_src.cost_center_id,
+    v_src.branch_id
+  )
+  returning id into v_new_id;
+
+  insert into public.voucher_lines (
+    voucher_id,
+    account_id,
+    side,
+    amount,
+    line_description,
+    cost_center_id,
+    line_category_id,
+    category_quantity,
+    cc_optional
+  )
+  select
+    v_new_id,
+    vl.account_id,
+    case when vl.side = 'debit' then 'credit' else 'debit' end,
+    vl.amount,
+    coalesce('عكس: ' || nullif(trim(vl.line_description), ''), 'عكس سطر'),
+    vl.cost_center_id,
+    vl.line_category_id,
+    vl.category_quantity,
+    vl.cc_optional
+  from public.voucher_lines vl
+  where vl.voucher_id = p_voucher_id;
+
+  update public.vouchers
+  set status = 'posted', updated_at = now()
+  where id = v_new_id;
+
+  return v_new_id;
+end;
+$$;
+
+grant execute on function public.reverse_posted_voucher(uuid) to authenticated;
+
+create or replace function public.replace_voucher_lines(
+  p_voucher_id uuid,
+  p_lines jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status varchar(20);
+  v_line jsonb;
+begin
+  select status
+  into v_status
+  from public.vouchers
+  where id = p_voucher_id;
+
+  if not found then
+    raise exception 'Voucher not found.';
+  end if;
+
+  if v_status = 'posted' then
+    raise exception 'Cannot replace lines on posted voucher.';
+  end if;
+
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' then
+    raise exception 'Lines payload must be a JSON array.';
+  end if;
+
+  delete from public.voucher_lines
+  where voucher_id = p_voucher_id;
+
+  for v_line in select value from jsonb_array_elements(p_lines)
+  loop
+    if coalesce(v_line->>'account_id', '') = '' then
+      continue;
+    end if;
+
+    if coalesce((v_line->>'amount')::numeric(18, 2), 0) <= 0 then
+      continue;
+    end if;
+
+    insert into public.voucher_lines (
+      voucher_id,
+      account_id,
+      side,
+      amount,
+      line_description,
+      cost_center_id,
+      line_category_id,
+      category_quantity,
+      cc_optional
+    )
+    values (
+      p_voucher_id,
+      (v_line->>'account_id')::uuid,
+      v_line->>'side',
+      (v_line->>'amount')::numeric(18, 2),
+      nullif(trim(v_line->>'line_description'), ''),
+      nullif(v_line->>'cost_center_id', '')::uuid,
+      nullif(v_line->>'line_category_id', '')::uuid,
+      nullif(v_line->>'category_quantity', '')::numeric(18, 4),
+      coalesce((v_line->>'cc_optional')::boolean, false)
+    );
+  end loop;
+end;
+$$;
+
+create or replace function public.replace_voucher_allocations(
+  p_voucher_id uuid,
+  p_allocations jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status varchar(20);
+  v_row jsonb;
+  v_target_id uuid;
+  v_amount numeric(18, 2);
+begin
+  select status
+  into v_status
+  from public.vouchers
+  where id = p_voucher_id;
+
+  if not found then
+    raise exception 'Voucher not found.';
+  end if;
+
+  if v_status = 'posted' then
+    raise exception 'Cannot replace allocations on posted voucher.';
+  end if;
+
+  if p_allocations is null or jsonb_typeof(p_allocations) <> 'array' then
+    raise exception 'Allocations payload must be a JSON array.';
+  end if;
+
+  delete from public.voucher_allocations
+  where voucher_id = p_voucher_id;
+
+  for v_row in select value from jsonb_array_elements(p_allocations)
+  loop
+    v_target_id := nullif(v_row->>'target_journal_line_id', '')::uuid;
+    v_amount := coalesce((v_row->>'applied_amount')::numeric(18, 2), 0);
+
+    if v_target_id is null or v_amount <= 0 then
+      continue;
+    end if;
+
+    insert into public.voucher_allocations (
+      voucher_id,
+      target_journal_line_id,
+      applied_amount,
+      note
+    )
+    values (
+      p_voucher_id,
+      v_target_id,
+      v_amount,
+      nullif(trim(v_row->>'note'), '')
+    );
+  end loop;
+end;
+$$;
+
+create or replace function public.bulk_create_accounts(p_rows jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row jsonb;
+  v_result jsonb := '[]'::jsonb;
+  v_account public.accounts%rowtype;
+begin
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    raise exception 'Accounts payload must be a JSON array.';
+  end if;
+
+  if jsonb_array_length(p_rows) = 0 then
+    raise exception 'At least one account row is required.';
+  end if;
+
+  for v_row in select value from jsonb_array_elements(p_rows)
+  loop
+    if coalesce(trim(v_row->>'code'), '') = '' then
+      raise exception 'Account code is required.';
+    end if;
+
+    if coalesce(trim(v_row->>'name_ar'), '') = '' then
+      raise exception 'Account name_ar is required.';
+    end if;
+
+    if coalesce(v_row->>'parent_id', '') = '' then
+      raise exception 'Account parent_id is required.';
+    end if;
+
+    insert into public.accounts (
+      code,
+      sub_code,
+      name_ar,
+      name_en,
+      parent_id,
+      currency_id,
+      is_postable,
+      is_active
+    )
+    values (
+      trim(v_row->>'code'),
+      nullif(trim(v_row->>'sub_code'), ''),
+      trim(v_row->>'name_ar'),
+      nullif(trim(v_row->>'name_en'), ''),
+      (v_row->>'parent_id')::uuid,
+      nullif(v_row->>'currency_id', '')::uuid,
+      coalesce((v_row->>'is_postable')::boolean, true),
+      coalesce((v_row->>'is_active')::boolean, true)
+    )
+    returning * into v_account;
+
+    v_result := v_result || jsonb_build_array(to_jsonb(v_account));
+  end loop;
+
+  return v_result;
+end;
+$$;
+
+grant execute on function public.replace_voucher_lines(uuid, jsonb) to authenticated;
+grant execute on function public.replace_voucher_allocations(uuid, jsonb) to authenticated;
+grant execute on function public.bulk_create_accounts(jsonb) to authenticated;
 
 create or replace function public.is_force_voucher_delete()
 returns boolean

@@ -307,7 +307,7 @@ function InventoryBalanceReportContent() {
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-        <h1 className="text-2xl font-bold text-slate-900">رصيد المخزون</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">رصيد المخزون</h1>
         <p className="mt-1 text-sm text-slate-600">
           كميات وقيم تقديرية من <code className="text-xs">inventory_movements</code>{" "}
           — per مادة ومستودع.         للتسوية الجردية استخدم{" "}
@@ -539,9 +539,11 @@ function InventoryBalanceReportContent() {
         </section>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
 
         {!isLoading && !error && viewMode === "balance" && (
           <BalanceTable rows={filteredBalance} />
@@ -559,9 +561,11 @@ function InventoryBalanceReportContent() {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--brand-navy)]">
+        {value}
+      </p>
     </div>
   );
 }
@@ -578,16 +582,16 @@ function BalanceTable({ rows }: { rows: InventoryBalanceRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[960px] border-collapse text-sm">
-        <thead className="bg-slate-50">
-          <tr className="text-right text-slate-700">
-            <th className="border-b border-slate-200 p-2">المادة</th>
-            <th className="border-b border-slate-200 p-2">المستودع</th>
-            <th className="border-b border-slate-200 p-2">الفرع</th>
-            <th className="border-b border-slate-200 p-2">الصنف</th>
-            <th className="border-b border-slate-200 p-2">كمية أساس</th>
-            <th className="border-b border-slate-200 p-2">متوسط تكلفة</th>
-            <th className="border-b border-slate-200 p-2">قيمة</th>
+      <table className="data-table min-w-[960px]">
+        <thead>
+          <tr>
+            <th>المادة</th>
+            <th>المستودع</th>
+            <th>الفرع</th>
+            <th>الصنف</th>
+            <th>كمية أساس</th>
+            <th>متوسط تكلفة</th>
+            <th>قيمة</th>
           </tr>
         </thead>
         <tbody>
@@ -633,17 +637,17 @@ function AnalysisTable({ rows }: { rows: InventoryAnalysisRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[960px] border-collapse text-sm">
-        <thead className="bg-slate-50">
-          <tr className="text-right text-slate-700">
-            <th className="border-b border-slate-200 p-2">النوع</th>
-            <th className="border-b border-slate-200 p-2">المادة</th>
-            <th className="border-b border-slate-200 p-2">المستودع</th>
-            <th className="border-b border-slate-200 p-2">كمية</th>
-            <th className="border-b border-slate-200 p-2">حد أدنى</th>
-            <th className="border-b border-slate-200 p-2">قيمة</th>
-            <th className="border-b border-slate-200 p-2">آخر حركة</th>
-            <th className="border-b border-slate-200 p-2">أيام خاملة</th>
+      <table className="data-table min-w-[960px]">
+        <thead>
+          <tr>
+            <th>النوع</th>
+            <th>المادة</th>
+            <th>المستودع</th>
+            <th>كمية</th>
+            <th>حد أدنى</th>
+            <th>قيمة</th>
+            <th>آخر حركة</th>
+            <th>أيام خاملة</th>
           </tr>
         </thead>
         <tbody>
@@ -694,17 +698,17 @@ function LedgerTable({ rows }: { rows: InventoryMovementLedgerRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[1080px] border-collapse text-sm">
-        <thead className="bg-slate-50">
-          <tr className="text-right text-slate-700">
-            <th className="border-b border-slate-200 p-2">التاريخ</th>
-            <th className="border-b border-slate-200 p-2">النوع</th>
-            <th className="border-b border-slate-200 p-2">المادة</th>
-            <th className="border-b border-slate-200 p-2">المستودع</th>
-            <th className="border-b border-slate-200 p-2">كمية</th>
-            <th className="border-b border-slate-200 p-2">رصيد</th>
-            <th className="border-b border-slate-200 p-2">قيمة</th>
-            <th className="border-b border-slate-200 p-2">قيد</th>
+      <table className="data-table min-w-[1080px]">
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>النوع</th>
+            <th>المادة</th>
+            <th>المستودع</th>
+            <th>كمية</th>
+            <th>رصيد</th>
+            <th>قيمة</th>
+            <th>قيد</th>
           </tr>
         </thead>
         <tbody>

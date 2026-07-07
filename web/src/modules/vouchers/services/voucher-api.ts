@@ -371,6 +371,16 @@ export const voucherApi = {
     return data as Account;
   },
 
+  async bulkCreateAccounts(rows: Partial<Account>[]): Promise<Account[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("bulk_create_accounts", {
+      p_rows: rows,
+    });
+    throwIfSupabaseError(error);
+    notifyAccountsChanged();
+    return (data ?? []) as Account[];
+  },
+
   async updateAccount(id: string, payload: Partial<Account>): Promise<Account> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
@@ -1290,14 +1300,33 @@ export const voucherApi = {
     voucherId: string,
     lines: Partial<VoucherLine>[],
   ): Promise<VoucherLine[]> {
-    await this.deleteAllVoucherLines(voucherId);
+    const supabase = getSupabaseClient();
+    const payload = lines
+      .filter((line) => line.account_id && Number(line.amount || 0) > 0)
+      .map((line) => ({
+        account_id: line.account_id,
+        side: line.side,
+        amount: Number(line.amount),
+        line_description: line.line_description ?? null,
+        cost_center_id: line.cost_center_id ?? null,
+        line_category_id: line.line_category_id ?? null,
+        category_quantity: line.category_quantity ?? null,
+        cc_optional: line.cc_optional ?? false,
+      }));
 
-    const inserted: VoucherLine[] = [];
-    for (const line of lines) {
-      if (!line.account_id || Number(line.amount || 0) <= 0) continue;
-      inserted.push(await this.addVoucherLine(voucherId, line));
-    }
-    return inserted;
+    const { error } = await supabase.rpc("replace_voucher_lines", {
+      p_voucher_id: voucherId,
+      p_lines: payload,
+    });
+    throwIfSupabaseError(error);
+
+    const { data, error: fetchError } = await supabase
+      .from("voucher_lines")
+      .select("*")
+      .eq("voucher_id", voucherId)
+      .order("created_at", { ascending: true });
+    throwIfSupabaseError(fetchError);
+    return (data ?? []) as VoucherLine[];
   },
 
   async addAllocation(
@@ -1355,23 +1384,34 @@ export const voucherApi = {
     voucherId: string,
     allocations: Partial<VoucherAllocation>[],
   ): Promise<VoucherAllocation[]> {
-    await this.deleteAllVoucherAllocations(voucherId);
-
-    const inserted: VoucherAllocation[] = [];
-    for (const allocation of allocations) {
-      const targetId =
-        allocation.target_journal_line_id || allocation.target_reference || "";
-      const amount = Number(allocation.applied_amount || 0);
-      if (!targetId || amount <= 0) continue;
-      inserted.push(
-        await this.addAllocation(voucherId, {
+    const supabase = getSupabaseClient();
+    const payload = allocations
+      .map((allocation) => {
+        const targetId =
+          allocation.target_journal_line_id || allocation.target_reference || "";
+        const amount = Number(allocation.applied_amount || 0);
+        if (!targetId || amount <= 0) return null;
+        return {
           target_journal_line_id: targetId,
           applied_amount: amount,
           note: allocation.note?.trim() || null,
-        }),
-      );
-    }
-    return inserted;
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    const { error } = await supabase.rpc("replace_voucher_allocations", {
+      p_voucher_id: voucherId,
+      p_allocations: payload,
+    });
+    throwIfSupabaseError(error);
+
+    const { data, error: fetchError } = await supabase
+      .from("voucher_allocations")
+      .select("*")
+      .eq("voucher_id", voucherId)
+      .order("created_at", { ascending: true });
+    throwIfSupabaseError(fetchError);
+    return (data ?? []) as VoucherAllocation[];
   },
 
   async deleteAllVoucherNettingLines(voucherId: string): Promise<void> {
@@ -1494,43 +1534,20 @@ export const voucherApi = {
   },
 
   async reverseVoucher(id: string): Promise<{ reversed_voucher_id: string }> {
-    const original = await this.getVoucherById(id);
-
-    if (original.header.status !== "posted") {
-      throw new ApiError({
-        code: "REVERSAL_NOT_ALLOWED",
-        message: "يمكن عكس السندات المرحلة فقط.",
-      });
-    }
-
-    const suffix = Date.now().toString().slice(-6);
-    const rawNo = `RV-${original.header.voucher_no}-${suffix}`;
-    const voucherNo = rawNo.length > 40 ? rawNo.slice(0, 40) : rawNo;
-
-    const reversalHeader = await this.createVoucher({
-      voucher_no: voucherNo,
-      voucher_type: original.header.voucher_type,
-      settlement_mode: "account",
-      voucher_date: new Date().toISOString().slice(0, 10),
-      description: `عكس السند ${original.header.voucher_no}`,
-      status: "approved",
-      customer_id: original.header.customer_id,
-      vendor_id: original.header.vendor_id,
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("reverse_posted_voucher", {
+      p_voucher_id: id,
     });
+    throwIfSupabaseError(error);
 
-    for (const line of original.lines) {
-      await this.addVoucherLine(reversalHeader.id, {
-        account_id: line.account_id,
-        side: line.side === "debit" ? "credit" : "debit",
-        amount: line.amount,
-        line_description: line.line_description
-          ? `عكس: ${line.line_description}`
-          : "عكس سطر",
+    if (!data) {
+      throw new ApiError({
+        code: "REVERSAL_FAILED",
+        message: "فشل عكس السند.",
       });
     }
 
-    await this.postVoucher(reversalHeader.id);
-    return { reversed_voucher_id: reversalHeader.id };
+    return { reversed_voucher_id: data as string };
   },
 
   async deleteVoucher(voucherId: string): Promise<void> {

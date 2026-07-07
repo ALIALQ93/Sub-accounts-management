@@ -26,7 +26,11 @@ $patchFiles = @(
     'patch_inventory_phase5.sql',
     'patch_inventory_phase6.sql',
     'patch_inventory_phase7.sql',
-    'patch_audit_fixes.sql'
+    'patch_audit_fixes.sql',
+    'patch_voucher_allocation_cap.sql',
+    'patch_voucher_line_cc_optional.sql',
+    'patch_reverse_voucher_rpc.sql',
+    'patch_voucher_atomic_ops.sql'
 )
 
 $out = Join-Path $here 'setup_all.sql'

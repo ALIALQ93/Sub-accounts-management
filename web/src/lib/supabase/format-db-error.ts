@@ -33,6 +33,27 @@ export function formatDbError(message: string | null | undefined): string {
     return "لا يمكن تحويل الحساب إلى «حساب أب» — عليه حركة محاسبية مسجّلة.";
   }
 
+  if (/Allocation total \(([\d.]+)\) exceeds original amount \(([\d.]+)\).*Remaining open: ([\d.]+)/i.test(raw)) {
+    const m = raw.match(
+      /Allocation total \(([\d.]+)\) exceeds original amount \(([\d.]+)\).*Remaining open: ([\d.]+)/i,
+    );
+    if (m) {
+      return `مجموع التخصيصات (${m[1]}) يتجاوز مبلغ الحركة الأصلي (${m[2]}). المتبقي المفتوح: ${m[3]}.`;
+    }
+  }
+
+  if (/Voucher must be approved before posting/i.test(raw)) {
+    return "يجب اعتماد السند قبل الترحيل — لا يمكن الترحيل من مسودة مباشرة.";
+  }
+
+  if (/Only posted vouchers can be reversed/i.test(raw)) {
+    return "يمكن عكس السندات المرحلة فقط.";
+  }
+
+  if (/Invoice settlement vouchers cannot be reversed automatically/i.test(raw)) {
+    return "لا يمكن عكس سند إغلاق حركات/فواتير تلقائياً — التخصيصات المرتبطة لن تُعاد لفتح الحركات. أنشئ سنداً عكسياً يدوياً أو تواصل مع المسؤول.";
+  }
+
   return raw;
 }
 

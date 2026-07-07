@@ -155,42 +155,6 @@ async function listFromView(filters: OpenMovementFilters): Promise<OpenMovement[
   return ((data ?? []) as ViewRow[]).map(mapViewRow);
 }
 
-async function listLegacyFallback(): Promise<OpenMovement[]> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("journal_entry_lines")
-    .select(
-      "id, account_id, debit, credit, line_description, journal_entries(entry_no), accounts(code, name_ar)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(150);
-
-  if (error) return [];
-
-  return (data ?? []).map((row) => {
-    const debit = Number((row as { debit?: number }).debit ?? 0);
-    const credit = Number((row as { credit?: number }).credit ?? 0);
-    const journalEntry = (row as { journal_entries?: { entry_no?: string } })
-      .journal_entries;
-    const account = (row as { accounts?: { code?: string; name_ar?: string } })
-      .accounts;
-    const openAmount = Math.abs(debit - credit);
-
-    return {
-      target_journal_line_id: (row as { id: string }).id,
-      entry_no: journalEntry?.entry_no ?? "N/A",
-      account_id: (row as { account_id: string }).account_id,
-      account_code: account?.code,
-      account_name: account?.name_ar,
-      open_amount: openAmount,
-      open_side:
-        debit > credit ? "debit" : credit > debit ? "credit" : null,
-      line_description: (row as { line_description: string | null })
-        .line_description,
-    } satisfies OpenMovement;
-  });
-}
-
 export const openMovementsApi = {
   async list(filters: OpenMovementFilters = {}): Promise<OpenMovement[]> {
     const supabase = getSupabaseClient();
@@ -225,7 +189,9 @@ export const openMovementsApi = {
     const fromView = await listFromView(filters);
     if (fromView.length > 0) return fromView;
 
-    const legacy = await listLegacyFallback();
-    return applyClientFilters(legacy, filters);
+    throw new Error(
+      "عرض الحركات المفتوحة (open_items_view) غير متوفر — شغّل patch_journal_dimensions.sql. " +
+        "لا يُستخدم المسار الاحتياطي لأنه يعرض مبالغاً خاطئة.",
+    );
   },
 };

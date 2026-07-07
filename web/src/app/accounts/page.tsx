@@ -247,6 +247,15 @@ export default function AccountsPage() {
   };
 
   const toggleActive = async (account: AccountTreeNode) => {
+    const action = account.is_active ? "تعطيل" : "تفعيل";
+    const confirmed = window.confirm(
+      `هل تريد ${action} الحساب «${account.name_ar}» (${account.code})؟\n\n` +
+        (account.is_active
+          ? "لن يظهر في قوائم الاختيار الجديدة، لكن الحركات والأرصدة السابقة تبقى كما هي."
+          : "سيُعاد ظهوره في قوائم الاختيار."),
+    );
+    if (!confirmed) return;
+
     setIsSaving(true);
     setActionError("");
     try {
@@ -318,7 +327,9 @@ export default function AccountsPage() {
     <main className="flex w-full flex-col gap-3">
       <section className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">دليل الحسابات</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">
+            دليل الحسابات
+          </h1>
           <p className="text-xs text-slate-600">
             شجرة الحسابات: 7 حسابات رئيسية + فروع يضيفها المستخدم.
           </p>
@@ -328,29 +339,26 @@ export default function AccountsPage() {
             <button
               type="button"
               onClick={() => setIsBulkImportOpen(true)}
-              className="rounded-md border border-blue-900 px-4 py-2 text-sm font-medium text-blue-900"
+              className="btn btn-outline text-[var(--brand-navy)]"
             >
               إضافة جماعية
             </button>
             <button
               type="button"
               onClick={() => openAddModal()}
-              className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
+              className="btn btn-primary"
             >
-              + إضافة حساب
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              إضافة حساب
             </button>
           </PermissionGate>
-          <Link
-            href="/currencies"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-          >
+          <Link href="/currencies" className="btn btn-outline">
             العملات
           </Link>
           <PermissionGate permission="vouchers.create">
-            <Link
-              href="/vouchers/new"
-              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-            >
+            <Link href="/vouchers/new" className="btn btn-outline">
               إنشاء سند
             </Link>
           </PermissionGate>
@@ -403,21 +411,29 @@ export default function AccountsPage() {
       )}
 
       <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-lg border border-slate-200 bg-white p-3">
+        <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <p className="text-xs text-slate-500">إجمالي الحسابات</p>
-          <p className="mt-1 text-xl font-bold text-slate-900">{stats.total}</p>
+          <p className="mt-1 text-xl font-bold tabular-nums text-[var(--brand-navy)]">
+            {stats.total}
+          </p>
         </article>
-        <article className="rounded-lg border border-slate-200 bg-white p-3">
+        <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <p className="text-xs text-slate-500">حسابات نشطة</p>
-          <p className="mt-1 text-xl font-bold text-emerald-700">{stats.active}</p>
+          <p className="mt-1 text-xl font-bold tabular-nums text-[var(--success)]">
+            {stats.active}
+          </p>
         </article>
-        <article className="rounded-lg border border-slate-200 bg-white p-3">
+        <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <p className="text-xs text-slate-500">قابلة للترحيل</p>
-          <p className="mt-1 text-xl font-bold text-blue-900">{stats.postable}</p>
+          <p className="mt-1 text-xl font-bold tabular-nums text-[var(--info)]">
+            {stats.postable}
+          </p>
         </article>
-        <article className="rounded-lg border border-slate-200 bg-white p-3">
+        <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
           <p className="text-xs text-slate-500">حسابات أب</p>
-          <p className="mt-1 text-xl font-bold text-slate-700">{stats.parent}</p>
+          <p className="mt-1 text-xl font-bold tabular-nums text-slate-700">
+            {stats.parent}
+          </p>
         </article>
       </section>
 
@@ -471,7 +487,7 @@ export default function AccountsPage() {
         onClose={closeCardModal}
       />
 
-      <section className="flex flex-col rounded-xl border-2 border-slate-300 bg-white p-2 md:p-3">
+      <section className="flex flex-col rounded-xl border border-slate-200 bg-white p-2 shadow-sm md:p-3">
         <div className="mb-2 flex shrink-0 flex-wrap items-end gap-2">
           <label className="grid min-w-[220px] flex-1 gap-1 text-sm">
             <span className="text-slate-700">بحث</span>
@@ -489,10 +505,10 @@ export default function AccountsPage() {
                 key={option.value}
                 type="button"
                 onClick={() => setStatementFilter(option.value)}
-                className={`rounded-full px-3 py-1.5 text-sm ${
+                className={`rounded-full px-3 py-1.5 text-sm transition ${
                   statementFilter === option.value
-                    ? "bg-blue-900 text-white"
-                    : "border border-slate-300 text-slate-700"
+                    ? "bg-[var(--brand-navy)] text-white shadow-sm"
+                    : "border border-slate-300 text-slate-700 hover:bg-slate-50"
                 }`}
               >
                 {option.label}
@@ -501,18 +517,10 @@ export default function AccountsPage() {
           </div>
 
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={expandAll}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700"
-            >
+            <button type="button" onClick={expandAll} className="btn btn-outline">
               توسيع الكل
             </button>
-            <button
-              type="button"
-              onClick={collapseAll}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700"
-            >
+            <button type="button" onClick={collapseAll} className="btn btn-outline">
               طي الكل
             </button>
           </div>
@@ -522,10 +530,10 @@ export default function AccountsPage() {
           <p className="text-sm text-slate-600">جاري تحميل الحسابات...</p>
         )}
         {!isLoading && loadError && (
-          <p className="text-sm text-rose-700">{loadError}</p>
+          <p className="text-sm text-[var(--danger)]">{loadError}</p>
         )}
         {!isLoading && actionError && (
-          <p className="mb-3 text-sm text-rose-700">{actionError}</p>
+          <p className="mb-3 text-sm text-[var(--danger)]">{actionError}</p>
         )}
 
         {!isLoading && !loadError && (

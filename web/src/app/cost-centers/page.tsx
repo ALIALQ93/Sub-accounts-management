@@ -128,84 +128,79 @@ export default function CostCentersPage() {
     <main className="flex w-full flex-col gap-4">
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">مراكز الكلفة</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">
+            مراكز الكلفة
+          </h1>
           <p className="text-xs text-slate-600">
             تعريف مراكز الكلفة لاستخدامها في السندات والتقارير.
           </p>
         </div>
         <PermissionGate permission="cost_centers.create">
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              + إضافة مركز كلفة
+            <button type="button" onClick={openCreateModal} className="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              إضافة مركز كلفة
             </button>
             <button
               type="button"
               onClick={() => setIsBulkImportOpen(true)}
-              className="rounded-md border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-900"
+              className="btn btn-outline text-[var(--brand-navy)]"
             >
-              + إضافة دفعة
+              إضافة دفعة
             </button>
           </div>
         </PermissionGate>
       </section>
 
-      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
-          <p className="text-sm text-slate-600">جاري تحميل مراكز الكلفة...</p>
+          <p className="p-4 text-sm text-slate-600">جاري تحميل مراكز الكلفة...</p>
         )}
 
         {!isLoading && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border border-slate-200 p-2">الكود</th>
-                  <th className="border border-slate-200 p-2">كود فرعي</th>
-                  <th className="border border-slate-200 p-2">الاسم</th>
-                  <th className="border border-slate-200 p-2">الاسم (EN)</th>
-                  <th className="border border-slate-200 p-2">الحالة</th>
-                  <th className="border border-slate-200 p-2">إجراءات</th>
+          <div className="overflow-x-auto">
+            <table className="data-table min-w-[640px]">
+              <thead>
+                <tr>
+                  <th>الكود</th>
+                  <th>كود فرعي</th>
+                  <th>الاسم</th>
+                  <th>الاسم (EN)</th>
+                  <th>الحالة</th>
+                  <th>إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {centers.map((center) => (
-                  <tr key={center.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border border-slate-100 p-2 font-mono">
-                      {center.code}
-                    </td>
-                    <td className="border border-slate-100 p-2 font-mono text-slate-600">
+                  <tr key={center.id}>
+                    <td className="font-mono text-slate-600">{center.code}</td>
+                    <td className="font-mono text-slate-500">
                       {center.sub_code ?? "—"}
                     </td>
-                    <td className="border border-slate-100 p-2 font-medium">
+                    <td className="font-medium text-slate-900">
                       {center.name_ar}
                     </td>
-                    <td className="border border-slate-100 p-2 text-slate-600" dir="ltr">
+                    <td className="text-slate-600" dir="ltr">
                       {center.name_en ?? "—"}
                     </td>
-                    <td className="border border-slate-100 p-2">
+                    <td>
                       {center.is_active ? (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
-                          نشط
-                        </span>
+                        <span className="badge badge-success">نشط</span>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                          معطّل
-                        </span>
+                        <span className="badge badge-muted">معطّل</span>
                       )}
                     </td>
-                    <td className="border border-slate-100 p-2">
-                      <div className="flex flex-wrap gap-1">
+                    <td>
+                      <div className="flex flex-wrap gap-1.5">
                         {canEdit && (
                           <>
                             <button
                               type="button"
                               onClick={() => openEditModal(center)}
                               disabled={isSaving}
-                              className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                              className="btn btn-sm btn-outline"
                             >
                               تعديل
                             </button>
@@ -213,7 +208,7 @@ export default function CostCentersPage() {
                               type="button"
                               onClick={() => void toggleActive(center)}
                               disabled={isSaving}
-                              className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                              className="btn btn-sm btn-outline text-[var(--warning)]"
                             >
                               {center.is_active ? "تعطيل" : "تفعيل"}
                             </button>
@@ -226,10 +221,7 @@ export default function CostCentersPage() {
 
                 {centers.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="border border-slate-100 p-6 text-center text-slate-500"
-                    >
+                    <td colSpan={6} className="p-8 text-center text-slate-500">
                       لا توجد مراكز كلفة. اضغط «إضافة مركز كلفة» أو «إضافة دفعة» للبدء.
                     </td>
                   </tr>

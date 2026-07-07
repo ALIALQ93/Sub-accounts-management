@@ -146,13 +146,21 @@ export function InvoiceMaterialLinesTable({
 
     const units = unitsByMaterial[materialId] ?? (await onMaterialSelected(materialId));
     const baseUnit = units.find((u) => u.is_base_unit) ?? units[0];
-    const unitPrice = baseUnit
-      ? defaultUnitPrice(commercialKind, material, baseUnit.factor_to_base)
-      : 0;
+    if (!baseUnit) {
+      window.alert(
+        `المادة «${material.name_ar}» بدون وحدة قياس — أكمل بطاقة المادة (وحدة الأساس) قبل استخدامها بالفاتورة.`,
+      );
+      return;
+    }
+    const unitPrice = defaultUnitPrice(
+      commercialKind,
+      material,
+      baseUnit.factor_to_base,
+    );
 
     updateLine(clientId, {
       material_id: materialId,
-      material_unit_id: baseUnit?.id ?? "",
+      material_unit_id: baseUnit.id,
       unit_price: unitPrice,
     });
   };

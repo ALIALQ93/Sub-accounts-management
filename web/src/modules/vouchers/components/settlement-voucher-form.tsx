@@ -207,6 +207,7 @@ export function SettlementVoucherForm({
         amount: Number(line.amount),
         line_description: line.line_description?.trim() || null,
         cost_center_id: line.cost_center_id || null,
+        cc_optional: line.cc_optional ?? false,
         ...lineCategoryPayload(line),
       })),
     );

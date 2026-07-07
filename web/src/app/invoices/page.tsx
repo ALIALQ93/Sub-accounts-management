@@ -60,7 +60,9 @@ export default function InvoicesPage() {
       <InvoicesNav />
 
       <section>
-        <h1 className="text-xl font-bold text-slate-900">الفواتير</h1>
+        <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">
+          الفواتير
+        </h1>
         <p className="text-xs text-slate-600">
           إنشاء فواتير حسب النمط — كل نمط له ترقيم وسلوك مستقل.
         </p>
@@ -74,15 +76,18 @@ export default function InvoicesPage() {
               <Link
                 key={pattern.id}
                 href={`/invoices/new?pattern=${pattern.id}`}
-                className="block rounded-xl border border-blue-200 bg-blue-50/40 p-4 transition hover:shadow-md"
+                className="group block rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--brand-navy)]/30 hover:shadow-md"
               >
                 <p className="font-semibold text-slate-900">{pattern.name_ar}</p>
                 <p className="mt-1 text-xs text-slate-600">
                   {getCommercialKindLabel(pattern.commercial_kind)} ·{" "}
                   {getDirectionLabel(pattern.direction)}
                 </p>
-                <p className="mt-3 text-sm font-medium text-blue-900">
-                  + فاتورة جديدة
+                <p className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[var(--brand-navy)]">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  فاتورة جديدة
                 </p>
               </Link>
             ))}
@@ -99,7 +104,7 @@ export default function InvoicesPage() {
         </section>
       </PermissionGate>
 
-      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
         <h2 className="mb-3 text-sm font-semibold text-slate-800">آخر الفواتير</h2>
         {isLoading && (
           <p className="text-sm text-slate-600">جاري التحميل...</p>

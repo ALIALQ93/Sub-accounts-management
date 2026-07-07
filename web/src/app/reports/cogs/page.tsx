@@ -119,7 +119,7 @@ export default function CogsReportPage() {
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-        <h1 className="text-2xl font-bold text-slate-900">تكلفة المبيعات (COGS)</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">تكلفة المبيعات (COGS)</h1>
         <p className="mt-1 text-sm text-slate-600">
           من حركات <code className="text-xs">sale</code> و{" "}
           <code className="text-xs">return_sale</code> عند ترحيل فواتير المبيعات —
@@ -249,9 +249,11 @@ export default function CogsReportPage() {
         </section>
       )}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
         {!isLoading && !error && filtered.length === 0 && (
           <p className="text-sm text-slate-600">
             لا توجد حركات مبيعات/مرتجع في الفترة — أو شغّل{" "}
@@ -268,9 +270,11 @@ export default function CogsReportPage() {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 font-mono text-lg font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--brand-navy)]">
+        {value}
+      </p>
     </div>
   );
 }
@@ -284,24 +288,18 @@ function CogsTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[960px] border-collapse text-sm">
-        <thead className="bg-slate-50">
-          <tr className="text-right text-slate-700">
-            <th className="border-b border-slate-200 p-2">
-              {groupBy === "invoice" ? "فاتورة" : "مادة"}
-            </th>
-            {groupBy === "material" && (
-              <th className="border-b border-slate-200 p-2">الاسم</th>
-            )}
-            {groupBy === "invoice" && (
-              <th className="border-b border-slate-200 p-2">التاريخ</th>
-            )}
-            <th className="border-b border-slate-200 p-2">كمية مبيعات</th>
-            <th className="border-b border-slate-200 p-2">كمية مرتجع</th>
-            <th className="border-b border-slate-200 p-2">إيراد</th>
-            <th className="border-b border-slate-200 p-2">COGS</th>
-            <th className="border-b border-slate-200 p-2">مرتجع COGS</th>
-            <th className="border-b border-slate-200 p-2">صافي</th>
+      <table className="data-table min-w-[960px]">
+        <thead>
+          <tr>
+            <th>{groupBy === "invoice" ? "فاتورة" : "مادة"}</th>
+            {groupBy === "material" && <th>الاسم</th>}
+            {groupBy === "invoice" && <th>التاريخ</th>}
+            <th>كمية مبيعات</th>
+            <th>كمية مرتجع</th>
+            <th>إيراد</th>
+            <th>COGS</th>
+            <th>مرتجع COGS</th>
+            <th>صافي</th>
           </tr>
         </thead>
         <tbody>

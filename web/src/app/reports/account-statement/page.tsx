@@ -217,25 +217,21 @@ export default function AccountStatementReportPage() {
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">كشف حساب</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+            كشف حساب
+          </h1>
           <p className="mt-1 text-sm text-slate-600">
             اختر حساباً أو أكثر، وحدّد عملة العرض وفلاتر الفترة.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {accountIds.length > 0 && (
-            <Link
-              href={trialBalanceHref}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <Link href={trialBalanceHref} className="btn btn-sm btn-outline">
               ميزان المراجعة
             </Link>
           )}
           {accountIds.length > 0 && (
-            <OpenInNewTabLink
-              href={shareHref}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+            <OpenInNewTabLink href={shareHref} className="btn btn-sm btn-outline">
               ↗ نسخة في تبويب جديد
             </OpenInNewTabLink>
           )}
@@ -244,12 +240,12 @@ export default function AccountStatementReportPage() {
 
       <ReportsNav active="account-statement" />
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {isLoading && (
           <p className="text-sm text-slate-600">جاري تحميل البيانات...</p>
         )}
         {!isLoading && error && (
-          <p className="text-sm text-rose-700">{error}</p>
+          <p className="text-sm text-[var(--danger)]">{error}</p>
         )}
 
         {!isLoading && !error && (
@@ -335,7 +331,7 @@ export default function AccountStatementReportPage() {
       )}
 
       {accountIds.length > 0 && displayCurrency && (
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <AccountStatementSection
             accountIds={accountIds}
             displayCurrency={displayCurrency}

@@ -78,7 +78,9 @@ export default function VouchersListPage() {
     <main className="flex w-full flex-col gap-4">
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">السندات</h1>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--brand-navy)]">
+            السندات
+          </h1>
           <p className="text-xs text-slate-600">
             كل نوع سند له نافذة إنشاء مستقلة وترقيم تلقائي.
           </p>
@@ -126,7 +128,7 @@ export default function VouchersListPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
         <div className="mb-3 flex flex-wrap gap-2">
           <FilterButton
             active={typeFilter === "all"}
@@ -153,22 +155,24 @@ export default function VouchersListPage() {
         </div>
 
         {isLoading && <p className="text-sm text-slate-600">جاري تحميل السندات...</p>}
-        {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
+        {!isLoading && error && (
+          <p className="text-sm text-[var(--danger)]">{error}</p>
+        )}
 
         {!isLoading && !error && (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[1040px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border border-slate-200 p-2">رقم السند</th>
-                  <th className="border border-slate-200 p-2">النوع</th>
-                  <th className="border border-slate-200 p-2">العملة</th>
-                  <th className="border border-slate-200 p-2">قيمة السند</th>
-                  <th className="border border-slate-200 p-2">وضع التسوية</th>
-                  <th className="border border-slate-200 p-2">التاريخ</th>
-                  <th className="border border-slate-200 p-2">الحالة</th>
-                  <th className="border border-slate-200 p-2 text-center">مرفقات</th>
-                  <th className="border border-slate-200 p-2">إجراء</th>
+            <table className="data-table min-w-[1040px]">
+              <thead>
+                <tr>
+                  <th>رقم السند</th>
+                  <th>النوع</th>
+                  <th>العملة</th>
+                  <th>قيمة السند</th>
+                  <th>وضع التسوية</th>
+                  <th>التاريخ</th>
+                  <th>الحالة</th>
+                  <th className="!text-center">مرفقات</th>
+                  <th>إجراء</th>
                 </tr>
               </thead>
               <tbody>
@@ -185,40 +189,33 @@ export default function VouchersListPage() {
                     : `/vouchers/${item.id}?mode=view`;
 
                   return (
-                  <tr key={item.id} className="odd:bg-white even:bg-slate-50/60">
-                    <td className="border border-slate-100 p-2 font-mono">
+                  <tr key={item.id}>
+                    <td className="font-mono">
                       <Link
                         href={voucherHref}
-                        className="font-medium text-blue-900 hover:underline"
+                        className="font-medium text-[var(--brand-navy)] hover:underline"
                         title={showEdit ? "تعديل السند" : "عرض السند"}
                       >
                         {item.voucher_no}
                       </Link>
                     </td>
-                    <td className="border border-slate-100 p-2">
-                      {getVoucherTypeLabel(item.voucher_type)}
-                    </td>
-                    <td className="border border-slate-100 p-2 font-mono text-xs">
+                    <td>{getVoucherTypeLabel(item.voucher_type)}</td>
+                    <td className="font-mono text-xs">
                       {item.currency_code ?? "—"}
                     </td>
-                    <td className="border border-slate-100 p-2">
+                    <td>
                       <VoucherAmountCell item={item} />
                     </td>
-                    <td className="border border-slate-100 p-2">
-                      {getSettlementModeLabel(item.settlement_mode)}
-                    </td>
-                    <td className="border border-slate-100 p-2">{item.voucher_date}</td>
-                    <td className="border border-slate-100 p-2">
+                    <td>{getSettlementModeLabel(item.settlement_mode)}</td>
+                    <td className="tabular-nums">{item.voucher_date}</td>
+                    <td>
                       <StatusChip status={item.status} />
                     </td>
-                    <td className="border border-slate-100 p-2 text-center">
+                    <td className="text-center">
                       <VoucherAttachmentBadge count={item.attachment_count} />
                     </td>
-                    <td className="border border-slate-100 p-2">
-                      <VoucherListActions
-                        item={item}
-                        onUpdated={loadVouchers}
-                      />
+                    <td>
+                      <VoucherListActions item={item} onUpdated={loadVouchers} />
                     </td>
                   </tr>
                   );
@@ -226,10 +223,7 @@ export default function VouchersListPage() {
 
                 {filteredItems.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={9}
-                      className="border border-slate-100 p-4 text-center text-slate-500"
-                    >
+                    <td colSpan={9} className="p-6 text-center text-slate-500">
                       لا توجد سندات في هذا التصنيف.
                     </td>
                   </tr>
@@ -313,10 +307,10 @@ function FilterButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm ${
+      className={`rounded-full px-3 py-1.5 text-sm transition ${
         active
-          ? "bg-blue-900 text-white"
-          : "border border-slate-300 text-slate-700"
+          ? "bg-[var(--brand-navy)] text-white shadow-sm"
+          : "border border-slate-300 text-slate-700 hover:bg-slate-50"
       }`}
     >
       {children}

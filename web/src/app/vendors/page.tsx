@@ -134,18 +134,19 @@ export default function VendorsPage() {
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-6">
       <section className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">الموردين</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+            الموردين
+          </h1>
           <p className="mt-1 text-sm text-slate-600">
             إدارة الموردين — يُنشأ حساب ذمم دائنة فرعي تلقائياً باسم كل مورد.
           </p>
         </div>
         <PermissionGate permission="vendors.create">
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            + إضافة مورد
+          <button type="button" onClick={openCreateModal} className="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            إضافة مورد
           </button>
         </PermissionGate>
       </section>
@@ -161,62 +162,60 @@ export default function VendorsPage() {
       )}
 
       {loadError && (
-        <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+        <p className="rounded-md border border-[var(--danger)]/25 bg-[var(--danger)]/8 px-3 py-2 text-sm text-[var(--danger)]">
           {loadError}
         </p>
       )}
       {success && (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <p className="rounded-md border border-[var(--success)]/25 bg-[var(--success)]/8 px-3 py-2 text-sm text-[var(--success)]">
           {success}
         </p>
       )}
 
-      <section className="rounded-xl border-2 border-slate-300 bg-white p-3 md:p-4">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading ? (
-          <p className="text-sm text-slate-600">جاري تحميل الموردين...</p>
+          <p className="p-4 text-sm text-slate-600">جاري تحميل الموردين...</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="w-full min-w-[920px] border-collapse text-sm">
-              <thead className="bg-slate-50">
-                <tr className="text-right text-slate-700">
-                  <th className="border border-slate-200 p-2">الكود</th>
-                  <th className="border border-slate-200 p-2">الاسم</th>
-                  <th className="border border-slate-200 p-2">الهاتف</th>
-                  <th className="border border-slate-200 p-2">البريد</th>
-                  <th className="border border-slate-200 p-2">حساب الذمم</th>
-                  <th className="border border-slate-200 p-2">الحالة</th>
-                  <th className="border border-slate-200 p-2">إجراءات</th>
+          <div className="overflow-x-auto">
+            <table className="data-table min-w-[920px]">
+              <thead>
+                <tr>
+                  <th>الكود</th>
+                  <th>الاسم</th>
+                  <th>الهاتف</th>
+                  <th>البريد</th>
+                  <th>حساب الذمم</th>
+                  <th>الحالة</th>
+                  <th>إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {vendors.map((vendor) => {
                   const linkedAccount = accountsById.get(vendor.payable_account_id);
                   return (
-                    <tr key={vendor.id} className="odd:bg-white even:bg-slate-50/60">
-                      <td className="border border-slate-100 p-2 font-mono">
+                    <tr key={vendor.id}>
+                      <td className="font-mono text-slate-600">
                         {vendor.vendor_code}
                       </td>
-                      <td className="border border-slate-100 p-2 font-medium">
+                      <td className="font-medium text-slate-900">
                         {vendor.name_ar}
                       </td>
-                      <td className="border border-slate-100 p-2">
-                        {vendor.phone || "—"}
-                      </td>
-                      <td className="border border-slate-100 p-2" dir="ltr">
+                      <td className="text-slate-600">{vendor.phone || "—"}</td>
+                      <td className="text-slate-600" dir="ltr">
                         {vendor.email || "—"}
                       </td>
-                      <td className="border border-slate-100 p-2">
+                      <td>
                         {linkedAccount ? (
                           <span className="inline-flex flex-wrap items-center gap-1">
                             <Link
                               href={`/reports/account-statement?accountId=${linkedAccount.id}`}
-                              className="font-mono text-xs font-medium text-blue-900 hover:underline"
+                              className="font-mono text-xs font-medium text-[var(--brand-navy)] hover:underline"
                             >
                               {linkedAccount.code} — {linkedAccount.name_ar}
                             </Link>
                             <OpenInNewTabLink
                               href={`/reports/account-statement?accountId=${linkedAccount.id}`}
-                              className="text-xs text-slate-500 hover:text-blue-900"
+                              className="text-xs text-slate-400 hover:text-[var(--brand-navy)]"
                               title="كشف الحساب في تبويب جديد"
                             >
                               ↗
@@ -226,26 +225,22 @@ export default function VendorsPage() {
                           "—"
                         )}
                       </td>
-                      <td className="border border-slate-100 p-2">
+                      <td>
                         {vendor.is_active ? (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800">
-                            نشط
-                          </span>
+                          <span className="badge badge-success">نشط</span>
                         ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                            معطّل
-                          </span>
+                          <span className="badge badge-muted">معطّل</span>
                         )}
                       </td>
-                      <td className="border border-slate-100 p-2">
-                        <div className="flex flex-wrap gap-1">
+                      <td>
+                        <div className="flex flex-wrap gap-1.5">
                           {canEdit && (
                             <>
                               <button
                                 type="button"
                                 onClick={() => openEditModal(vendor)}
                                 disabled={isSaving}
-                                className="rounded-md border border-blue-300 px-2 py-1 text-xs font-medium text-blue-700 disabled:opacity-50"
+                                className="btn btn-sm btn-outline"
                               >
                                 تعديل
                               </button>
@@ -253,7 +248,7 @@ export default function VendorsPage() {
                                 type="button"
                                 onClick={() => void toggleActive(vendor)}
                                 disabled={isSaving}
-                                className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 disabled:opacity-50"
+                                className="btn btn-sm btn-outline text-[var(--warning)]"
                               >
                                 {vendor.is_active ? "تعطيل" : "تفعيل"}
                               </button>
@@ -267,10 +262,7 @@ export default function VendorsPage() {
 
                 {vendors.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="border border-slate-100 p-6 text-center text-slate-500"
-                    >
+                    <td colSpan={7} className="p-8 text-center text-slate-500">
                       لا يوجد موردين. اضغط «إضافة مورد» للبدء.
                     </td>
                   </tr>

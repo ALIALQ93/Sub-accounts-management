@@ -208,9 +208,10 @@ export function AccountBulkImportModal({
 
     setIsImporting(true);
     let workingAccounts = [...accounts];
-    let importedCount = 0;
 
     try {
+      const payloads: Partial<Account>[] = [];
+
       for (const row of importable) {
         const parent = workingAccounts.find(
           (account) => account.code === row.parent_code,
@@ -226,7 +227,7 @@ export function AccountBulkImportModal({
           currencies,
         );
 
-        const created = await voucherApi.createAccount({
+        payloads.push({
           code,
           sub_code: row.sub_code || null,
           name_ar: row.name_ar,
@@ -237,23 +238,31 @@ export function AccountBulkImportModal({
           is_active: true,
         });
 
-        workingAccounts = [...workingAccounts, created];
-        importedCount += 1;
+        workingAccounts = [
+          ...workingAccounts,
+          {
+            id: `pending-${payloads.length}`,
+            code,
+            sub_code: row.sub_code || null,
+            name_ar: row.name_ar,
+            name_en: row.name_en || null,
+            parent_id: parent.id,
+            currency_id: currencyId,
+            level: (parent.level ?? 1) + 1,
+            is_postable: row.is_postable,
+            is_active: true,
+          } as Account,
+        ];
       }
 
+      await voucherApi.bulkCreateAccounts(payloads);
+
       await onImported();
-      setFeedback(`تم استيراد ${importedCount} حساب بنجاح.`);
+      setFeedback(`تم استيراد ${payloads.length} حساب بنجاح.`);
       resetState();
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? `${err.message}${importedCount > 0 ? ` (تم استيراد ${importedCount} قبل التوقف)` : ""}`
-          : "فشل الاستيراد.",
-      );
-      if (importedCount > 0) {
-        await onImported();
-      }
+      setError(err instanceof Error ? err.message : "فشل الاستيراد.");
     } finally {
       setIsImporting(false);
     }
