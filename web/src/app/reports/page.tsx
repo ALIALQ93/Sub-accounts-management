@@ -47,6 +47,13 @@ const REPORTS: ReportCard[] = [
     phase: "المرحلة 2",
   },
   {
+    title: "تقرير المبيعات التفصيلي",
+    description: "أسطر فواتير مبيعات ومرتجع — مرحّلة، مع رابط COGS.",
+    href: "/reports/sales-lines",
+    status: "available",
+    phase: "جاهز",
+  },
+  {
     title: "تقرير المشتريات التفصيلي",
     description: "أسطر فواتير مشتريات ومرتجع وبضاعة أول المدة — مرحّلة.",
     href: "/reports/purchase-lines",
