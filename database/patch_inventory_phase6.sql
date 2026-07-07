@@ -59,10 +59,12 @@ as $$
   inner join public.branches b on b.id = iml.branch_id
   left join public.vendors v on v.id = i.vendor_id
   where i.status = 'posted'
-    and ip.commercial_kind in (
-      'purchase',
-      case when coalesce(p_include_returns, true) then 'return_purchase' else null end,
-      'opening_stock'
+    and (
+      ip.commercial_kind in ('purchase', 'opening_stock')
+      or (
+        coalesce(p_include_returns, true)
+        and ip.commercial_kind = 'return_purchase'
+      )
     )
     and (p_from_date is null or i.invoice_date >= p_from_date)
     and (p_to_date is null or i.invoice_date <= p_to_date)
