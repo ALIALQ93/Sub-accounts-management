@@ -28,7 +28,6 @@ const EMPTY_VALUES: MaterialFormValues = {
   weight: null,
   notes: "",
   has_expiry_date: false,
-  expiry_days: null,
   require_expiry_on_inbound: false,
   require_expiry_on_outbound: false,
   has_serial_number: false,

@@ -217,7 +217,6 @@ export interface MaterialOption {
   is_active: boolean;
   barcode?: string | null;
   has_expiry_date?: boolean;
-  expiry_days?: number | null;
   require_expiry_on_inbound?: boolean;
   require_expiry_on_outbound?: boolean;
   has_serial_number?: boolean;

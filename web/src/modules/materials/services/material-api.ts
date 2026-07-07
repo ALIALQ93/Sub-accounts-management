@@ -57,7 +57,6 @@ function mapMaterial(row: Material & { min_stock?: number | null }): Material {
     weight: row.weight == null ? null : Number(row.weight),
     notes: row.notes ?? null,
     has_expiry_date: Boolean(row.has_expiry_date),
-    expiry_days: row.expiry_days == null ? null : Number(row.expiry_days),
     require_expiry_on_inbound: Boolean(row.require_expiry_on_inbound),
     require_expiry_on_outbound: Boolean(row.require_expiry_on_outbound),
     has_serial_number: Boolean(row.has_serial_number),
@@ -104,9 +103,9 @@ function buildMaterialInsertPayload(
     weight: payload.weight,
     notes: payload.notes.trim() || null,
     has_expiry_date: payload.has_expiry_date,
-    expiry_days: payload.has_expiry_date ? payload.expiry_days : null,
     require_expiry_on_inbound: payload.require_expiry_on_inbound,
     require_expiry_on_outbound: payload.require_expiry_on_outbound,
+    expiry_days: null,
     has_serial_number: payload.has_serial_number,
     require_serial_on_inbound: payload.require_serial_on_inbound,
     require_serial_on_outbound: payload.require_serial_on_outbound,
@@ -182,9 +181,11 @@ function buildMaterialPatch(
   if (payload.notes != null) patch.notes = payload.notes.trim() || null;
   if (payload.has_expiry_date != null) {
     patch.has_expiry_date = payload.has_expiry_date;
-    patch.expiry_days = payload.has_expiry_date ? payload.expiry_days : null;
-  } else if (payload.expiry_days !== undefined) {
-    patch.expiry_days = payload.expiry_days;
+    if (!payload.has_expiry_date) {
+      patch.require_expiry_on_inbound = false;
+      patch.require_expiry_on_outbound = false;
+      patch.expiry_days = null;
+    }
   }
   if (payload.require_expiry_on_inbound != null) {
     patch.require_expiry_on_inbound = payload.require_expiry_on_inbound;

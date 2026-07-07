@@ -17,7 +17,6 @@ export interface Material {
   weight: number | null;
   notes: string | null;
   has_expiry_date: boolean;
-  expiry_days: number | null;
   require_expiry_on_inbound: boolean;
   require_expiry_on_outbound: boolean;
   has_serial_number: boolean;
@@ -49,7 +48,6 @@ export interface MaterialFormValues {
   weight: number | null;
   notes: string;
   has_expiry_date: boolean;
-  expiry_days: number | null;
   require_expiry_on_inbound: boolean;
   require_expiry_on_outbound: boolean;
   has_serial_number: boolean;

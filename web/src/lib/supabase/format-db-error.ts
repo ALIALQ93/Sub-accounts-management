@@ -71,11 +71,11 @@ export function formatDbError(message: string | null | undefined): string {
   }
 
   if (/requires expiry date on inbound/i.test(raw)) {
-    return "تاريخ الصلاحية مطلوب لهذه المادة عند الإدخال — راجع إعدادات بطاقة المادة.";
+    return "تاريخ انتهاء الصلاحية مطلوب عند الإدخال — أدخله في سطر الفاتورة حسب إعداد بطاقة المادة.";
   }
 
   if (/requires expiry date on outbound/i.test(raw)) {
-    return "تاريخ الصلاحية مطلوب لهذه المادة عند الإخراج — راجع إعدادات بطاقة المادة.";
+    return "تاريخ انتهاء الصلاحية مطلوب عند الإخراج — أدخله في سطر الفاتورة حسب إعداد بطاقة المادة.";
   }
 
   if (/requires serial number on inbound/i.test(raw)) {

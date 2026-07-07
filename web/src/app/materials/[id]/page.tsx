@@ -35,7 +35,6 @@ function toFormValues(material: Material): MaterialFormValues {
     weight: material.weight,
     notes: material.notes ?? "",
     has_expiry_date: material.has_expiry_date,
-    expiry_days: material.expiry_days,
     require_expiry_on_inbound: material.require_expiry_on_inbound,
     require_expiry_on_outbound: material.require_expiry_on_outbound,
     has_serial_number: material.has_serial_number,

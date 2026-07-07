@@ -133,6 +133,7 @@ database/setup_all.sql
 | `patch_materials_item_card.sql` | مواصفات بطاقة المادة + أسعار per وحدة | **#31 — مواد** |
 | `patch_materials_tracking.sql` | صلاحية + رقم تسلسلي + إجبار إدخال/إخراج | **#32 — مواد** |
 | `patch_invoice_line_adjustments.sql` | خصم/إضافي per سطر + تأثير على تكلفة المخزون | **#33 — فواتير** |
+| `patch_expiry_from_invoice.sql` | تاريخ الانتهاء في سطر الفاتورة؛ الإعدادات من بطاقة المادة | **#34 — فواتير/مواد** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

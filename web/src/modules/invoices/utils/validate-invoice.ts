@@ -158,9 +158,7 @@ export function validateInvoice(context: InvoiceValidationContext): string | nul
           isExpiryRequiredOnLine(material, context.commercialKind) &&
           !line.expiry_date
         ) {
-          return `${label}: تاريخ الصلاحية مطلوب لهذه المادة عند ${
-            isInboundStockMovement(context.commercialKind) ? "الإدخال" : "الإخراج"
-          }.`;
+          return `${label}: تاريخ انتهاء الصلاحية مطلوب — أدخله في سطر الفاتورة حسب إعداد بطاقة المادة.`;
         }
         if (
           isSerialRequiredOnLine(material, context.commercialKind) &&

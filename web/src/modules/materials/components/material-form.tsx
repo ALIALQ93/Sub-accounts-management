@@ -636,9 +636,6 @@ export function MaterialForm({
                         setValues((current) => ({
                           ...current,
                           has_expiry_date: event.target.checked,
-                          expiry_days: event.target.checked
-                            ? current.expiry_days
-                            : null,
                           require_expiry_on_inbound: event.target.checked
                             ? current.require_expiry_on_inbound
                             : false,
@@ -649,30 +646,7 @@ export function MaterialForm({
                       }
                       disabled={!canEdit || isSaving}
                     />
-                    <span>يوجد تاريخ صلاحية للمادة</span>
-                  </label>
-                  <label className="grid gap-1 text-sm">
-                    <span className="font-medium">مدة الصلاحية (يوم)</span>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={values.expiry_days ?? ""}
-                      onChange={(event) =>
-                        setValues((current) => ({
-                          ...current,
-                          expiry_days:
-                            event.target.value === ""
-                              ? null
-                              : Number(event.target.value),
-                        }))
-                      }
-                      disabled={!canEdit || isSaving || !values.has_expiry_date}
-                      className="max-w-xs rounded-md border border-slate-300 px-3 py-2 font-mono"
-                    />
-                    <span className="text-xs text-slate-500">
-                      اختياري — يُستخدم كمرجع عند حساب تاريخ الصلاحية من تاريخ الإدخال.
-                    </span>
+                    <span>المادة تتتبع تاريخ الصلاحية</span>
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -686,7 +660,7 @@ export function MaterialForm({
                       }
                       disabled={!canEdit || isSaving || !values.has_expiry_date}
                     />
-                    <span>إجبار تاريخ الصلاحية عند الإدخال</span>
+                    <span>إجبار تاريخ انتهاء الصلاحية عند الإدخال (في الفاتورة)</span>
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -700,8 +674,12 @@ export function MaterialForm({
                       }
                       disabled={!canEdit || isSaving || !values.has_expiry_date}
                     />
-                    <span>إجبار تاريخ الصلاحية عند الإخراج</span>
+                    <span>إجبار تاريخ انتهاء الصلاحية عند الإخراج (في الفاتورة)</span>
                   </label>
+                  <p className="text-xs text-slate-500">
+                    الإعدادات هنا — التاريخ الفعلي يُدخل يدوياً في كل سطر فاتورة (مشتريات،
+                    مبيعات، …) وليس بحساب بعدد أيام من البطاقة.
+                  </p>
                 </div>
               </fieldset>
 
