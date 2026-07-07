@@ -53,6 +53,8 @@ export interface InvoicePattern {
   discount_enabled: boolean;
   max_discount_percent: number | null;
   discount_applies_to: "line" | "invoice" | null;
+  line_extra_enabled: boolean;
+  line_adjustments_affect_material_cost: boolean;
   reservation_enabled: boolean;
   reserve_on_save: boolean;
   release_on_cancel: boolean;
@@ -171,8 +173,12 @@ export interface InvoiceMaterialLine {
   line_amount: number;
   discount_percent?: number | null;
   discount_amount?: number;
+  extra_percent?: number | null;
+  extra_amount?: number;
   qty_received?: number | null;
   line_description: string | null;
+  expiry_date?: string | null;
+  serial_number?: string | null;
   material_code?: string;
   material_name_ar?: string;
   unit_name_ar?: string;
@@ -209,6 +215,14 @@ export interface MaterialOption {
   sale_price: number;
   purchase_price: number;
   is_active: boolean;
+  barcode?: string | null;
+  has_expiry_date?: boolean;
+  expiry_days?: number | null;
+  require_expiry_on_inbound?: boolean;
+  require_expiry_on_outbound?: boolean;
+  has_serial_number?: boolean;
+  require_serial_on_inbound?: boolean;
+  require_serial_on_outbound?: boolean;
 }
 
 export interface MaterialUnitOption {

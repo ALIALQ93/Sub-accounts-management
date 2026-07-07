@@ -19,6 +19,21 @@ const EMPTY_VALUES: MaterialFormValues = {
   sale_price: 0,
   inventory_account_id: "",
   min_stock: 0,
+  max_stock: 0,
+  barcode: "",
+  manufacturer: "",
+  supplier_name: "",
+  color: "",
+  size: "",
+  weight: null,
+  notes: "",
+  has_expiry_date: false,
+  expiry_days: null,
+  require_expiry_on_inbound: false,
+  require_expiry_on_outbound: false,
+  has_serial_number: false,
+  require_serial_on_inbound: false,
+  require_serial_on_outbound: false,
   is_active: true,
 };
 
@@ -84,7 +99,7 @@ export default function NewMaterialPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-4xl">
+    <main className="mx-auto w-full max-w-6xl">
       <h1 className="mb-4 text-2xl font-bold text-slate-900">مادة جديدة</h1>
       <MaterialsNav />
 

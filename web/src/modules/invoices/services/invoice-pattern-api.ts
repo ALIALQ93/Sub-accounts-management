@@ -84,6 +84,8 @@ export interface InvoicePatternFormValues {
   discount_enabled: boolean;
   max_discount_percent: number | null;
   discount_applies_to: "line" | "invoice" | null;
+  line_extra_enabled: boolean;
+  line_adjustments_affect_material_cost: boolean;
   reservation_enabled: boolean;
   reserve_on_save: boolean;
   release_on_cancel: boolean;
@@ -147,6 +149,8 @@ function buildPatternPayload(values: InvoicePatternFormValues) {
     discount_enabled: values.discount_enabled,
     max_discount_percent: values.discount_enabled ? values.max_discount_percent : null,
     discount_applies_to: values.discount_enabled ? values.discount_applies_to : null,
+    line_extra_enabled: values.line_extra_enabled,
+    line_adjustments_affect_material_cost: values.line_adjustments_affect_material_cost,
     reservation_enabled: values.reservation_enabled,
     reserve_on_save: values.reservation_enabled ? values.reserve_on_save : true,
     release_on_cancel: values.reservation_enabled ? values.release_on_cancel : true,
@@ -401,6 +405,9 @@ export function patternToFormValues(
     discount_enabled: pattern.discount_enabled ?? false,
     max_discount_percent: pattern.max_discount_percent,
     discount_applies_to: pattern.discount_applies_to,
+    line_extra_enabled: pattern.line_extra_enabled ?? false,
+    line_adjustments_affect_material_cost:
+      pattern.line_adjustments_affect_material_cost ?? true,
     reservation_enabled: pattern.reservation_enabled ?? false,
     reserve_on_save: pattern.reserve_on_save ?? true,
     release_on_cancel: pattern.release_on_cancel ?? true,
@@ -468,6 +475,8 @@ export const DEFAULT_INVOICE_PATTERN_FORM: InvoicePatternFormValues = {
   discount_enabled: false,
   max_discount_percent: null,
   discount_applies_to: "line",
+  line_extra_enabled: false,
+  line_adjustments_affect_material_cost: true,
   reservation_enabled: false,
   reserve_on_save: true,
   release_on_cancel: true,

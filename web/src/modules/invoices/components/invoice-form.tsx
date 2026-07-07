@@ -46,7 +46,7 @@ import type {
   MaterialUnitOption,
   SalesRepOption,
 } from "@/modules/invoices/types";
-import { partyKindForCommercial, defaultUnitPrice, computeLineNetAmount, computeLineDiscountAmount } from "@/modules/invoices/utils/invoice-line-utils";
+import { partyKindForCommercial, defaultUnitPrice, computeLineNetAmount, computeLineDiscountAmount, computeLineExtraAmount } from "@/modules/invoices/utils/invoice-line-utils";
 import {
   applyRounding,
   roundingDelta,
@@ -107,8 +107,12 @@ function toDraftMaterialLines(
     size?: string | null;
     source?: string | null;
     caliber?: string | null;
+    expiry_date?: string | null;
+    serial_number?: string | null;
     discount_percent?: number | null;
     discount_amount?: number | null;
+    extra_percent?: number | null;
+    extra_amount?: number | null;
   }>,
 ): DraftMaterialLine[] {
   return lines.map((line) => ({
@@ -128,8 +132,12 @@ function toDraftMaterialLines(
     size: line.size ?? null,
     source: line.source ?? null,
     caliber: line.caliber ?? null,
+    expiry_date: line.expiry_date ?? null,
+    serial_number: line.serial_number ?? null,
     discount_percent: line.discount_percent ?? null,
     discount_amount: line.discount_amount ?? null,
+    extra_percent: line.extra_percent ?? null,
+    extra_amount: line.extra_amount ?? null,
   }));
 }
 
@@ -274,6 +282,8 @@ export function InvoiceForm({
   const showLineDiscount =
     !!pattern?.discount_enabled && pattern.discount_applies_to === "line";
 
+  const showLineExtra = !!pattern?.line_extra_enabled;
+
   const showInvoiceDiscount =
     !!pattern?.discount_enabled && pattern.discount_applies_to === "invoice";
 
@@ -297,6 +307,8 @@ export function InvoiceForm({
               line.unit_price,
               line.discount_percent,
               line.discount_amount,
+              line.extra_percent,
+              line.extra_amount,
             )
           : sum,
       0,
@@ -318,6 +330,22 @@ export function InvoiceForm({
       );
     }, 0);
   }, [materialLines, showLineDiscount]);
+
+  const lineExtraTotal = useMemo(() => {
+    if (!showLineExtra) return 0;
+    return materialLines.reduce((sum, line) => {
+      if (!line.material_id) return sum;
+      return (
+        sum +
+        computeLineExtraAmount(
+          line.quantity,
+          line.unit_price,
+          line.extra_percent,
+          line.extra_amount,
+        )
+      );
+    }, 0);
+  }, [materialLines, showLineExtra]);
 
   const invoiceTotals = useMemo(() => {
     let subtotal = materialSubtotal;
@@ -876,6 +904,7 @@ export function InvoiceForm({
         invoiceDiscountPercent,
         materialLines,
         accountLines,
+        materials,
         forPost,
       });
       if (validationError) return validationError;
@@ -939,6 +968,10 @@ export function InvoiceForm({
         return "حساب الخصم مطلوب عند ترحيل فاتورة فيها خصم على الأسطر.";
       }
 
+      if (forPost && showLineExtra && lineExtraTotal > 0 && !extraAccountId) {
+        return "حساب الإضافي مطلوب عند ترحيل فاتورة فيها إضافي على الأسطر.";
+      }
+
       return null;
     },
     [
@@ -966,6 +999,9 @@ export function InvoiceForm({
       showLineDiscount,
       lineDiscountTotal,
       discountAccountId,
+      showLineExtra,
+      lineExtraTotal,
+      extraAccountId,
     ],
   );
 
@@ -1643,6 +1679,7 @@ export function InvoiceForm({
             readOnly={readOnly}
             showQtyReceived={pattern.commercial_kind === "transfer_in"}
             showLineDiscount={showLineDiscount}
+            showLineExtra={showLineExtra}
             referenceLineCaps={referenceLineCaps}
             lineAttributes={lineAttrFlags}
             onChange={setMaterialLines}
@@ -1665,7 +1702,7 @@ export function InvoiceForm({
         />
       </section>
 
-      {(showInvoiceDiscount || roundingSettings?.enabled) && (
+      {(showInvoiceDiscount || showLineDiscount || showLineExtra || roundingSettings?.enabled) && (
         <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
           <h2 className="mb-3 text-sm font-bold text-slate-800">الإجماليات</h2>
           <div className="flex flex-col gap-2 text-sm text-slate-700">
@@ -1684,6 +1721,24 @@ export function InvoiceForm({
                 {!discountAccountId && (
                   <span className="mr-2 text-xs text-amber-700">
                     — حدّد حساب الخصم لتوليد قيد الخصم عند الترحيل
+                  </span>
+                )}
+              </p>
+            )}
+            {showLineExtra && lineExtraTotal > 0 && (
+              <p>
+                إجمالي إضافي الأسطر:{" "}
+                <span className="font-mono font-semibold text-emerald-800">
+                  {lineExtraTotal.toFixed(2)}
+                </span>
+                {!extraAccountId && (
+                  <span className="mr-2 text-xs text-amber-700">
+                    — حدّد حساب الإضافي لتوليد القيد عند الترحيل
+                  </span>
+                )}
+                {pattern.line_adjustments_affect_material_cost === false && (
+                  <span className="mr-2 text-xs text-slate-500">
+                    — الإضافي لا يؤثر على تكلفة المخزون لهذا النمط
                   </span>
                 )}
               </p>

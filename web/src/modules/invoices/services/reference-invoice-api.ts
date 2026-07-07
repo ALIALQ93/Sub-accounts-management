@@ -91,10 +91,14 @@ function mapReferenceMaterialLine(
   let unitPrice = settings.load_unit_price ? line.unit_price : 0;
   let discountPercent = line.discount_percent ?? null;
   let discountAmount = line.discount_amount ?? null;
+  let extraPercent = line.extra_percent ?? null;
+  let extraAmount = line.extra_amount ?? null;
 
   if (!settings.load_discount_extra) {
     discountPercent = null;
     discountAmount = null;
+    extraPercent = null;
+    extraAmount = null;
   }
 
   if (
@@ -105,6 +109,8 @@ function mapReferenceMaterialLine(
     unitPrice = Math.round((line.line_amount / line.quantity) * 10000) / 10000;
     discountPercent = null;
     discountAmount = null;
+    extraPercent = null;
+    extraAmount = null;
   }
 
   return {
@@ -122,6 +128,8 @@ function mapReferenceMaterialLine(
     line_description: line.line_description,
     discount_percent: discountPercent,
     discount_amount: discountAmount,
+    extra_percent: extraPercent,
+    extra_amount: extraAmount,
   };
 }
 

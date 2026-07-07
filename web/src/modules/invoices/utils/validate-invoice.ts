@@ -3,6 +3,12 @@ import type { InvoiceSettlementMode } from "@/modules/invoices/types";
 import type { DraftAccountLine } from "@/modules/invoices/components/invoice-account-lines-table";
 import type { DraftMaterialLine } from "@/modules/invoices/components/invoice-material-lines-table";
 import { partyKindForCommercial } from "@/modules/invoices/utils/invoice-line-utils";
+import type { MaterialOption } from "@/modules/invoices/types";
+import {
+  isExpiryRequiredOnLine,
+  isInboundStockMovement,
+  isSerialRequiredOnLine,
+} from "@/modules/materials/utils/material-tracking-utils";
 
 export interface InvoiceDiscountPolicy {
   enabled: boolean;
@@ -30,6 +36,7 @@ export interface InvoiceValidationContext {
   invoiceDiscountPercent: number | null;
   materialLines: DraftMaterialLine[];
   accountLines: DraftAccountLine[];
+  materials?: MaterialOption[];
   forPost: boolean;
 }
 
@@ -143,6 +150,26 @@ export function validateInvoice(context: InvoiceValidationContext): string | nul
       }
       if (conditions?.require_caliber && !line.caliber?.trim()) {
         return `${label}: العيار مطلوب حسب شروط النمط.`;
+      }
+
+      const material = context.materials?.find((row) => row.id === line.material_id);
+      if (material) {
+        if (
+          isExpiryRequiredOnLine(material, context.commercialKind) &&
+          !line.expiry_date
+        ) {
+          return `${label}: تاريخ الصلاحية مطلوب لهذه المادة عند ${
+            isInboundStockMovement(context.commercialKind) ? "الإدخال" : "الإخراج"
+          }.`;
+        }
+        if (
+          isSerialRequiredOnLine(material, context.commercialKind) &&
+          !line.serial_number?.trim()
+        ) {
+          return `${label}: الرقم التسلسلي مطلوب لهذه المادة عند ${
+            isInboundStockMovement(context.commercialKind) ? "الإدخال" : "الإخراج"
+          }.`;
+        }
       }
     }
   }

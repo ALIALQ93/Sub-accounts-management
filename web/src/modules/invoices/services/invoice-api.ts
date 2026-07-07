@@ -28,8 +28,12 @@ export interface InvoiceMaterialLineInput {
   quantity: number;
   unit_price: number;
   line_description: string | null;
+  expiry_date?: string | null;
+  serial_number?: string | null;
   discount_percent?: number | null;
   discount_amount?: number | null;
+  extra_percent?: number | null;
+  extra_amount?: number | null;
   qty_received?: number | null;
   color?: string | null;
   size?: string | null;
@@ -227,6 +231,8 @@ export const invoiceApi = {
       line_amount: Number(row.line_amount),
       discount_percent: row.discount_percent != null ? Number(row.discount_percent) : null,
       discount_amount: Number(row.discount_amount ?? 0),
+      extra_percent: row.extra_percent != null ? Number(row.extra_percent) : null,
+      extra_amount: Number(row.extra_amount ?? 0),
       material_code: row.materials?.material_code,
       material_name_ar: row.materials?.name_ar,
       unit_name_ar: row.material_units?.name_ar,
@@ -346,8 +352,12 @@ export const invoiceApi = {
           size: line.size?.trim() || null,
           source: line.source?.trim() || null,
           caliber: line.caliber?.trim() || null,
+          expiry_date: line.expiry_date || null,
+          serial_number: line.serial_number?.trim() || null,
           discount_percent: line.discount_percent ?? null,
           discount_amount: line.discount_amount ?? 0,
+          extra_percent: line.extra_percent ?? null,
+          extra_amount: line.extra_amount ?? 0,
         })),
       );
       throwIfSupabaseError(error);

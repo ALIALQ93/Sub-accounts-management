@@ -8,6 +8,21 @@ export interface Material {
   sale_price: number;
   inventory_account_id: string | null;
   min_stock: number;
+  max_stock: number;
+  barcode: string | null;
+  manufacturer: string | null;
+  supplier_name: string | null;
+  color: string | null;
+  size: string | null;
+  weight: number | null;
+  notes: string | null;
+  has_expiry_date: boolean;
+  expiry_days: number | null;
+  require_expiry_on_inbound: boolean;
+  require_expiry_on_outbound: boolean;
+  has_serial_number: boolean;
+  require_serial_on_inbound: boolean;
+  require_serial_on_outbound: boolean;
   is_active: boolean;
 }
 
@@ -25,6 +40,21 @@ export interface MaterialFormValues {
   sale_price: number;
   inventory_account_id: string;
   min_stock: number;
+  max_stock: number;
+  barcode: string;
+  manufacturer: string;
+  supplier_name: string;
+  color: string;
+  size: string;
+  weight: number | null;
+  notes: string;
+  has_expiry_date: boolean;
+  expiry_days: number | null;
+  require_expiry_on_inbound: boolean;
+  require_expiry_on_outbound: boolean;
+  has_serial_number: boolean;
+  require_serial_on_inbound: boolean;
+  require_serial_on_outbound: boolean;
   is_active: boolean;
 }
 
@@ -36,6 +66,10 @@ export interface MaterialUnit {
   name_en: string | null;
   is_base_unit: boolean;
   factor_to_base: number;
+  purchase_price: number | null;
+  sale_price: number | null;
+  semi_wholesale_price: number | null;
+  wholesale_price: number | null;
   is_active: boolean;
   sort_order: number;
 }
@@ -47,6 +81,10 @@ export interface MaterialUnitFormValues {
   name_en: string;
   is_base_unit: boolean;
   factor_to_base: number;
+  purchase_price: number | null;
+  sale_price: number | null;
+  semi_wholesale_price: number | null;
+  wholesale_price: number | null;
   is_active: boolean;
 }
 

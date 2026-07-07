@@ -14,6 +14,8 @@ export function computeLineNetAmount(
   unitPrice: number,
   discountPercent?: number | null,
   discountAmount?: number | null,
+  extraPercent?: number | null,
+  extraAmount?: number | null,
 ): number {
   const gross = quantity * unitPrice;
   const discount = computeLineDiscountAmount(
@@ -22,7 +24,13 @@ export function computeLineNetAmount(
     discountPercent,
     discountAmount,
   );
-  return Math.max(0, Math.round((gross - discount) * 100) / 100);
+  const extra = computeLineExtraAmount(
+    quantity,
+    unitPrice,
+    extraPercent,
+    extraAmount,
+  );
+  return Math.max(0, Math.round((gross - discount + extra) * 100) / 100);
 }
 
 export function computeLineGross(quantity: number, unitPrice: number): number {
@@ -41,6 +49,22 @@ export function computeLineDiscountAmount(
   }
   if (discountAmount != null && discountAmount > 0) {
     return discountAmount;
+  }
+  return 0;
+}
+
+export function computeLineExtraAmount(
+  quantity: number,
+  unitPrice: number,
+  extraPercent?: number | null,
+  extraAmount?: number | null,
+): number {
+  const gross = quantity * unitPrice;
+  if (extraPercent != null && extraPercent > 0) {
+    return Math.round(gross * extraPercent * 100) / 10000;
+  }
+  if (extraAmount != null && extraAmount > 0) {
+    return extraAmount;
   }
   return 0;
 }

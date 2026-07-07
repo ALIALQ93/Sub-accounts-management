@@ -130,6 +130,9 @@ database/setup_all.sql
 | `patch_voucher_atomic_ops.sql` | استبدال أسطر/تخصيصات + استيراد حسابات ذرّي | **#28 — تدقيق** |
 | `patch_reverse_invoice_settlement.sql` | عكس سندات invoice + إصلاح ترحيل المقاصة | **#29 — تدقيق** |
 | `patch_audit_remaining.sql` | دوران تصنيفات المواد + قفل فرع المستودع | **#30 — تدقيق** |
+| `patch_materials_item_card.sql` | مواصفات بطاقة المادة + أسعار per وحدة | **#31 — مواد** |
+| `patch_materials_tracking.sql` | صلاحية + رقم تسلسلي + إجبار إدخال/إخراج | **#32 — مواد** |
+| `patch_invoice_line_adjustments.sql` | خصم/إضافي per سطر + تأثير على تكلفة المخزون | **#33 — فواتير** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

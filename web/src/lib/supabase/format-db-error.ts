@@ -70,6 +70,38 @@ export function formatDbError(message: string | null | undefined): string {
     return "لا يمكن أن يكون التصنيف أباً لنفسه.";
   }
 
+  if (/requires expiry date on inbound/i.test(raw)) {
+    return "تاريخ الصلاحية مطلوب لهذه المادة عند الإدخال — راجع إعدادات بطاقة المادة.";
+  }
+
+  if (/requires expiry date on outbound/i.test(raw)) {
+    return "تاريخ الصلاحية مطلوب لهذه المادة عند الإخراج — راجع إعدادات بطاقة المادة.";
+  }
+
+  if (/requires serial number on inbound/i.test(raw)) {
+    return "الرقم التسلسلي مطلوب لهذه المادة عند الإدخال — راجع إعدادات بطاقة المادة.";
+  }
+
+  if (/requires serial number on outbound/i.test(raw)) {
+    return "الرقم التسلسلي مطلوب لهذه المادة عند الإخراج — راجع إعدادات بطاقة المادة.";
+  }
+
+  if (/discount_amount cannot exceed line gross amount/i.test(raw)) {
+    return "مبلغ الخصم لا يمكن أن يتجاوز إجمالي السطر.";
+  }
+
+  if (/Line net amount cannot be negative after discount\/extra/i.test(raw)) {
+    return "صافي السطر سالب بعد الخصم والإضافي — راجع القيم.";
+  }
+
+  if (/Line discount requires discount_account_id/i.test(raw)) {
+    return "حساب الخصم مطلوب — حدّده في الفاتورة أو في نمط الفاتورة.";
+  }
+
+  if (/Line extra requires extra_account_id/i.test(raw)) {
+    return "حساب الإضافي مطلوب — حدّده في الفاتورة أو في نمط الفاتورة.";
+  }
+
   if (/Invoice settlement vouchers cannot be reversed automatically/i.test(raw)) {
     return "لا يمكن عكس سند إغلاق الحركات تلقائياً — راجع إعداد قاعدة البيانات.";
   }

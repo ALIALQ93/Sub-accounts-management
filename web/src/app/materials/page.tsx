@@ -70,7 +70,7 @@ export default function MaterialsPage() {
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">
-            بطاقات المواد — وحدات القياس والأسعار حسب الوحدة الأساسية.
+            بطاقات المواد — مواصفات، وحدات وأسعار، وأرصدة المخزون.
           </p>
           {canCreate && (
             <Link href="/materials/new" className="btn btn-primary">
@@ -101,6 +101,7 @@ export default function MaterialsPage() {
                   <th>الرمز</th>
                   <th>الاسم</th>
                   <th>الصنف</th>
+                  <th>باركود</th>
                   <th>شراء</th>
                   <th>بيع</th>
                   <th>حد أدنى</th>
@@ -124,6 +125,9 @@ export default function MaterialsPage() {
                     </td>
                     <td className="text-xs text-slate-600">
                       {material.category_name_ar ?? "—"}
+                    </td>
+                    <td className="font-mono text-xs text-slate-500">
+                      {material.barcode ?? "—"}
                     </td>
                     <td className="font-mono text-xs tabular-nums">
                       {material.purchase_price.toFixed(4)}

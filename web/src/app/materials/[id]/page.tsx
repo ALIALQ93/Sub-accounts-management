@@ -26,6 +26,21 @@ function toFormValues(material: Material): MaterialFormValues {
     sale_price: material.sale_price,
     inventory_account_id: material.inventory_account_id ?? "",
     min_stock: material.min_stock,
+    max_stock: material.max_stock,
+    barcode: material.barcode ?? "",
+    manufacturer: material.manufacturer ?? "",
+    supplier_name: material.supplier_name ?? "",
+    color: material.color ?? "",
+    size: material.size ?? "",
+    weight: material.weight,
+    notes: material.notes ?? "",
+    has_expiry_date: material.has_expiry_date,
+    expiry_days: material.expiry_days,
+    require_expiry_on_inbound: material.require_expiry_on_inbound,
+    require_expiry_on_outbound: material.require_expiry_on_outbound,
+    has_serial_number: material.has_serial_number,
+    require_serial_on_inbound: material.require_serial_on_inbound,
+    require_serial_on_outbound: material.require_serial_on_outbound,
     is_active: material.is_active,
   };
 }
@@ -108,13 +123,11 @@ export default function EditMaterialPage() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-4xl">
-      <h1 className="mb-1 text-2xl font-bold text-slate-900">
-        {material ? material.name_ar : "بطاقة مادة"}
-      </h1>
+    <main className="mx-auto w-full max-w-6xl">
+      <h1 className="mb-1 text-2xl font-bold text-slate-900">بطاقة مادة</h1>
       {material && (
         <p className="mb-4 font-mono text-sm text-slate-500">
-          {material.material_code}
+          {material.material_code} — {material.name_ar}
         </p>
       )}
       <MaterialsNav />
@@ -126,6 +139,7 @@ export default function EditMaterialPage() {
         <div className="mt-4">
           <MaterialForm
             mode="edit"
+            materialId={material.id}
             initialValues={toFormValues(material)}
             initialUnits={units}
             categories={categories}

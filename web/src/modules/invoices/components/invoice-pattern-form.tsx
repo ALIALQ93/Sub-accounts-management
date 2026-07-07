@@ -655,6 +655,42 @@ export function InvoicePatternForm({
         </p>
       </Section>
 
+      <Section title="إضافي السطر">
+        <div className="flex flex-wrap items-center gap-4 md:col-span-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={formDisabled}
+              checked={values.line_extra_enabled}
+              onChange={(e) => update({ line_extra_enabled: e.target.checked })}
+            />
+            تفعيل حقول الإضافي على أسطر المواد
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={formDisabled}
+              checked={values.line_adjustments_affect_material_cost}
+              onChange={(e) =>
+                update({ line_adjustments_affect_material_cost: e.target.checked })
+              }
+            />
+            خصم/إضافي السطر يؤثر على تكلفة المخزون (مشتريات، بضاعة أول مدة، مرتجع مبيعات)
+          </label>
+        </div>
+        <AccountSearchField
+          label="حساب الإضافي الافتراضي"
+          accounts={accounts}
+          value={values.default_extra_account_id ?? ""}
+          onChange={(id) => update({ default_extra_account_id: id || null })}
+          disabled={formDisabled || !values.line_extra_enabled}
+        />
+        <p className="text-xs text-slate-500 md:col-span-2">
+          الإضافي يُدخل كنسبة أو مبلغ ثابت لكل سطر. عند تعطيل التأثير على التكلفة يُسجَّل
+          الإضافي كقيد منفصل ولا يدخل في تكلفة الوحدة بالمخزون.
+        </p>
+      </Section>
+
       <Section title="الحجز">
         <div className="flex flex-wrap items-center gap-4 md:col-span-2">
           <label className="flex items-center gap-2 text-sm">

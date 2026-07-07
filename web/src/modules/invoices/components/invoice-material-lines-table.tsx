@@ -13,6 +13,12 @@ import {
   SearchSelectField,
   type SearchSelectOption,
 } from "@/modules/vouchers/components/search-select-field";
+import {
+  isExpiryRequiredOnLine,
+  isSerialRequiredOnLine,
+  showExpiryOnLine,
+  showSerialOnLine,
+} from "@/modules/materials/utils/material-tracking-utils";
 
 export type DraftMaterialLine = InvoiceMaterialLineInput & {
   clientId: string;
@@ -37,6 +43,7 @@ interface InvoiceMaterialLinesTableProps {
   readOnly: boolean;
   showQtyReceived?: boolean;
   showLineDiscount?: boolean;
+  showLineExtra?: boolean;
   referenceLineCaps?: Record<string, number> | null;
   lineAttributes?: MaterialLineAttributeFlags;
   onChange: (lines: DraftMaterialLine[]) => void;
@@ -79,6 +86,7 @@ export function InvoiceMaterialLinesTable({
   readOnly,
   showQtyReceived = false,
   showLineDiscount = false,
+  showLineExtra = false,
   referenceLineCaps = null,
   lineAttributes,
   onChange,
@@ -99,6 +107,16 @@ export function InvoiceMaterialLinesTable({
   const materialById = useMemo(
     () => new Map(materials.map((m) => [m.id, m])),
     [materials],
+  );
+
+  const showExpiryColumn = useMemo(
+    () => materials.some((material) => showExpiryOnLine(material, commercialKind)),
+    [materials, commercialKind],
+  );
+
+  const showSerialColumn = useMemo(
+    () => materials.some((material) => showSerialOnLine(material, commercialKind)),
+    [materials, commercialKind],
   );
 
   const warehousesForBranch = (branchId: string) =>
@@ -197,7 +215,10 @@ export function InvoiceMaterialLinesTable({
 
   const extraCols =
     attrCols +
-    (showLineDiscount ? 1 : 0) +
+    (showExpiryColumn ? 1 : 0) +
+    (showSerialColumn ? 1 : 0) +
+    (showLineDiscount ? 2 : 0) +
+    (showLineExtra ? 2 : 0) +
     (showQtyReceived ? 1 : 0) +
     (readOnly ? 0 : 1);
 
@@ -209,6 +230,8 @@ export function InvoiceMaterialLinesTable({
         line.unit_price,
         line.discount_percent,
         line.discount_amount,
+        line.extra_percent,
+        line.extra_amount,
       ),
     0,
   );
@@ -256,8 +279,23 @@ export function InvoiceMaterialLinesTable({
               {lineAttributes?.showCaliber && (
                 <th className="border border-slate-200 p-2">العيار</th>
               )}
+              {showExpiryColumn && (
+                <th className="border border-slate-200 p-2">تاريخ الصلاحية</th>
+              )}
+              {showSerialColumn && (
+                <th className="border border-slate-200 p-2">الرقم التسلسلي</th>
+              )}
               {showLineDiscount && (
-                <th className="border border-slate-200 p-2">خصم %</th>
+                <>
+                  <th className="border border-slate-200 p-2">خصم %</th>
+                  <th className="border border-slate-200 p-2">خصم مبلغ</th>
+                </>
+              )}
+              {showLineExtra && (
+                <>
+                  <th className="border border-slate-200 p-2">إضافي %</th>
+                  <th className="border border-slate-200 p-2">إضافي مبلغ</th>
+                </>
               )}
               {showQtyReceived && (
                 <th className="border border-slate-200 p-2">المستلم</th>
@@ -269,11 +307,20 @@ export function InvoiceMaterialLinesTable({
             {lines.map((line) => {
               const units = unitsByMaterial[line.material_id] ?? [];
               const whOptions = warehousesForBranch(line.branch_id);
+              const material = materialById.get(line.material_id);
+              const expiryRequired =
+                material != null &&
+                isExpiryRequiredOnLine(material, commercialKind);
+              const serialRequired =
+                material != null &&
+                isSerialRequiredOnLine(material, commercialKind);
               const amount = computeLineNetAmount(
                 line.quantity,
                 line.unit_price,
                 line.discount_percent,
                 line.discount_amount,
+                line.extra_percent,
+                line.extra_amount,
               );
 
               return (
@@ -371,26 +418,135 @@ export function InvoiceMaterialLinesTable({
                     renderAttrInput(line, "source", "المصدر")}
                   {lineAttributes?.showCaliber &&
                     renderAttrInput(line, "caliber", "العيار")}
-                  {showLineDiscount && (
+                  {showExpiryColumn && (
                     <td className="border border-slate-100 p-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.01"
-                        disabled={readOnly}
-                        className={inputClass}
-                        value={line.discount_percent ?? ""}
-                        onChange={(e) =>
-                          updateLine(line.clientId, {
-                            discount_percent: e.target.value
-                              ? Number(e.target.value)
-                              : null,
-                            discount_amount: null,
-                          })
-                        }
-                      />
+                      {showExpiryOnLine(material, commercialKind) ? (
+                        <input
+                          type="date"
+                          disabled={readOnly}
+                          required={expiryRequired}
+                          className={inputClass}
+                          value={line.expiry_date ?? ""}
+                          onChange={(e) =>
+                            updateLine(line.clientId, {
+                              expiry_date: e.target.value || null,
+                            })
+                          }
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </td>
+                  )}
+                  {showSerialColumn && (
+                    <td className="border border-slate-100 p-2">
+                      {showSerialOnLine(material, commercialKind) ? (
+                        <input
+                          disabled={readOnly}
+                          required={serialRequired}
+                          className={`${inputClass} font-mono`}
+                          placeholder="SN"
+                          value={line.serial_number ?? ""}
+                          onChange={(e) =>
+                            updateLine(line.clientId, {
+                              serial_number: e.target.value || null,
+                            })
+                          }
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
+                  )}
+                  {showLineDiscount && (
+                    <>
+                      <td className="border border-slate-100 p-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          disabled={readOnly}
+                          className={inputClass}
+                          value={line.discount_percent ?? ""}
+                          onChange={(e) =>
+                            updateLine(line.clientId, {
+                              discount_percent: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                              discount_amount: null,
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="border border-slate-100 p-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          disabled={readOnly}
+                          className={inputClass}
+                          value={
+                            line.discount_percent != null && line.discount_percent > 0
+                              ? ""
+                              : (line.discount_amount ?? "")
+                          }
+                          onChange={(e) =>
+                            updateLine(line.clientId, {
+                              discount_amount: e.target.value
+                                ? Number(e.target.value)
+                                : 0,
+                              discount_percent: null,
+                            })
+                          }
+                        />
+                      </td>
+                    </>
+                  )}
+                  {showLineExtra && (
+                    <>
+                      <td className="border border-slate-100 p-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step="0.01"
+                          disabled={readOnly}
+                          className={inputClass}
+                          value={line.extra_percent ?? ""}
+                          onChange={(e) =>
+                            updateLine(line.clientId, {
+                              extra_percent: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                              extra_amount: 0,
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="border border-slate-100 p-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          disabled={readOnly}
+                          className={inputClass}
+                          value={
+                            line.extra_percent != null && line.extra_percent > 0
+                              ? ""
+                              : (line.extra_amount ?? "")
+                          }
+                          onChange={(e) =>
+                            updateLine(line.clientId, {
+                              extra_amount: e.target.value
+                                ? Number(e.target.value)
+                                : 0,
+                              extra_percent: null,
+                            })
+                          }
+                        />
+                      </td>
+                    </>
                   )}
                   {showQtyReceived && (
                     <td className="border border-slate-100 p-2">
