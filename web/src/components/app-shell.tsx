@@ -1,47 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AppUpdateModal } from "@/components/app-update-modal";
 import { CompanyLogo } from "@/components/company-logo";
-import { AppBrandFooter } from "@/components/app-brand-footer";
+import { HorizontalNav } from "@/components/horizontal-nav";
+import { QuickShortcutsBar } from "@/components/quick-shortcuts-bar";
 import { APP_BRANDING } from "@/config/app-branding";
+import {
+  APP_NAV_SECTIONS,
+  isNavSectionActive,
+} from "@/config/app-navigation";
 import { useAuth } from "@/modules/auth/auth-context";
-import type { PermissionKey } from "@/modules/settings/permissions/permission-catalog";
 import { settingsApi } from "@/modules/settings/services/settings-api";
 import { ROLE_LABELS } from "@/modules/settings/types";
-
-interface NavItem {
-  href: string;
-  label: string;
-  permission: PermissionKey;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "الرئيسية", permission: "dashboard.view" },
-  { href: "/vouchers", label: "السندات", permission: "vouchers.view" },
-  { href: "/invoices", label: "الفواتير", permission: "invoices.view" },
-  { href: "/materials", label: "المواد", permission: "materials.view" },
-  { href: "/accounts", label: "دليل الحسابات", permission: "accounts.view" },
-  { href: "/currencies", label: "العملات", permission: "currencies.view" },
-  { href: "/cost-centers", label: "مراكز الكلفة", permission: "cost_centers.view" },
-  { href: "/customers", label: "العملاء", permission: "customers.view" },
-  { href: "/vendors", label: "الموردين", permission: "vendors.view" },
-  {
-    href: "/open-movements",
-    label: "الحركات المفتوحة",
-    permission: "open_movements.view",
-  },
-  { href: "/journals", label: "قيود اليومية", permission: "journals.view" },
-  { href: "/reports", label: "التقارير", permission: "reports.view" },
-  { href: "/settings", label: "الإعدادات", permission: "settings.company.view" },
-];
-
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -83,10 +55,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, isLoading, authDisabled, canAccessRoute, router]);
 
-  const visibleNavItems = useMemo(
+  const visibleNavSections = useMemo(
     () =>
-      NAV_ITEMS.filter(
-        (item) => authDisabled || hasPermission(item.permission),
+      APP_NAV_SECTIONS.filter(
+        (section) => authDisabled || hasPermission(section.permission),
       ),
     [authDisabled, hasPermission],
   );
@@ -102,92 +74,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const activeLabel =
-    visibleNavItems.find((item) => isActive(pathname, item.href))?.label ??
-    "شاشة";
+    visibleNavSections.find((section) => isNavSectionActive(pathname, section))
+      ?.label ?? "شاشة";
 
   return (
-    <div className="h-screen w-full bg-[var(--background)] text-[var(--foreground)]">
-      <div className="grid h-screen w-full grid-cols-1 lg:grid-cols-[252px_minmax(0,1fr)]">
-        <aside className="flex max-h-[40vh] flex-col border-b border-[var(--brand-border)] bg-[var(--brand-navy)] lg:max-h-none lg:border-b-0 lg:border-l">
-          <div className="border-b border-white/10 p-3">
-            <div className="flex items-center gap-2.5">
-              <CompanyLogo
-                companyName={companyName}
-                logoUrl={companyLogoUrl}
-                size="sm"
-                className="border-white/20 bg-white/10"
-              />
-              <div className="min-w-0 flex-1">
-                <h1 className="truncate text-sm font-bold text-white">{companyName}</h1>
-                <p className="text-[10px] text-white/60">{APP_BRANDING.productTaglineAr}</p>
-              </div>
+    <div className="flex h-screen w-full flex-col bg-[var(--background)] text-[var(--foreground)]">
+      <header className="app-top-nav shrink-0 border-b border-[var(--brand-border)] bg-[var(--brand-navy)] shadow-md">
+        <div className="flex items-center gap-3 border-b border-white/10 px-3 py-2">
+          <div className="flex shrink-0 items-center gap-2">
+            <CompanyLogo
+              companyName={companyName}
+              logoUrl={companyLogoUrl}
+              size="sm"
+              className="border-white/20 bg-white/10"
+            />
+            <div className="hidden min-w-0 sm:block">
+              <p className="truncate text-sm font-bold text-white">{companyName}</p>
+              <p className="text-[10px] text-white/60">
+                {APP_BRANDING.productTaglineAr}
+              </p>
             </div>
           </div>
 
-          <nav className="flex-1 overflow-y-auto p-2">
-            <div className="grid gap-0.5">
-              {visibleNavItems.map((item) => {
-                const active = isActive(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`rounded-md px-2.5 py-2 text-sm font-medium transition ${
-                      active
-                        ? "bg-[var(--brand-gold)] text-[var(--brand-navy)] shadow-sm"
-                        : "text-white/85 hover:bg-white/10 hover:text-white"
-                    }`}
+          <HorizontalNav />
+
+          <div className="shrink-0 text-left text-xs text-white/90">
+            {!isLoading && profile && (
+              <div className="grid gap-0.5 text-right">
+                <p className="max-w-[140px] truncate font-medium text-white">
+                  {profile.full_name_ar}
+                </p>
+                <p className="text-[10px] text-white/60">
+                  {ROLE_LABELS[profile.role]}
+                  {authDisabled && " · بدون مصادقة"}
+                </p>
+                {!authDisabled && (
+                  <button
+                    type="button"
+                    onClick={() => void onSignOut()}
+                    className="justify-self-end text-[10px] text-[var(--brand-gold-light)] hover:underline"
                   >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </nav>
-
-          <div className="hidden border-t border-white/10 bg-[var(--brand-navy-light)] p-3 lg:block">
-            <AppBrandFooter compact theme="dark" className="border-none pt-0" />
+                    خروج
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-        </aside>
-
-        <div className="flex h-full min-w-0 flex-col overflow-hidden">
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--brand-border)] bg-white px-4 py-3 shadow-sm">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                {APP_BRANDING.productNameAr}
-              </p>
-              <p className="text-base font-semibold text-[var(--brand-navy)]">
-                {activeLabel}
-              </p>
-            </div>
-
-            <div className="text-left text-xs text-slate-600">
-              {!isLoading && profile && (
-                <div className="grid gap-0.5 text-right">
-                  <p className="font-medium text-slate-800">{profile.full_name_ar}</p>
-                  <p className="text-slate-500">
-                    {ROLE_LABELS[profile.role]}
-                    {authDisabled && " · وضع بدون مصادقة"}
-                  </p>
-                  {!authDisabled && (
-                    <button
-                      type="button"
-                      onClick={() => void onSignOut()}
-                      className="justify-self-end text-[var(--brand-navy)] hover:text-[var(--brand-gold)] hover:underline"
-                    >
-                      تسجيل الخروج
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </header>
-
-          <AppUpdateModal />
-
-          <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">{children}</div>
         </div>
+      </header>
+
+      <QuickShortcutsBar />
+
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--brand-border)] bg-white px-4 py-2 shadow-sm">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+            {APP_BRANDING.productNameAr}
+          </p>
+          <p className="text-sm font-semibold text-[var(--brand-navy)]">
+            {activeLabel}
+          </p>
+        </div>
+        <p className="hidden text-[10px] text-slate-400 md:block">
+          القوائم تُفتح في تبويب متصفح منفصل
+        </p>
       </div>
+
+      <AppUpdateModal />
+
+      <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">{children}</div>
     </div>
   );
 }

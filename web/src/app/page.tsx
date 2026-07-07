@@ -127,59 +127,10 @@ export default function Home() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">اختصارات سريعة</h2>
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/vouchers"
-            className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            قائمة السندات
-          </Link>
-          <Link
-            href="/vouchers/new"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-          >
-            سند جديد
-          </Link>
-          <Link
-            href="/accounts"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-          >
-            دليل الحسابات
-          </Link>
-          <Link
-            href="/customers"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-          >
-            العملاء
-          </Link>
-          <Link
-            href="/vendors"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-          >
-            الموردين
-          </Link>
-          <Link
-            href="/open-movements"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-          >
-            الحركات المفتوحة
-          </Link>
-          <Link
-            href="/journals"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-          >
-            قيود اليومية
-          </Link>
-          <Link
-            href="/reports"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800"
-          >
-            التقارير
-          </Link>
-        </div>
-      </section>
+      <p className="text-sm text-slate-500">
+        اختصارات الوصول السريع متوفرة في الشريط العلوي — يمكنك تعديلها وإضافتها
+        من زر «تعديل».
+      </p>
     </main>
   );
 }

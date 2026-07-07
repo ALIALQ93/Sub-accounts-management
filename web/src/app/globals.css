@@ -46,7 +46,7 @@ body {
 }
 
 @media print {
-  aside,
+  .app-top-nav,
   header,
   .no-print {
     display: none !important;
