@@ -8,7 +8,8 @@ interface ReportsNavProps {
     | "receivables-aging"
     | "inventory-balance"
     | "cogs"
-    | "inventory-movements";
+    | "inventory-movements"
+    | "purchase-lines";
 }
 
 export function ReportsNav({ active = "hub" }: ReportsNavProps) {
@@ -56,6 +57,12 @@ export function ReportsNav({ active = "hub" }: ReportsNavProps) {
         className={itemClass(active === "inventory-movements")}
       >
         ملخص الحركات
+      </Link>
+      <Link
+        href="/reports/purchase-lines"
+        className={itemClass(active === "purchase-lines")}
+      >
+        المشتريات
       </Link>
     </nav>
   );

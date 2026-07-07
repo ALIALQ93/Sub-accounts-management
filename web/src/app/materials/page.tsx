@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialsNav } from "@/modules/materials/components/materials-nav";
+import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
 import { materialApi } from "@/modules/materials/services/material-api";
 import type { MaterialListItem } from "@/modules/materials/types";
 
@@ -61,6 +62,8 @@ export default function MaterialsPage() {
     <main className="mx-auto w-full max-w-6xl">
       <h1 className="mb-4 text-2xl font-bold text-slate-900">المواد والمستودعات</h1>
       <MaterialsNav />
+
+      <InventoryShortageAlert />
 
       <section className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

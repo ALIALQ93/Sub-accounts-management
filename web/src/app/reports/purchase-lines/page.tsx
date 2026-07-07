@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "@/components/export-csv-button";
 import { PrintReportButton } from "@/components/print-report-button";
@@ -9,13 +10,14 @@ import { warehouseApi } from "@/modules/materials/services/warehouse-api";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   COMMERCIAL_KIND_LABELS,
-  inventoryReportApi,
-  MOVEMENT_KIND_LABELS,
-  type InventoryMovementSummaryRow,
-} from "@/modules/reports/services/inventory-report-api";
+  purchaseLinesReportApi,
+  type PurchaseLineReportRow,
+} from "@/modules/reports/services/purchase-lines-report-api";
+import { voucherApi } from "@/modules/vouchers/services/voucher-api";
+import type { Vendor } from "@/modules/vouchers/types";
 
-export default function InventoryMovementsReportPage() {
-  const [rows, setRows] = useState<InventoryMovementSummaryRow[]>([]);
+export default function PurchaseLinesReportPage() {
+  const [rows, setRows] = useState<PurchaseLineReportRow[]>([]);
   const [materials, setMaterials] = useState<
     Awaited<ReturnType<typeof materialApi.listMaterials>>
   >([]);
@@ -23,14 +25,18 @@ export default function InventoryMovementsReportPage() {
     Awaited<ReturnType<typeof warehouseApi.listWarehouses>>
   >([]);
   const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [vendorId, setVendorId] = useState("");
   const [materialId, setMaterialId] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [branchId, setBranchId] = useState("");
+  const [includeReturns, setIncludeReturns] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,12 +44,14 @@ export default function InventoryMovementsReportPage() {
       materialApi.listMaterials(),
       warehouseApi.listWarehouses(),
       branchApi.listBranchOptions(),
+      voucherApi.listVendors(),
     ])
-      .then(([materialsData, warehousesData, branchesData]) => {
+      .then(([materialsData, warehousesData, branchesData, vendorsData]) => {
         if (!cancelled) {
           setMaterials(materialsData);
           setWarehouses(warehousesData);
           setBranches(branchesData);
+          setVendors(vendorsData);
         }
       })
       .catch(() => undefined);
@@ -57,22 +65,22 @@ export default function InventoryMovementsReportPage() {
     setIsLoading(true);
     setError("");
 
-    void inventoryReportApi
-      .listMovementSummary({
+    void purchaseLinesReportApi
+      .listRows({
         fromDate: fromDate || undefined,
         toDate: toDate || undefined,
+        vendorId: vendorId || undefined,
         materialId: materialId || undefined,
         warehouseId: warehouseId || undefined,
         branchId: branchId || undefined,
+        includeReturns,
       })
       .then((data) => {
         if (!cancelled) setRows(data);
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "فشل تحميل ملخص الحركات.",
-          );
+          setError(err instanceof Error ? err.message : "فشل تحميل تقرير المشتريات.");
         }
       })
       .finally(() => {
@@ -82,74 +90,86 @@ export default function InventoryMovementsReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [fromDate, toDate, materialId, warehouseId, branchId]);
+  }, [
+    fromDate,
+    toDate,
+    vendorId,
+    materialId,
+    warehouseId,
+    branchId,
+    includeReturns,
+  ]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (row) =>
+        row.invoice_no.toLowerCase().includes(q) ||
+        row.material_code.toLowerCase().includes(q) ||
+        row.material_name_ar.toLowerCase().includes(q) ||
+        row.vendor_name_ar.toLowerCase().includes(q),
+    );
+  }, [rows, query]);
 
   const totals = useMemo(
-    () =>
-      rows.reduce(
-        (acc, row) => ({
-          movement_count: acc.movement_count + row.movement_count,
-          quantity_in_base: acc.quantity_in_base + row.quantity_in_base,
-          quantity_out_base: acc.quantity_out_base + row.quantity_out_base,
-          total_value: acc.total_value + row.total_value,
-        }),
-        {
-          movement_count: 0,
-          quantity_in_base: 0,
-          quantity_out_base: 0,
-          total_value: 0,
-        },
-      ),
-    [rows],
+    () => purchaseLinesReportApi.summarize(filtered),
+    [filtered],
   );
 
   const csvRows = useMemo(
     () =>
-      rows.map((row) => [
+      filtered.map((row) => [
+        row.invoice_no,
+        row.invoice_date,
         COMMERCIAL_KIND_LABELS[row.commercial_kind] ?? row.commercial_kind,
-        MOVEMENT_KIND_LABELS[row.movement_kind] ?? row.movement_kind,
-        row.source_type,
-        row.movement_count,
-        row.quantity_in_base.toFixed(4),
-        row.quantity_out_base.toFixed(4),
-        row.total_value.toFixed(2),
+        row.vendor_name_ar,
+        row.material_code,
+        row.warehouse_code,
+        row.quantity_base.toFixed(4),
+        row.unit_price.toFixed(4),
+        row.discount_amount.toFixed(2),
+        row.line_amount.toFixed(2),
       ]),
-    [rows],
+    [filtered],
   );
 
   return (
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="no-print flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">ملخص حركات المخزون</h1>
+          <h1 className="text-2xl font-bold text-slate-900">تقرير المشتريات التفصيلي</h1>
           <p className="mt-1 text-sm text-slate-600">
-            مجمّع per نوع حركة ونوع فاتورة (مبيعات، مشتريات، مناقلة، تسوية…).
+            أسطر فواتير مشتريات ومرتجع مشتريات وبضاعة أول المدة — مرحّلة فقط.
           </p>
         </div>
-        <div className="no-print flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <PrintReportButton
-            documentTitle="ملخص حركات المخزون"
-            disabled={isLoading || rows.length === 0}
+            documentTitle="تقرير المشتريات"
+            disabled={isLoading || filtered.length === 0}
           />
-        <ExportCsvButton
-          filename="inventory-movements-summary"
-          headers={[
-            "نوع الفاتورة/المصدر",
-            "نوع الحركة",
-            "مصدر السجل",
-            "عدد الحركات",
-            "كمية وارد",
-            "كمية صادر",
-            "قيمة",
-          ]}
-          rows={csvRows}
-          disabled={isLoading || rows.length === 0}
-        />
+          <ExportCsvButton
+            filename="purchase-lines"
+            headers={[
+              "فاتورة",
+              "تاريخ",
+              "النوع",
+              "مورد",
+              "مادة",
+              "مستودع",
+              "كمية",
+              "سعر",
+              "خصم",
+              "مبلغ",
+            ]}
+            rows={csvRows}
+            disabled={isLoading || filtered.length === 0}
+          />
         </div>
       </div>
 
       <div className="no-print">
-      <ReportsNav active="inventory-movements" />
+        <ReportsNav active="purchase-lines" />
       </div>
 
       <section className="no-print flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4">
@@ -170,6 +190,21 @@ export default function InventoryMovementsReportPage() {
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
           />
+        </label>
+        <label className="flex min-w-[180px] flex-col gap-1 text-sm">
+          <span className="font-medium text-slate-700">المورد</span>
+          <select
+            className="rounded-md border border-slate-300 px-3 py-2"
+            value={vendorId}
+            onChange={(e) => setVendorId(e.target.value)}
+          >
+            <option value="">الكل</option>
+            {vendors.map((vendor) => (
+              <option key={vendor.id} value={vendor.id}>
+                {vendor.name_ar}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="flex min-w-[180px] flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">المادة</span>
@@ -216,73 +251,107 @@ export default function InventoryMovementsReportPage() {
             ))}
           </select>
         </label>
+        <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-sm">
+          <span className="font-medium text-slate-700">بحث</span>
+          <input
+            className="rounded-md border border-slate-300 px-3 py-2"
+            placeholder="فاتورة، مادة، مورد..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <label className="flex items-end gap-2 pb-2 text-sm">
+          <input
+            type="checkbox"
+            checked={includeReturns}
+            onChange={(e) => setIncludeReturns(e.target.checked)}
+          />
+          <span>تضمين مرتجع المشتريات</span>
+        </label>
       </section>
 
-      {!isLoading && rows.length > 0 && (
+      {!isLoading && filtered.length > 0 && (
         <section className="grid gap-3 sm:grid-cols-4">
-          <SummaryCard label="عدد الحركات" value={String(totals.movement_count)} />
+          <SummaryCard label="عدد الأسطر" value={String(totals.line_count)} />
           <SummaryCard
-            label="إجمالي وارد (أساس)"
-            value={totals.quantity_in_base.toFixed(4)}
+            label="إجمالي كمية"
+            value={totals.quantity_base.toFixed(4)}
           />
-          <SummaryCard
-            label="إجمالي صادر (أساس)"
-            value={totals.quantity_out_base.toFixed(4)}
-          />
-          <SummaryCard label="إجمالي قيمة" value={totals.total_value.toFixed(2)} />
+          <SummaryCard label="إجمالي خصم" value={totals.discount_amount.toFixed(2)} />
+          <SummaryCard label="إجمالي مبلغ" value={totals.line_amount.toFixed(2)} />
         </section>
       )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="mb-3 hidden text-lg font-bold print:block">
+          تقرير المشتريات التفصيلي
+        </h2>
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
         {!isLoading && error && <p className="text-sm text-rose-700">{error}</p>}
-        {!isLoading && !error && rows.length === 0 && (
+        {!isLoading && !error && filtered.length === 0 && (
           <p className="text-sm text-slate-600">
-            لا توجد حركات في الفترة — أو شغّل{" "}
-            <code className="text-xs">patch_inventory_phase5.sql</code>.
+            لا توجد أسطر مطابقة — أو شغّل{" "}
+            <code className="text-xs">patch_inventory_phase6.sql</code>.
           </p>
         )}
-        {!isLoading && !error && rows.length > 0 && (
+        {!isLoading && !error && filtered.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] border-collapse text-sm">
+            <table className="w-full min-w-[1080px] border-collapse text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-right text-slate-700">
-                  <th className="border-b border-slate-200 p-2">نوع الفاتورة/المصدر</th>
-                  <th className="border-b border-slate-200 p-2">نوع الحركة</th>
-                  <th className="border-b border-slate-200 p-2">مصدر السجل</th>
-                  <th className="border-b border-slate-200 p-2">عدد</th>
-                  <th className="border-b border-slate-200 p-2">وارد</th>
-                  <th className="border-b border-slate-200 p-2">صادر</th>
-                  <th className="border-b border-slate-200 p-2">قيمة</th>
+                  <th className="border-b border-slate-200 p-2">فاتورة</th>
+                  <th className="border-b border-slate-200 p-2">تاريخ</th>
+                  <th className="border-b border-slate-200 p-2">النوع</th>
+                  <th className="border-b border-slate-200 p-2">مورد</th>
+                  <th className="border-b border-slate-200 p-2">مادة</th>
+                  <th className="border-b border-slate-200 p-2">مستودع</th>
+                  <th className="border-b border-slate-200 p-2">كمية</th>
+                  <th className="border-b border-slate-200 p-2">سعر</th>
+                  <th className="border-b border-slate-200 p-2">خصم</th>
+                  <th className="border-b border-slate-200 p-2">مبلغ</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {filtered.map((row) => (
                   <tr
-                    key={`${row.commercial_kind}-${row.movement_kind}-${row.source_type}`}
+                    key={`${row.invoice_id}-${row.material_id}-${row.warehouse_code}-${row.quantity_base}`}
                     className="odd:bg-white even:bg-slate-50/60"
                   >
+                    <td className="border-b border-slate-100 p-2">
+                      <Link
+                        href={`/invoices/${row.invoice_id}`}
+                        className="font-mono text-xs text-blue-800 underline print:text-black print:no-underline"
+                      >
+                        {row.invoice_no}
+                      </Link>
+                    </td>
+                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                      {row.invoice_date}
+                    </td>
                     <td className="border-b border-slate-100 p-2 text-xs">
                       {COMMERCIAL_KIND_LABELS[row.commercial_kind] ??
                         row.commercial_kind}
                     </td>
                     <td className="border-b border-slate-100 p-2 text-xs">
-                      {MOVEMENT_KIND_LABELS[row.movement_kind] ?? row.movement_kind}
+                      {row.vendor_name_ar}
+                    </td>
+                    <td className="border-b border-slate-100 p-2">
+                      <span className="font-mono text-xs">{row.material_code}</span>
                     </td>
                     <td className="border-b border-slate-100 p-2 font-mono text-xs">
-                      {row.source_type}
+                      {row.warehouse_code}
                     </td>
                     <td className="border-b border-slate-100 p-2 font-mono text-xs">
-                      {row.movement_count}
+                      {row.quantity_base.toFixed(4)}
                     </td>
                     <td className="border-b border-slate-100 p-2 font-mono text-xs">
-                      {row.quantity_in_base.toFixed(4)}
+                      {row.unit_price.toFixed(4)}
                     </td>
                     <td className="border-b border-slate-100 p-2 font-mono text-xs">
-                      {row.quantity_out_base.toFixed(4)}
+                      {row.discount_amount.toFixed(2)}
                     </td>
                     <td className="border-b border-slate-100 p-2 font-mono text-xs">
-                      {row.total_value.toFixed(2)}
+                      {row.line_amount.toFixed(2)}
                     </td>
                   </tr>
                 ))}

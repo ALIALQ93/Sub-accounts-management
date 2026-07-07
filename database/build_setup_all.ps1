@@ -23,7 +23,8 @@ $patchFiles = @(
     'patch_inventory_phase2.sql',
     'patch_inventory_phase3.sql',
     'patch_inventory_phase4.sql',
-    'patch_inventory_phase5.sql'
+    'patch_inventory_phase5.sql',
+    'patch_inventory_phase6.sql'
 )
 
 $out = Join-Path $here 'setup_all.sql'

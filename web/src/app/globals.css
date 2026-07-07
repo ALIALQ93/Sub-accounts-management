@@ -44,3 +44,38 @@ body {
     transform: translateY(0) scale(1);
   }
 }
+
+@media print {
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  .h-screen,
+  .overflow-hidden,
+  .overflow-y-auto {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .report-print-area {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .report-print-area table {
+    font-size: 10px;
+  }
+
+  .report-print-area th,
+  .report-print-area td {
+    padding: 4px !important;
+  }
+}

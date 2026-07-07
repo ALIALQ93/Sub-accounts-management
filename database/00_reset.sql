@@ -94,6 +94,7 @@ drop function if exists public.post_stock_adjustment_batch(jsonb, uuid, uuid, da
 drop function if exists public.get_inventory_analysis(date, numeric, int, uuid, uuid) cascade;
 drop function if exists public.get_cogs_report(date, date, uuid, uuid, uuid, varchar) cascade;
 drop function if exists public.get_inventory_movements_summary(date, date, uuid, uuid, uuid) cascade;
+drop function if exists public.get_purchase_lines_report(date, date, uuid, uuid, uuid, uuid, boolean) cascade;
 drop function if exists public.assert_accounting_period_open(date, uuid) cascade;
 drop function if exists public.get_open_items(uuid, uuid, varchar, uuid, varchar, uuid, boolean, boolean) cascade;
 drop function if exists public.post_invoice(uuid) cascade;

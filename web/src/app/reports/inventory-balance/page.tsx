@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "@/components/export-csv-button";
+import { PrintReportButton } from "@/components/print-report-button";
 import { branchApi, type BranchOption } from "@/modules/branches/services/branch-api";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { warehouseMaterialLimitsApi } from "@/modules/materials/services/warehouse-material-limits-api";
@@ -21,7 +23,21 @@ import {
 type ViewMode = "balance" | "ledger" | "analysis";
 
 export default function InventoryBalanceReportPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>("balance");
+  return (
+    <Suspense fallback={<p className="p-4 text-sm text-slate-600">جاري التحميل...</p>}>
+      <InventoryBalanceReportContent />
+    </Suspense>
+  );
+}
+
+function InventoryBalanceReportContent() {
+  const searchParams = useSearchParams();
+  const initialView = searchParams.get("view");
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    initialView === "analysis" || initialView === "ledger"
+      ? initialView
+      : "balance",
+  );
   const [balanceRows, setBalanceRows] = useState<InventoryBalanceRow[]>([]);
   const [ledgerRows, setLedgerRows] = useState<InventoryMovementLedgerRow[]>([]);
   const [analysisRows, setAnalysisRows] = useState<InventoryAnalysisRow[]>([]);
@@ -288,7 +304,7 @@ export default function InventoryBalanceReportPage() {
   }, [viewMode, filteredBalance, filteredLedger, filteredAnalysis]);
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
+    <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
         <h1 className="text-2xl font-bold text-slate-900">رصيد المخزون</h1>
@@ -305,17 +321,25 @@ export default function InventoryBalanceReportPage() {
           .
         </p>
         </div>
+        <div className="no-print flex flex-wrap gap-2">
+          <PrintReportButton
+            documentTitle="رصيد المخزون"
+            disabled={isLoading}
+          />
         <ExportCsvButton
           filename={exportConfig.filename}
           headers={exportConfig.headers}
           rows={exportConfig.rows}
           disabled={isLoading}
         />
+        </div>
       </div>
 
+      <div className="no-print">
       <ReportsNav active="inventory-balance" />
+      </div>
 
-      <section className="flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="no-print flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">العرض</span>
           <select

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
+import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
 
 type ReportStatus = "available" | "soon";
 
@@ -44,6 +45,13 @@ const REPORTS: ReportCard[] = [
     description: "اطعام، تغذية، انشائية… حسب PAY/RCP وكميات التصنيف.",
     status: "soon",
     phase: "المرحلة 2",
+  },
+  {
+    title: "تقرير المشتريات التفصيلي",
+    description: "أسطر فواتير مشتريات ومرتجع وبضاعة أول المدة — مرحّلة.",
+    href: "/reports/purchase-lines",
+    status: "available",
+    phase: "جاهز",
   },
   {
     title: "ملخص حركات المخزون",
@@ -91,6 +99,12 @@ const REPORTS: ReportCard[] = [
     phase: "المرحلة 3",
   },
   {
+    title: "طباعة / PDF",
+    description: "طباعة التقارير أو حفظها PDF من المتصفح — متاح في تقارير المخزون.",
+    status: "available",
+    phase: "جاهز",
+  },
+  {
     title: "تصدير Excel (CSV)",
     description: "تصدير CSV من تقارير المخزون وCOGS وملخص الحركات — يفتح في Excel.",
     status: "available",
@@ -98,7 +112,7 @@ const REPORTS: ReportCard[] = [
   },
   {
     title: "تصدير PDF",
-    description: "طباعة وتصدير PDF للتقارير — قريباً.",
+    description: "قوالب PDF مخصّصة — قريباً (الطباعة من المتصفح متاحة الآن).",
     status: "soon",
     phase: "المرحلة 3",
   },
@@ -119,6 +133,8 @@ export default function ReportsHubPage() {
       </div>
 
       <ReportsNav active="hub" />
+
+      <InventoryShortageAlert />
 
       <section className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
         <p className="font-semibold">مقارنة في تبويبين</p>

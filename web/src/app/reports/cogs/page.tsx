@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "@/components/export-csv-button";
+import { PrintReportButton } from "@/components/print-report-button";
 import { branchApi, type BranchOption } from "@/modules/branches/services/branch-api";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
@@ -115,7 +116,7 @@ export default function CogsReportPage() {
   );
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
+    <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
         <h1 className="text-2xl font-bold text-slate-900">تكلفة المبيعات (COGS)</h1>
@@ -125,6 +126,11 @@ export default function CogsReportPage() {
           للجرد المستمر.
         </p>
         </div>
+        <div className="no-print flex flex-wrap gap-2">
+          <PrintReportButton
+            documentTitle="تكلفة المبيعات"
+            disabled={isLoading || filtered.length === 0}
+          />
         <ExportCsvButton
           filename="cogs-report"
           headers={[
@@ -141,11 +147,14 @@ export default function CogsReportPage() {
           rows={csvRows}
           disabled={isLoading || filtered.length === 0}
         />
+        </div>
       </div>
 
+      <div className="no-print">
       <ReportsNav active="cogs" />
+      </div>
 
-      <section className="flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="no-print flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4">
         <label className="flex flex-col gap-1 text-sm">
           <span className="font-medium text-slate-700">من</span>
           <input

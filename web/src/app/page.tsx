@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { DashboardStats } from "@/modules/vouchers/types";
 
@@ -60,6 +61,8 @@ export default function Home() {
           {error}
         </div>
       )}
+
+      <InventoryShortageAlert />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
