@@ -1,3 +1,4 @@
+import { formatDbError } from "@/lib/supabase/format-db-error";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 export function formatSupabaseErrorMessage(error: PostgrestError): string {
@@ -16,5 +17,5 @@ export function formatSupabaseErrorMessage(error: PostgrestError): string {
     return `${combined} — قد تحتاج لتشغيل ملفات الترقية (patch) على قاعدة Supabase.`;
   }
 
-  return combined;
+  return formatDbError(combined);
 }

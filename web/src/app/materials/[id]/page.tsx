@@ -25,6 +25,7 @@ function toFormValues(material: Material): MaterialFormValues {
     purchase_price: material.purchase_price,
     sale_price: material.sale_price,
     inventory_account_id: material.inventory_account_id ?? "",
+    min_stock: material.min_stock,
     is_active: material.is_active,
   };
 }

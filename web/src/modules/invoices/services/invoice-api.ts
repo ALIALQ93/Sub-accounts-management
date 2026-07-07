@@ -1,6 +1,7 @@
 "use client";
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { errorFromSupabase } from "@/lib/supabase/format-db-error";
 import type {
   InvoiceAccountLine,
   InvoiceDetail,
@@ -13,9 +14,7 @@ import type { InvoicePattern } from "@/modules/invoices/types";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 function throwIfSupabaseError(error: PostgrestError | null): void {
-  if (error) {
-    throw new Error(error.message || "حدث خطأ غير متوقع من قاعدة البيانات.");
-  }
+  if (error) throw errorFromSupabase(error);
 }
 
 export interface InvoiceMaterialLineInput {

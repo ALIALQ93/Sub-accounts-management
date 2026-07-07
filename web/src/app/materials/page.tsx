@@ -96,6 +96,7 @@ export default function MaterialsPage() {
                   <th className="border-b border-slate-200 p-2">الصنف</th>
                   <th className="border-b border-slate-200 p-2">شراء</th>
                   <th className="border-b border-slate-200 p-2">بيع</th>
+                  <th className="border-b border-slate-200 p-2">حد أدنى</th>
                   <th className="border-b border-slate-200 p-2">الحالة</th>
                   {(canEdit || canCreate) && (
                     <th className="border-b border-slate-200 p-2">إجراء</th>
@@ -124,6 +125,9 @@ export default function MaterialsPage() {
                     </td>
                     <td className="border-b border-slate-100 p-2 font-mono text-xs">
                       {material.sale_price.toFixed(4)}
+                    </td>
+                    <td className="border-b border-slate-100 p-2 font-mono text-xs">
+                      {material.min_stock > 0 ? material.min_stock.toFixed(4) : "—"}
                     </td>
                     <td className="border-b border-slate-100 p-2 text-xs">
                       {material.is_active ? (

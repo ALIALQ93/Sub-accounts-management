@@ -150,6 +150,8 @@ begin
     raise exception 'Cannot post cancelled invoice.';
   end if;
 
+  perform public.assert_accounting_period_open(v_inv.invoice_date, v_inv.branch_id);
+
   select * into v_pat from public.invoice_patterns where id = v_inv.pattern_id;
   select * into v_inv_settings from public.company_inventory_settings where id = 1;
 

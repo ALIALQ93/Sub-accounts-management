@@ -238,6 +238,26 @@ export function MaterialForm({
               className="rounded-md border border-slate-300 px-3 py-2 font-mono"
             />
           </label>
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium">حد أدنى للمخزون (وحدة أساس)</span>
+            <input
+              type="number"
+              min={0}
+              step="0.0001"
+              value={values.min_stock}
+              onChange={(event) =>
+                setValues((current) => ({
+                  ...current,
+                  min_stock: Number(event.target.value),
+                }))
+              }
+              disabled={!canEdit || isSaving}
+              className="rounded-md border border-slate-300 px-3 py-2 font-mono"
+            />
+            <span className="text-xs text-slate-500">
+              يُستخدم في تقرير النواقص — صفر يعني الاعتماد على الحد العام.
+            </span>
+          </label>
           <div className="grid gap-1 text-sm md:col-span-2">
             <span className="font-medium">حساب المخزون</span>
             <AccountSearchField

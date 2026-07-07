@@ -46,6 +46,30 @@ const REPORTS: ReportCard[] = [
     phase: "المرحلة 2",
   },
   {
+    title: "ملخص حركات المخزون",
+    description:
+      "تجميع per نوع حركة ونوع فاتورة — مشتريات، مبيعات، مناقلة، تسوية.",
+    href: "/reports/inventory-movements",
+    status: "available",
+    phase: "جاهز",
+  },
+  {
+    title: "تكلفة المبيعات (COGS)",
+    description:
+      "تكلفة وإيراد المبيعات من حركات الفواتير المرحّلة — sale و return_sale.",
+    href: "/reports/cogs",
+    status: "available",
+    phase: "جاهز",
+  },
+  {
+    title: "رصيد المخزون",
+    description:
+      "كميات وقيم per مادة/مستودع + دفتر حركة — من inventory_movements.",
+    href: "/reports/inventory-balance",
+    status: "available",
+    phase: "جاهز",
+  },
+  {
     title: "أعمار الذمم",
     description:
       "حركات مفتوحة حسب تاريخ الاستحقاق — عملاء وموردون، مرتبط بفواتير آجل.",
@@ -67,8 +91,14 @@ const REPORTS: ReportCard[] = [
     phase: "المرحلة 3",
   },
   {
-    title: "تصدير PDF / Excel",
-    description: "طباعة وتصدير التقارير للأرشفة والمشاركة.",
+    title: "تصدير Excel (CSV)",
+    description: "تصدير CSV من تقارير المخزون وCOGS وملخص الحركات — يفتح في Excel.",
+    status: "available",
+    phase: "جاهز",
+  },
+  {
+    title: "تصدير PDF",
+    description: "طباعة وتصدير PDF للتقارير — قريباً.",
     status: "soon",
     phase: "المرحلة 3",
   },

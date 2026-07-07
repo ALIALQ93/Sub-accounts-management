@@ -1,7 +1,14 @@
 import Link from "next/link";
 
 interface ReportsNavProps {
-  active?: "hub" | "trial-balance" | "account-statement" | "receivables-aging";
+  active?:
+    | "hub"
+    | "trial-balance"
+    | "account-statement"
+    | "receivables-aging"
+    | "inventory-balance"
+    | "cogs"
+    | "inventory-movements";
 }
 
 export function ReportsNav({ active = "hub" }: ReportsNavProps) {
@@ -34,6 +41,21 @@ export function ReportsNav({ active = "hub" }: ReportsNavProps) {
         className={itemClass(active === "receivables-aging")}
       >
         أعمار الذمم
+      </Link>
+      <Link
+        href="/reports/inventory-balance"
+        className={itemClass(active === "inventory-balance")}
+      >
+        رصيد المخزون
+      </Link>
+      <Link href="/reports/cogs" className={itemClass(active === "cogs")}>
+        تكلفة المبيعات
+      </Link>
+      <Link
+        href="/reports/inventory-movements"
+        className={itemClass(active === "inventory-movements")}
+      >
+        ملخص الحركات
       </Link>
     </nav>
   );

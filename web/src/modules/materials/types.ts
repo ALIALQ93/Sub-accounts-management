@@ -7,6 +7,7 @@ export interface Material {
   purchase_price: number;
   sale_price: number;
   inventory_account_id: string | null;
+  min_stock: number;
   is_active: boolean;
 }
 
@@ -23,6 +24,7 @@ export interface MaterialFormValues {
   purchase_price: number;
   sale_price: number;
   inventory_account_id: string;
+  min_stock: number;
   is_active: boolean;
 }
 

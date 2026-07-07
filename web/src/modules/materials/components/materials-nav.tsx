@@ -12,7 +12,9 @@ const NAV_ITEMS = [
       (path.startsWith("/materials/") &&
         !path.startsWith("/materials/categories") &&
         !path.startsWith("/materials/warehouses") &&
-        !path.startsWith("/materials/settings")),
+        !path.startsWith("/materials/warehouse-limits") &&
+        !path.startsWith("/materials/settings") &&
+        !path.startsWith("/materials/stock-adjustment")),
   },
   {
     href: "/materials/categories",
@@ -25,9 +27,25 @@ const NAV_ITEMS = [
     match: (path: string) => path.startsWith("/materials/warehouses"),
   },
   {
+    href: "/materials/warehouse-limits",
+    label: "حدود المخزون",
+    match: (path: string) => path.startsWith("/materials/warehouse-limits"),
+  },
+  {
     href: "/materials/settings",
     label: "إعدادات الجرد",
     match: (path: string) => path.startsWith("/materials/settings"),
+  },
+  {
+    href: "/materials/stock-adjustment/new",
+    label: "تسوية جرد",
+    match: (path: string) =>
+      path === "/materials/stock-adjustment/new",
+  },
+  {
+    href: "/materials/stock-adjustment/batch",
+    label: "تسوية مجمّعة",
+    match: (path: string) => path.startsWith("/materials/stock-adjustment/batch"),
   },
 ] as const;
 

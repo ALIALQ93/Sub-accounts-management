@@ -42,6 +42,7 @@ drop table if exists public.invoice_pattern_allowed_categories cascade;
 drop table if exists public.invoice_pattern_conditions cascade;
 drop table if exists public.invoice_pattern_sequences cascade;
 drop table if exists public.invoice_patterns cascade;
+drop table if exists public.warehouse_material_limits cascade;
 drop table if exists public.material_units cascade;
 drop table if exists public.materials cascade;
 drop table if exists public.material_categories cascade;
@@ -103,6 +104,14 @@ drop function if exists public.log_currency_rate_change(uuid, numeric, numeric, 
 drop function if exists public.update_currency_exchange_rate(uuid, numeric, date, text) cascade;
 drop function if exists public.get_currency_rate_at_date(uuid, date) cascade;
 drop function if exists public.get_trial_balance(date, date, uuid, uuid, boolean, uuid) cascade;
+drop function if exists public.get_inventory_balance(date, uuid, uuid, uuid, uuid, boolean) cascade;
+drop function if exists public.get_inventory_movement_ledger(date, date, uuid, uuid, uuid) cascade;
+drop function if exists public.post_stock_adjustment(uuid, uuid, numeric, uuid, uuid, date, text, uuid) cascade;
+drop function if exists public.post_stock_adjustment_batch(jsonb, uuid, uuid, date, text, uuid) cascade;
+drop function if exists public.get_inventory_analysis(date, numeric, int, uuid, uuid) cascade;
+drop function if exists public.get_cogs_report(date, date, uuid, uuid, uuid, varchar) cascade;
+drop function if exists public.get_inventory_movements_summary(date, date, uuid, uuid, uuid) cascade;
+drop function if exists public.assert_accounting_period_open(date, uuid) cascade;
 drop function if exists public.get_open_items(uuid, uuid, varchar, uuid, varchar, uuid, boolean, boolean) cascade;
 drop function if exists public.post_invoice(uuid) cascade;
 drop function if exists public.close_invoice_reference(uuid) cascade;
@@ -4695,6 +4704,8 @@ begin
     raise exception 'Cannot post cancelled invoice.';
   end if;
 
+  perform public.assert_accounting_period_open(v_inv.invoice_date, v_inv.branch_id);
+
   select * into v_pat from public.invoice_patterns where id = v_inv.pattern_id;
   select * into v_inv_settings from public.company_inventory_settings where id = 1;
 
@@ -5841,6 +5852,1838 @@ drop trigger if exists trg_accounting_periods_updated_at on public.accounting_pe
 create trigger trg_accounting_periods_updated_at
 before update on public.accounting_periods
 for each row execute function public.accounting_periods_set_updated_at();
+
+-- =============================================================================
+-- BEGIN patch_period_enforcement.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_period_enforcement.sql — قفل الفترة + قيود مقاصة CC/فرع عند الترحيل
+-- =============================================================================
+-- يتطلب: patch_accounting_periods.sql + patch_settlement_foundation.sql
+-- =============================================================================
+
+create or replace function public.assert_accounting_period_open(
+  p_entry_date date,
+  p_branch_id uuid default null
+)
+returns void
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_closed record;
+begin
+  if p_entry_date is null then
+    return;
+  end if;
+
+  select ap.period_code, ap.name_ar
+  into v_closed
+  from public.accounting_periods ap
+  where ap.is_active = true
+    and ap.status = 'closed'
+    and p_entry_date between ap.start_date and ap.end_date
+    and (
+      ap.branch_id is null
+      or (p_branch_id is not null and ap.branch_id = p_branch_id)
+    )
+  order by ap.branch_id nulls last
+  limit 1;
+
+  if found then
+    raise exception 'Accounting period % (%) is closed for date %.',
+      v_closed.period_code, v_closed.name_ar, p_entry_date;
+  end if;
+end;
+$$;
+
+comment on function public.assert_accounting_period_open(date, uuid) is
+  'يمنع الترحيل داخل فترة محاسبية مغلقة (عامة أو للفرع)';
+
+-- ---------------------------------------------------------------------------
+-- ترحيل السند + قيود مقاصة CC/فرع
+-- ---------------------------------------------------------------------------
+
+create or replace function public.vouchers_before_update_handle_posting()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_debit numeric(18,2);
+  v_credit numeric(18,2);
+  v_je_id uuid;
+  v_entry_no varchar(40);
+  v_allocation_count int;
+  v_unbalanced_cc int;
+  v_rate numeric(18,6);
+  v_netting record;
+begin
+  if old.status = 'posted' then
+    if public.is_force_voucher_delete() then
+      return new;
+    end if;
+
+    if not public.is_admin() then
+      raise exception 'Posted voucher cannot be modified. Use reversal instead.';
+    end if;
+
+    if new.status <> 'posted' then
+      raise exception 'Cannot change status of a posted voucher directly.';
+    end if;
+
+    if old.journal_entry_id is not null then
+      update public.journal_entries
+      set
+        entry_date = new.voucher_date,
+        description = coalesce(
+          new.description,
+          'Auto-posted from voucher ' || new.voucher_no
+        ),
+        branch_id = new.branch_id,
+        updated_at = now()
+      where id = old.journal_entry_id;
+    end if;
+
+    return new;
+  end if;
+
+  if new.status = 'posted' and old.status <> 'posted' then
+    perform public.assert_accounting_period_open(new.voucher_date, new.branch_id);
+
+    v_rate := coalesce(nullif(new.exchange_rate, 0), 1);
+
+    select
+      coalesce(sum(case when side = 'debit' then amount else 0 end), 0),
+      coalesce(sum(case when side = 'credit' then amount else 0 end), 0)
+    into v_debit, v_credit
+    from public.voucher_lines
+    where voucher_id = new.id;
+
+    if v_debit = 0 and v_credit = 0 then
+      raise exception 'Cannot post empty voucher.';
+    end if;
+
+    if v_debit <> v_credit then
+      raise exception 'Cannot post unbalanced voucher: debit (%) <> credit (%).', v_debit, v_credit;
+    end if;
+
+    if new.settlement_mode = 'invoice' then
+      select count(*)
+      into v_allocation_count
+      from public.voucher_allocations va
+      where va.voucher_id = new.id;
+
+      if v_allocation_count = 0 then
+        raise exception 'Invoice settlement voucher requires allocation rows.';
+      end if;
+    end if;
+
+    if new.voucher_type = 'settlement' then
+      if exists (
+        select 1
+        from public.voucher_lines vl
+        where vl.voucher_id = new.id
+          and vl.cost_center_id is null
+          and vl.amount > 0
+          and coalesce(vl.line_description, '') not like 'تصفية —%'
+      ) then
+        raise exception 'Settlement voucher lines require a cost center.';
+      end if;
+
+      select count(*)
+      into v_unbalanced_cc
+      from (
+        select
+          vl.cost_center_id,
+          coalesce(sum(case when vl.side = 'debit' then vl.amount else 0 end), 0) as debit_total,
+          coalesce(sum(case when vl.side = 'credit' then vl.amount else 0 end), 0) as credit_total
+        from public.voucher_lines vl
+        where vl.voucher_id = new.id
+          and vl.cost_center_id is not null
+        group by vl.cost_center_id
+      ) cc
+      where cc.debit_total <> cc.credit_total;
+
+      if v_unbalanced_cc > 0 then
+        raise exception 'Cannot post settlement voucher: cost centers must balance (debit = credit per cost center).';
+      end if;
+    end if;
+
+    if old.journal_entry_id is not null then
+      raise exception 'Voucher already posted with journal entry.';
+    end if;
+
+    v_entry_no := 'JE-' || new.voucher_no;
+
+    insert into public.journal_entries (
+      entry_no,
+      entry_date,
+      description,
+      status,
+      source_type,
+      source_id,
+      branch_id
+    )
+    values (
+      v_entry_no,
+      new.voucher_date,
+      coalesce(new.description, 'Auto-posted from voucher ' || new.voucher_no),
+      'posted',
+      'voucher',
+      new.id,
+      new.branch_id
+    )
+    returning id into v_je_id;
+
+    insert into public.journal_entry_lines (
+      journal_entry_id,
+      account_id,
+      debit,
+      credit,
+      line_description,
+      cost_center_id,
+      branch_id,
+      currency_id,
+      exchange_rate,
+      debit_base,
+      credit_base
+    )
+    select
+      v_je_id,
+      vl.account_id,
+      case when vl.side = 'debit' then vl.amount else 0 end as debit,
+      case when vl.side = 'credit' then vl.amount else 0 end as credit,
+      trim(both from concat_ws(
+        ' — ',
+        nullif(trim(vl.line_description), ''),
+        case
+          when vlc.name_ar is not null then
+            'نوع: ' || vlc.name_ar ||
+            case
+              when vl.category_quantity is not null and vl.category_quantity > 0 then
+                ' (' || coalesce(nullif(trim(vlc.quantity_label), ''), 'العدد') ||
+                ': ' || trim(trailing '.' from trim(trailing '0' from vl.category_quantity::text)) || ')'
+              else ''
+            end
+          else null
+        end
+      )),
+      vl.cost_center_id,
+      new.branch_id,
+      new.currency_id,
+      v_rate,
+      case when vl.side = 'debit' then public.to_base_amount(vl.amount, v_rate) else 0 end,
+      case when vl.side = 'credit' then public.to_base_amount(vl.amount, v_rate) else 0 end
+    from public.voucher_lines vl
+    left join public.voucher_line_categories vlc on vlc.id = vl.line_category_id
+    where vl.voucher_id = new.id;
+
+    for v_netting in
+      select *
+      from public.voucher_netting_lines vnl
+      where vnl.voucher_id = new.id
+        and vnl.amount > 0
+    loop
+      if v_netting.inter_account_id is null then
+        raise exception 'Netting line requires inter_account_id.';
+      end if;
+
+      if v_netting.netting_kind = 'cc' then
+        insert into public.journal_entry_lines (
+          journal_entry_id,
+          account_id,
+          debit,
+          credit,
+          line_description,
+          cost_center_id,
+          branch_id,
+          currency_id,
+          exchange_rate,
+          debit_base,
+          credit_base
+        )
+        values (
+          v_je_id,
+          v_netting.inter_account_id,
+          v_netting.amount,
+          0,
+          coalesce(v_netting.note, 'مقاصة CC — مدين'),
+          v_netting.to_cc_id,
+          new.branch_id,
+          new.currency_id,
+          v_rate,
+          public.to_base_amount(v_netting.amount, v_rate),
+          0
+        );
+
+        insert into public.journal_entry_lines (
+          journal_entry_id,
+          account_id,
+          debit,
+          credit,
+          line_description,
+          cost_center_id,
+          branch_id,
+          currency_id,
+          exchange_rate,
+          debit_base,
+          credit_base
+        )
+        values (
+          v_je_id,
+          v_netting.inter_account_id,
+          0,
+          v_netting.amount,
+          coalesce(v_netting.note, 'مقاصة CC — دائن'),
+          v_netting.from_cc_id,
+          new.branch_id,
+          new.currency_id,
+          v_rate,
+          0,
+          public.to_base_amount(v_netting.amount, v_rate)
+        );
+      elsif v_netting.netting_kind = 'branch' then
+        insert into public.journal_entry_lines (
+          journal_entry_id,
+          account_id,
+          debit,
+          credit,
+          line_description,
+          cost_center_id,
+          branch_id,
+          currency_id,
+          exchange_rate,
+          debit_base,
+          credit_base
+        )
+        values (
+          v_je_id,
+          v_netting.inter_account_id,
+          v_netting.amount,
+          0,
+          coalesce(v_netting.note, 'مقاصة فرع — مدين'),
+          null,
+          v_netting.to_branch_id,
+          new.currency_id,
+          v_rate,
+          public.to_base_amount(v_netting.amount, v_rate),
+          0
+        );
+
+        insert into public.journal_entry_lines (
+          journal_entry_id,
+          account_id,
+          debit,
+          credit,
+          line_description,
+          cost_center_id,
+          branch_id,
+          currency_id,
+          exchange_rate,
+          debit_base,
+          credit_base
+        )
+        values (
+          v_je_id,
+          v_netting.inter_account_id,
+          0,
+          v_netting.amount,
+          coalesce(v_netting.note, 'مقاصة فرع — دائن'),
+          null,
+          v_netting.from_branch_id,
+          new.currency_id,
+          v_rate,
+          0,
+          public.to_base_amount(v_netting.amount, v_rate)
+        );
+      end if;
+    end loop;
+
+    new.journal_entry_id := v_je_id;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- =============================================================================
+-- BEGIN patch_inventory_reports.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_inventory_reports.sql — تقارير مخزون + تسوية جردية
+-- =============================================================================
+-- يتطلب: patch_post_invoice.sql (inventory_movements)
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- رصيد مخزون per مادة/مستودع
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.get_inventory_balance(date, uuid, uuid, uuid, uuid, boolean) cascade;
+
+create or replace function public.get_inventory_balance(
+  p_as_of_date date default null,
+  p_material_id uuid default null,
+  p_warehouse_id uuid default null,
+  p_branch_id uuid default null,
+  p_category_id uuid default null,
+  p_hide_zero boolean default true
+)
+returns table (
+  material_id uuid,
+  material_code varchar,
+  material_name_ar varchar,
+  category_id uuid,
+  category_name_ar varchar,
+  warehouse_id uuid,
+  warehouse_code varchar,
+  warehouse_name_ar varchar,
+  branch_id uuid,
+  branch_code varchar,
+  quantity_base numeric,
+  inventory_value numeric,
+  unit_cost_avg numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with scoped_movements as (
+    select im.*
+    from public.inventory_movements im
+    inner join public.materials m on m.id = im.material_id
+    where m.is_active = true
+      and (p_as_of_date is null or im.movement_date <= p_as_of_date)
+      and (p_material_id is null or im.material_id = p_material_id)
+      and (p_warehouse_id is null or im.warehouse_id = p_warehouse_id)
+      and (p_branch_id is null or im.branch_id = p_branch_id)
+      and (p_category_id is null or m.category_id = p_category_id)
+  ),
+  agg as (
+    select
+      sm.material_id,
+      sm.warehouse_id,
+      coalesce(sum(sm.quantity_base_delta), 0)::numeric(18, 6) as quantity_base,
+      coalesce(
+        sum(sm.quantity_base_delta * coalesce(sm.unit_cost, 0)),
+        0
+      )::numeric(18, 2) as inventory_value
+    from scoped_movements sm
+    group by sm.material_id, sm.warehouse_id
+  )
+  select
+    m.id as material_id,
+    m.material_code,
+    m.name_ar as material_name_ar,
+    m.category_id,
+    mc.name_ar as category_name_ar,
+    w.id as warehouse_id,
+    w.warehouse_code,
+    w.name_ar as warehouse_name_ar,
+    w.branch_id,
+    b.branch_code,
+    a.quantity_base,
+    a.inventory_value,
+    case
+      when a.quantity_base <> 0 then
+        round((a.inventory_value / a.quantity_base)::numeric, 4)
+      else null
+    end as unit_cost_avg
+  from agg a
+  inner join public.materials m on m.id = a.material_id
+  inner join public.warehouses w on w.id = a.warehouse_id
+  inner join public.branches b on b.id = w.branch_id
+  left join public.material_categories mc on mc.id = m.category_id
+  where (not p_hide_zero or a.quantity_base <> 0)
+  order by m.material_code, w.warehouse_code;
+$$;
+
+comment on function public.get_inventory_balance is
+  'رصيد مخزون مجمّع per مادة/مستودع — كمية أساس + قيمة تقديرية';
+
+-- ---------------------------------------------------------------------------
+-- دفتر حركة مادة في مستودع (مع رصيد تراكمي)
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.get_inventory_movement_ledger(date, date, uuid, uuid, uuid) cascade;
+
+create or replace function public.get_inventory_movement_ledger(
+  p_from_date date default null,
+  p_to_date date default null,
+  p_material_id uuid default null,
+  p_warehouse_id uuid default null,
+  p_branch_id uuid default null
+)
+returns table (
+  movement_id uuid,
+  movement_date date,
+  movement_kind varchar,
+  material_id uuid,
+  material_code varchar,
+  material_name_ar varchar,
+  warehouse_id uuid,
+  warehouse_code varchar,
+  warehouse_name_ar varchar,
+  branch_code varchar,
+  quantity_base_delta numeric,
+  unit_cost numeric,
+  line_value numeric,
+  running_balance_base numeric,
+  source_type varchar,
+  source_id uuid,
+  created_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with filtered as (
+    select
+      im.id as movement_id,
+      im.movement_date,
+      im.movement_kind,
+      im.material_id,
+      m.material_code,
+      m.name_ar as material_name_ar,
+      im.warehouse_id,
+      w.warehouse_code,
+      w.name_ar as warehouse_name_ar,
+      b.branch_code,
+      im.quantity_base_delta,
+      im.unit_cost,
+      round((im.quantity_base_delta * coalesce(im.unit_cost, 0))::numeric, 2) as line_value,
+      im.source_type,
+      im.source_id,
+      im.created_at
+    from public.inventory_movements im
+    inner join public.materials m on m.id = im.material_id
+    inner join public.warehouses w on w.id = im.warehouse_id
+    inner join public.branches b on b.id = im.branch_id
+    where (p_from_date is null or im.movement_date >= p_from_date)
+      and (p_to_date is null or im.movement_date <= p_to_date)
+      and (p_material_id is null or im.material_id = p_material_id)
+      and (p_warehouse_id is null or im.warehouse_id = p_warehouse_id)
+      and (p_branch_id is null or im.branch_id = p_branch_id)
+  )
+  select
+    f.movement_id,
+    f.movement_date,
+    f.movement_kind,
+    f.material_id,
+    f.material_code,
+    f.material_name_ar,
+    f.warehouse_id,
+    f.warehouse_code,
+    f.warehouse_name_ar,
+    f.branch_code,
+    f.quantity_base_delta,
+    f.unit_cost,
+    f.line_value,
+    sum(f.quantity_base_delta) over (
+      partition by f.material_id, f.warehouse_id
+      order by f.movement_date, f.created_at, f.movement_id
+      rows between unbounded preceding and current row
+    )::numeric(18, 6) as running_balance_base,
+    f.source_type,
+    f.source_id,
+    f.created_at
+  from filtered f
+  order by f.movement_date, f.created_at, f.movement_id;
+$$;
+
+comment on function public.get_inventory_movement_ledger is
+  'دفتر حركات مخزون مع رصيد تراكمي per مادة/مستودع';
+
+-- ---------------------------------------------------------------------------
+-- تسوية جردية مباشرة (فروقات عدّ فعلي ↔ نظامي)
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.post_stock_adjustment(
+  uuid, uuid, numeric, uuid, uuid, date, text, uuid
+) cascade;
+
+create or replace function public.post_stock_adjustment(
+  p_material_id uuid,
+  p_warehouse_id uuid,
+  p_counted_quantity_base numeric,
+  p_inventory_account_id uuid,
+  p_adjustment_account_id uuid,
+  p_adjustment_date date default current_date,
+  p_description text default null,
+  p_cost_center_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_material public.materials%rowtype;
+  v_warehouse public.warehouses%rowtype;
+  v_settings public.company_inventory_settings%rowtype;
+  v_system_qty numeric(18, 6);
+  v_delta numeric(18, 6);
+  v_unit_cost numeric(18, 4);
+  v_amount numeric(18, 2);
+  v_je_id uuid;
+  v_entry_no varchar(40);
+  v_desc text;
+begin
+  if p_counted_quantity_base < 0 then
+    raise exception 'Counted quantity cannot be negative.';
+  end if;
+
+  if p_inventory_account_id is null or p_adjustment_account_id is null then
+    raise exception 'Inventory and adjustment accounts are required.';
+  end if;
+
+  select * into v_material
+  from public.materials
+  where id = p_material_id and is_active = true;
+  if not found then
+    raise exception 'Material not found or inactive.';
+  end if;
+
+  select * into v_warehouse
+  from public.warehouses
+  where id = p_warehouse_id and is_active = true;
+  if not found then
+    raise exception 'Warehouse not found or inactive.';
+  end if;
+
+  select * into v_settings from public.company_inventory_settings where id = 1;
+  if v_settings.inventory_method is null then
+    raise exception 'Configure inventory_method before stock adjustment.';
+  end if;
+
+  perform public.assert_accounting_period_open(p_adjustment_date, null);
+
+  select coalesce(sum(im.quantity_base_delta), 0)
+  into v_system_qty
+  from public.inventory_movements im
+  where im.material_id = p_material_id
+    and im.warehouse_id = p_warehouse_id;
+
+  v_delta := round((p_counted_quantity_base - v_system_qty)::numeric, 6);
+
+  if abs(v_delta) < 0.000001 then
+    raise exception 'No adjustment needed — counted quantity matches system balance.';
+  end if;
+
+  select coalesce(
+    (
+      select sum(im.quantity_base_delta * coalesce(im.unit_cost, 0))
+             / nullif(sum(im.quantity_base_delta), 0)
+      from public.inventory_movements im
+      where im.material_id = p_material_id
+        and im.warehouse_id = p_warehouse_id
+    ),
+    v_material.purchase_price,
+    0
+  )
+  into v_unit_cost;
+
+  v_amount := round((abs(v_delta) * coalesce(v_unit_cost, 0))::numeric, 2);
+  if v_amount <= 0 then
+    raise exception 'Adjustment value is zero — set purchase price or post purchases first.';
+  end if;
+
+  v_desc := coalesce(
+    p_description,
+    'تسوية جرد — ' || v_material.material_code || ' @ ' || v_warehouse.warehouse_code
+  );
+
+  v_entry_no := 'JE-STKADJ-' || to_char(now(), 'YYYYMMDD-HH24MISS');
+
+  insert into public.journal_entries (
+    entry_no,
+    entry_date,
+    description,
+    status,
+    source_type,
+    source_id,
+    branch_id
+  )
+  values (
+    v_entry_no,
+    p_adjustment_date,
+    v_desc,
+    'posted',
+    'stock_adjustment',
+    p_material_id,
+    v_warehouse.branch_id
+  )
+  returning id into v_je_id;
+
+  if v_delta > 0 then
+    perform public._invoice_add_journal_line(
+      v_je_id, p_inventory_account_id, v_amount, 0,
+      'فائض جرد — ' || v_material.material_code,
+      p_cost_center_id, v_warehouse.branch_id,
+      null, 1,
+      null, null, null, null, null, null
+    );
+    perform public._invoice_add_journal_line(
+      v_je_id, p_adjustment_account_id, 0, v_amount,
+      'فائض جرد — طرف مقابل',
+      p_cost_center_id, v_warehouse.branch_id,
+      null, 1,
+      null, null, null, null, null, null
+    );
+  else
+    perform public._invoice_add_journal_line(
+      v_je_id, p_adjustment_account_id, v_amount, 0,
+      'عجز جرد — ' || v_material.material_code,
+      p_cost_center_id, v_warehouse.branch_id,
+      null, 1,
+      null, null, null, null, null, null
+    );
+    perform public._invoice_add_journal_line(
+      v_je_id, p_inventory_account_id, 0, v_amount,
+      'عجز جرد — مخزون',
+      p_cost_center_id, v_warehouse.branch_id,
+      null, 1,
+      null, null, null, null, null, null
+    );
+  end if;
+
+  insert into public.inventory_movements (
+    movement_date,
+    material_id,
+    warehouse_id,
+    branch_id,
+    cost_center_id,
+    quantity_delta,
+    quantity_base_delta,
+    unit_cost,
+    total_cost,
+    movement_kind,
+    source_type,
+    source_id
+  )
+  values (
+    p_adjustment_date,
+    p_material_id,
+    p_warehouse_id,
+    v_warehouse.branch_id,
+    p_cost_center_id,
+    v_delta,
+    v_delta,
+    v_unit_cost,
+    v_amount,
+    'adjustment',
+    'stock_adjustment',
+    v_je_id
+  );
+
+  perform public.lock_company_inventory_foundation(p_adjustment_date::timestamptz);
+
+  return jsonb_build_object(
+    'journal_entry_id', v_je_id,
+    'entry_no', v_entry_no,
+    'system_quantity_base', v_system_qty,
+    'counted_quantity_base', p_counted_quantity_base,
+    'delta_quantity_base', v_delta,
+    'adjustment_amount', v_amount,
+    'unit_cost', v_unit_cost
+  );
+end;
+$$;
+
+comment on function public.post_stock_adjustment is
+  'ترحيل فروقات جرد — قيد + حركة adjustment عند اختلاف العدّ الفعلي عن الرصيد النظامي';
+
+-- =============================================================================
+-- BEGIN patch_inventory_phase2.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_inventory_phase2.sql — تسوية مجمّعة + تحليل نواقص/راكد
+-- =============================================================================
+-- يتطلب: patch_inventory_reports.sql + patch_period_enforcement.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- تسوية جرد متعددة الأسطر — قيد واحد
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.post_stock_adjustment_batch(jsonb, uuid, uuid, date, text, uuid) cascade;
+
+create or replace function public.post_stock_adjustment_batch(
+  p_lines jsonb,
+  p_inventory_account_id uuid,
+  p_adjustment_account_id uuid,
+  p_adjustment_date date default current_date,
+  p_description text default null,
+  p_cost_center_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_settings public.company_inventory_settings%rowtype;
+  v_line jsonb;
+  v_material public.materials%rowtype;
+  v_warehouse public.warehouses%rowtype;
+  v_system_qty numeric(18, 6);
+  v_delta numeric(18, 6);
+  v_unit_cost numeric(18, 4);
+  v_amount numeric(18, 2);
+  v_counted numeric(18, 6);
+  v_je_id uuid;
+  v_entry_no varchar(40);
+  v_desc text;
+  v_line_results jsonb := '[]'::jsonb;
+  v_applied int := 0;
+  v_branch_id uuid;
+begin
+  if p_inventory_account_id is null or p_adjustment_account_id is null then
+    raise exception 'Inventory and adjustment accounts are required.';
+  end if;
+
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
+    raise exception 'At least one adjustment line is required.';
+  end if;
+
+  select * into v_settings from public.company_inventory_settings where id = 1;
+  if v_settings.inventory_method is null then
+    raise exception 'Configure inventory_method before stock adjustment.';
+  end if;
+
+  perform public.assert_accounting_period_open(p_adjustment_date, null);
+
+  v_entry_no := 'JE-STKADJ-BATCH-' || to_char(now(), 'YYYYMMDD-HH24MISS');
+  v_desc := coalesce(p_description, 'تسوية جرد مجمّعة');
+
+  for v_line in select value from jsonb_array_elements(p_lines)
+  loop
+    select * into v_material
+    from public.materials
+    where id = (v_line->>'material_id')::uuid and is_active = true;
+    if not found then
+      raise exception 'Material not found: %', v_line->>'material_id';
+    end if;
+
+    select * into v_warehouse
+    from public.warehouses
+    where id = (v_line->>'warehouse_id')::uuid and is_active = true;
+    if not found then
+      raise exception 'Warehouse not found: %', v_line->>'warehouse_id';
+    end if;
+
+    v_counted := (v_line->>'counted_quantity_base')::numeric;
+    if v_counted < 0 then
+      raise exception 'Counted quantity cannot be negative for material %.', v_material.material_code;
+    end if;
+
+    select coalesce(sum(im.quantity_base_delta), 0)
+    into v_system_qty
+    from public.inventory_movements im
+    where im.material_id = v_material.id
+      and im.warehouse_id = v_warehouse.id;
+
+    v_delta := round((v_counted - v_system_qty)::numeric, 6);
+    if abs(v_delta) < 0.000001 then
+      continue;
+    end if;
+
+    select coalesce(
+      (
+        select sum(im.quantity_base_delta * coalesce(im.unit_cost, 0))
+               / nullif(sum(im.quantity_base_delta), 0)
+        from public.inventory_movements im
+        where im.material_id = v_material.id
+          and im.warehouse_id = v_warehouse.id
+      ),
+      v_material.purchase_price,
+      0
+    )
+    into v_unit_cost;
+
+    v_amount := round((abs(v_delta) * coalesce(v_unit_cost, 0))::numeric, 2);
+    if v_amount <= 0 then
+      raise exception 'Adjustment value is zero for material %.', v_material.material_code;
+    end if;
+
+    if v_je_id is null then
+      v_branch_id := v_warehouse.branch_id;
+      insert into public.journal_entries (
+        entry_no, entry_date, description, status, source_type, source_id, branch_id
+      )
+      values (
+        v_entry_no,
+        p_adjustment_date,
+        v_desc,
+        'posted',
+        'stock_adjustment_batch',
+        gen_random_uuid(),
+        v_branch_id
+      )
+      returning id into v_je_id;
+    end if;
+
+    if v_delta > 0 then
+      perform public._invoice_add_journal_line(
+        v_je_id, p_inventory_account_id, v_amount, 0,
+        'فائض جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, p_adjustment_account_id, 0, v_amount,
+        'فائض جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+    else
+      perform public._invoice_add_journal_line(
+        v_je_id, p_adjustment_account_id, v_amount, 0,
+        'عجز جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, p_inventory_account_id, 0, v_amount,
+        'عجز جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+    end if;
+
+    insert into public.inventory_movements (
+      movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+      quantity_delta, quantity_base_delta, unit_cost, total_cost,
+      movement_kind, source_type, source_id
+    )
+    values (
+      p_adjustment_date,
+      v_material.id,
+      v_warehouse.id,
+      v_warehouse.branch_id,
+      p_cost_center_id,
+      v_delta,
+      v_delta,
+      v_unit_cost,
+      v_amount,
+      'adjustment',
+      'stock_adjustment',
+      v_je_id
+    );
+
+    v_applied := v_applied + 1;
+    v_line_results := v_line_results || jsonb_build_array(
+      jsonb_build_object(
+        'material_id', v_material.id,
+        'material_code', v_material.material_code,
+        'warehouse_id', v_warehouse.id,
+        'warehouse_code', v_warehouse.warehouse_code,
+        'system_quantity_base', v_system_qty,
+        'counted_quantity_base', v_counted,
+        'delta_quantity_base', v_delta,
+        'adjustment_amount', v_amount
+      )
+    );
+  end loop;
+
+  if v_applied = 0 then
+    raise exception 'No adjustment lines with quantity difference.';
+  end if;
+
+  perform public.lock_company_inventory_foundation(p_adjustment_date::timestamptz);
+
+  return jsonb_build_object(
+    'journal_entry_id', v_je_id,
+    'entry_no', v_entry_no,
+    'applied_lines', v_applied,
+    'lines', v_line_results
+  );
+end;
+$$;
+
+comment on function public.post_stock_adjustment_batch is
+  'تسوية جرد متعددة الأسطر في قيد واحد';
+
+-- ---------------------------------------------------------------------------
+-- نواقص + مواد راكدة
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.get_inventory_analysis(date, numeric, int, uuid, uuid) cascade;
+
+create or replace function public.get_inventory_analysis(
+  p_as_of_date date default current_date,
+  p_shortage_max_qty numeric default 0,
+  p_stagnant_days int default 90,
+  p_warehouse_id uuid default null,
+  p_branch_id uuid default null
+)
+returns table (
+  analysis_kind varchar,
+  material_id uuid,
+  material_code varchar,
+  material_name_ar varchar,
+  warehouse_id uuid,
+  warehouse_code varchar,
+  warehouse_name_ar varchar,
+  branch_code varchar,
+  quantity_base numeric,
+  inventory_value numeric,
+  last_movement_date date,
+  days_idle int
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with balance as (
+    select *
+    from public.get_inventory_balance(
+      p_as_of_date,
+      null,
+      p_warehouse_id,
+      p_branch_id,
+      null,
+      false
+    )
+  ),
+  last_move as (
+    select
+      im.material_id,
+      im.warehouse_id,
+      max(im.movement_date) as last_movement_date
+    from public.inventory_movements im
+    where (p_as_of_date is null or im.movement_date <= p_as_of_date)
+    group by im.material_id, im.warehouse_id
+  ),
+  enriched as (
+    select
+      b.*,
+      lm.last_movement_date,
+      case
+        when lm.last_movement_date is null then null
+        else (p_as_of_date - lm.last_movement_date)::int
+      end as days_idle
+    from balance b
+    left join last_move lm
+      on lm.material_id = b.material_id
+      and lm.warehouse_id = b.warehouse_id
+  )
+  select
+    'shortage'::varchar as analysis_kind,
+    e.material_id,
+    e.material_code,
+    e.material_name_ar,
+    e.warehouse_id,
+    e.warehouse_code,
+    e.warehouse_name_ar,
+    e.branch_code,
+    e.quantity_base,
+    e.inventory_value,
+    e.last_movement_date,
+    e.days_idle
+  from enriched e
+  where e.quantity_base <= coalesce(p_shortage_max_qty, 0)
+
+  union all
+
+  select
+    'stagnant'::varchar as analysis_kind,
+    e.material_id,
+    e.material_code,
+    e.material_name_ar,
+    e.warehouse_id,
+    e.warehouse_code,
+    e.warehouse_name_ar,
+    e.branch_code,
+    e.quantity_base,
+    e.inventory_value,
+    e.last_movement_date,
+    e.days_idle
+  from enriched e
+  where e.quantity_base > 0
+    and coalesce(p_stagnant_days, 0) > 0
+    and (
+      e.last_movement_date is null
+      or e.last_movement_date <= p_as_of_date - p_stagnant_days
+    )
+
+  order by analysis_kind, material_code, warehouse_code;
+$$;
+
+comment on function public.get_inventory_analysis is
+  'نواقص (كمية <= حد) ومواد راكدة (بدون حركة منذ N يوم مع رصيد)';
+
+-- =============================================================================
+-- BEGIN patch_inventory_phase3.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_inventory_phase3.sql — حد أدنى للمخزون + تسوية batch متعددة الفروع
+-- =============================================================================
+-- يتطلب: patch_inventory_phase2.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- حد أدنى للمخزون per مادة
+-- ---------------------------------------------------------------------------
+
+alter table public.materials
+  add column if not exists min_stock numeric(18, 6) not null default 0;
+
+alter table public.materials
+  drop constraint if exists materials_min_stock_nonneg;
+
+alter table public.materials
+  add constraint materials_min_stock_nonneg check (min_stock >= 0);
+
+comment on column public.materials.min_stock is
+  'الحد الأدنى للمخزون (وحدة أساس) — يُستخدم في تحليل النواقص';
+
+-- ---------------------------------------------------------------------------
+-- تحليل نواقص/راكد — يفضّل min_stock من بطاقة المادة
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.get_inventory_analysis(date, numeric, int, uuid, uuid) cascade;
+
+create or replace function public.get_inventory_analysis(
+  p_as_of_date date default current_date,
+  p_shortage_max_qty numeric default 0,
+  p_stagnant_days int default 90,
+  p_warehouse_id uuid default null,
+  p_branch_id uuid default null
+)
+returns table (
+  analysis_kind varchar,
+  material_id uuid,
+  material_code varchar,
+  material_name_ar varchar,
+  warehouse_id uuid,
+  warehouse_code varchar,
+  warehouse_name_ar varchar,
+  branch_code varchar,
+  quantity_base numeric,
+  min_stock numeric,
+  inventory_value numeric,
+  last_movement_date date,
+  days_idle int
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with balance as (
+    select *
+    from public.get_inventory_balance(
+      p_as_of_date,
+      null,
+      p_warehouse_id,
+      p_branch_id,
+      null,
+      false
+    )
+  ),
+  last_move as (
+    select
+      im.material_id,
+      im.warehouse_id,
+      max(im.movement_date) as last_movement_date
+    from public.inventory_movements im
+    where (p_as_of_date is null or im.movement_date <= p_as_of_date)
+    group by im.material_id, im.warehouse_id
+  ),
+  enriched as (
+    select
+      b.*,
+      coalesce(m.min_stock, 0) as min_stock,
+      lm.last_movement_date,
+      case
+        when lm.last_movement_date is null then null
+        else (p_as_of_date - lm.last_movement_date)::int
+      end as days_idle
+    from balance b
+    join public.materials m on m.id = b.material_id
+    left join last_move lm
+      on lm.material_id = b.material_id
+      and lm.warehouse_id = b.warehouse_id
+  )
+  select
+    'shortage'::varchar as analysis_kind,
+    e.material_id,
+    e.material_code,
+    e.material_name_ar,
+    e.warehouse_id,
+    e.warehouse_code,
+    e.warehouse_name_ar,
+    e.branch_code,
+    e.quantity_base,
+    e.min_stock,
+    e.inventory_value,
+    e.last_movement_date,
+    e.days_idle
+  from enriched e
+  where (
+    (e.min_stock > 0 and e.quantity_base < e.min_stock)
+    or (e.min_stock = 0 and e.quantity_base <= coalesce(p_shortage_max_qty, 0))
+  )
+
+  union all
+
+  select
+    'stagnant'::varchar as analysis_kind,
+    e.material_id,
+    e.material_code,
+    e.material_name_ar,
+    e.warehouse_id,
+    e.warehouse_code,
+    e.warehouse_name_ar,
+    e.branch_code,
+    e.quantity_base,
+    e.min_stock,
+    e.inventory_value,
+    e.last_movement_date,
+    e.days_idle
+  from enriched e
+  where e.quantity_base > 0
+    and coalesce(p_stagnant_days, 0) > 0
+    and (
+      e.last_movement_date is null
+      or e.last_movement_date <= p_as_of_date - p_stagnant_days
+    )
+
+  order by analysis_kind, material_code, warehouse_code;
+$$;
+
+comment on function public.get_inventory_analysis is
+  'نواقص (أقل من min_stock أو حد عام) ومواد راكدة';
+
+-- ---------------------------------------------------------------------------
+-- تسوية مجمّعة — قيد واحد لعدة فروع + فحص فترة لكل فرع
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.post_stock_adjustment_batch(jsonb, uuid, uuid, date, text, uuid) cascade;
+
+create or replace function public.post_stock_adjustment_batch(
+  p_lines jsonb,
+  p_inventory_account_id uuid,
+  p_adjustment_account_id uuid,
+  p_adjustment_date date default current_date,
+  p_description text default null,
+  p_cost_center_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_settings public.company_inventory_settings%rowtype;
+  v_line jsonb;
+  v_material public.materials%rowtype;
+  v_warehouse public.warehouses%rowtype;
+  v_system_qty numeric(18, 6);
+  v_delta numeric(18, 6);
+  v_unit_cost numeric(18, 4);
+  v_amount numeric(18, 2);
+  v_counted numeric(18, 6);
+  v_je_id uuid;
+  v_entry_no varchar(40);
+  v_desc text;
+  v_line_results jsonb := '[]'::jsonb;
+  v_applied int := 0;
+  v_branch_id uuid;
+  v_branch_ids uuid[] := '{}';
+  v_distinct_branches int := 0;
+  v_check_branch uuid;
+begin
+  if p_inventory_account_id is null or p_adjustment_account_id is null then
+    raise exception 'Inventory and adjustment accounts are required.';
+  end if;
+
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
+    raise exception 'At least one adjustment line is required.';
+  end if;
+
+  select * into v_settings from public.company_inventory_settings where id = 1;
+  if v_settings.inventory_method is null then
+    raise exception 'Configure inventory_method before stock adjustment.';
+  end if;
+
+  select coalesce(array_agg(distinct w.branch_id), '{}')
+  into v_branch_ids
+  from jsonb_array_elements(p_lines) as elem
+  join public.warehouses w
+    on w.id = (elem.value->>'warehouse_id')::uuid
+   and w.is_active = true;
+
+  v_distinct_branches := coalesce(array_length(v_branch_ids, 1), 0);
+
+  perform public.assert_accounting_period_open(p_adjustment_date, null);
+  foreach v_check_branch in array v_branch_ids
+  loop
+    perform public.assert_accounting_period_open(p_adjustment_date, v_check_branch);
+  end loop;
+
+  v_entry_no := 'JE-STKADJ-BATCH-' || to_char(now(), 'YYYYMMDD-HH24MISS');
+  v_desc := coalesce(p_description, 'تسوية جرد مجمّعة');
+
+  for v_line in select value from jsonb_array_elements(p_lines)
+  loop
+    select * into v_material
+    from public.materials
+    where id = (v_line->>'material_id')::uuid and is_active = true;
+    if not found then
+      raise exception 'Material not found: %', v_line->>'material_id';
+    end if;
+
+    select * into v_warehouse
+    from public.warehouses
+    where id = (v_line->>'warehouse_id')::uuid and is_active = true;
+    if not found then
+      raise exception 'Warehouse not found: %', v_line->>'warehouse_id';
+    end if;
+
+    v_counted := (v_line->>'counted_quantity_base')::numeric;
+    if v_counted < 0 then
+      raise exception 'Counted quantity cannot be negative for material %.', v_material.material_code;
+    end if;
+
+    select coalesce(sum(im.quantity_base_delta), 0)
+    into v_system_qty
+    from public.inventory_movements im
+    where im.material_id = v_material.id
+      and im.warehouse_id = v_warehouse.id;
+
+    v_delta := round((v_counted - v_system_qty)::numeric, 6);
+    if abs(v_delta) < 0.000001 then
+      continue;
+    end if;
+
+    select coalesce(
+      (
+        select sum(im.quantity_base_delta * coalesce(im.unit_cost, 0))
+               / nullif(sum(im.quantity_base_delta), 0)
+        from public.inventory_movements im
+        where im.material_id = v_material.id
+          and im.warehouse_id = v_warehouse.id
+      ),
+      v_material.purchase_price,
+      0
+    )
+    into v_unit_cost;
+
+    v_amount := round((abs(v_delta) * coalesce(v_unit_cost, 0))::numeric, 2);
+    if v_amount <= 0 then
+      raise exception 'Adjustment value is zero for material %.', v_material.material_code;
+    end if;
+
+    if v_je_id is null then
+      v_branch_id := case
+        when v_distinct_branches > 1 then null
+        else v_branch_ids[1]
+      end;
+
+      insert into public.journal_entries (
+        entry_no, entry_date, description, status, source_type, source_id, branch_id
+      )
+      values (
+        v_entry_no,
+        p_adjustment_date,
+        v_desc,
+        'posted',
+        'stock_adjustment_batch',
+        gen_random_uuid(),
+        v_branch_id
+      )
+      returning id into v_je_id;
+    end if;
+
+    if v_delta > 0 then
+      perform public._invoice_add_journal_line(
+        v_je_id, p_inventory_account_id, v_amount, 0,
+        'فائض جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, p_adjustment_account_id, 0, v_amount,
+        'فائض جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+    else
+      perform public._invoice_add_journal_line(
+        v_je_id, p_adjustment_account_id, v_amount, 0,
+        'عجز جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+      perform public._invoice_add_journal_line(
+        v_je_id, p_inventory_account_id, 0, v_amount,
+        'عجز جرد — ' || v_material.material_code,
+        p_cost_center_id, v_warehouse.branch_id,
+        null, 1,
+        null, null, null, null, null, null
+      );
+    end if;
+
+    insert into public.inventory_movements (
+      movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+      quantity_delta, quantity_base_delta, unit_cost, total_cost,
+      movement_kind, source_type, source_id
+    )
+    values (
+      p_adjustment_date,
+      v_material.id,
+      v_warehouse.id,
+      v_warehouse.branch_id,
+      p_cost_center_id,
+      v_delta,
+      v_delta,
+      v_unit_cost,
+      v_amount,
+      'adjustment',
+      'stock_adjustment',
+      v_je_id
+    );
+
+    v_applied := v_applied + 1;
+    v_line_results := v_line_results || jsonb_build_array(
+      jsonb_build_object(
+        'material_id', v_material.id,
+        'material_code', v_material.material_code,
+        'warehouse_id', v_warehouse.id,
+        'warehouse_code', v_warehouse.warehouse_code,
+        'branch_id', v_warehouse.branch_id,
+        'system_quantity_base', v_system_qty,
+        'counted_quantity_base', v_counted,
+        'delta_quantity_base', v_delta,
+        'adjustment_amount', v_amount
+      )
+    );
+  end loop;
+
+  if v_applied = 0 then
+    raise exception 'No adjustment lines with quantity difference.';
+  end if;
+
+  perform public.lock_company_inventory_foundation(p_adjustment_date::timestamptz);
+
+  return jsonb_build_object(
+    'journal_entry_id', v_je_id,
+    'entry_no', v_entry_no,
+    'applied_lines', v_applied,
+    'branch_count', v_distinct_branches,
+    'lines', v_line_results
+  );
+end;
+$$;
+
+comment on function public.post_stock_adjustment_batch is
+  'تسوية جرد متعددة الأسطر — قيد واحد يدعم عدة فروع';
+
+-- =============================================================================
+-- BEGIN patch_inventory_phase4.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_inventory_phase4.sql — تقرير تكلفة المبيعات (COGS)
+-- =============================================================================
+-- يتطلب: patch_post_invoice.sql (حركات sale / return_sale)
+-- =============================================================================
+
+drop function if exists public.get_cogs_report(date, date, uuid, uuid, uuid, varchar) cascade;
+
+create or replace function public.get_cogs_report(
+  p_from_date date default null,
+  p_to_date date default null,
+  p_material_id uuid default null,
+  p_warehouse_id uuid default null,
+  p_branch_id uuid default null,
+  p_group_by varchar default 'material'
+)
+returns table (
+  group_key varchar,
+  invoice_id uuid,
+  invoice_no varchar,
+  invoice_date date,
+  material_id uuid,
+  material_code varchar,
+  material_name_ar varchar,
+  warehouse_code varchar,
+  branch_code varchar,
+  sale_quantity_base numeric,
+  return_quantity_base numeric,
+  sales_amount numeric,
+  cogs_amount numeric,
+  return_cogs_amount numeric,
+  net_cogs numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with scoped as (
+    select
+      im.movement_kind,
+      im.quantity_base_delta,
+      im.unit_cost,
+      im.total_cost,
+      im.material_id,
+      im.source_id as invoice_id,
+      m.material_code,
+      m.name_ar as material_name_ar,
+      w.warehouse_code,
+      b.branch_code,
+      i.invoice_no,
+      i.invoice_date
+    from public.inventory_movements im
+    inner join public.materials m on m.id = im.material_id
+    inner join public.warehouses w on w.id = im.warehouse_id
+    inner join public.branches b on b.id = im.branch_id
+    left join public.invoices i
+      on im.source_type = 'invoice' and i.id = im.source_id
+    where im.movement_kind in ('sale', 'return_sale')
+      and (p_from_date is null or im.movement_date >= p_from_date)
+      and (p_to_date is null or im.movement_date <= p_to_date)
+      and (p_material_id is null or im.material_id = p_material_id)
+      and (p_warehouse_id is null or im.warehouse_id = p_warehouse_id)
+      and (p_branch_id is null or im.branch_id = p_branch_id)
+  )
+  select
+    case
+      when coalesce(p_group_by, 'material') = 'invoice' then
+        coalesce(max(s.invoice_no), max(s.invoice_id::text))
+      else max(s.material_code)
+    end::varchar as group_key,
+    case
+      when coalesce(p_group_by, 'material') = 'invoice' then max(s.invoice_id)
+      else null::uuid
+    end as invoice_id,
+    case
+      when coalesce(p_group_by, 'material') = 'invoice' then max(s.invoice_no)
+      else null::varchar
+    end as invoice_no,
+    case
+      when coalesce(p_group_by, 'material') = 'invoice' then max(s.invoice_date)
+      else null::date
+    end as invoice_date,
+    case
+      when coalesce(p_group_by, 'material') = 'material' then max(s.material_id)
+      else null::uuid
+    end as material_id,
+    case
+      when coalesce(p_group_by, 'material') = 'material' then max(s.material_code)
+      else null::varchar
+    end as material_code,
+    case
+      when coalesce(p_group_by, 'material') = 'material' then max(s.material_name_ar)
+      else null::varchar
+    end as material_name_ar,
+    case
+      when coalesce(p_group_by, 'material') = 'material' then max(s.warehouse_code)
+      else null::varchar
+    end as warehouse_code,
+    case
+      when coalesce(p_group_by, 'material') = 'material' then max(s.branch_code)
+      else null::varchar
+    end as branch_code,
+    coalesce(
+      sum(case when s.movement_kind = 'sale' then abs(s.quantity_base_delta) else 0 end),
+      0
+    )::numeric(18, 6) as sale_quantity_base,
+    coalesce(
+      sum(case when s.movement_kind = 'return_sale' then s.quantity_base_delta else 0 end),
+      0
+    )::numeric(18, 6) as return_quantity_base,
+    coalesce(
+      sum(case when s.movement_kind = 'sale' then coalesce(s.total_cost, 0) else 0 end),
+      0
+    )::numeric(18, 2) as sales_amount,
+    coalesce(
+      sum(
+        case
+          when s.movement_kind = 'sale' then
+            round((abs(s.quantity_base_delta) * coalesce(s.unit_cost, 0))::numeric, 2)
+          else 0
+        end
+      ),
+      0
+    )::numeric(18, 2) as cogs_amount,
+    coalesce(
+      sum(
+        case
+          when s.movement_kind = 'return_sale' then
+            round((s.quantity_base_delta * coalesce(s.unit_cost, 0))::numeric, 2)
+          else 0
+        end
+      ),
+      0
+    )::numeric(18, 2) as return_cogs_amount,
+    coalesce(
+      sum(
+        case
+          when s.movement_kind = 'sale' then
+            round((abs(s.quantity_base_delta) * coalesce(s.unit_cost, 0))::numeric, 2)
+          when s.movement_kind = 'return_sale' then
+            -round((s.quantity_base_delta * coalesce(s.unit_cost, 0))::numeric, 2)
+          else 0
+        end
+      ),
+      0
+    )::numeric(18, 2) as net_cogs
+  from scoped s
+  group by
+    case
+      when coalesce(p_group_by, 'material') = 'invoice' then s.invoice_id::text
+      else s.material_id::text
+    end
+  order by group_key;
+$$;
+
+comment on function public.get_cogs_report is
+  'تكلفة المبيعات من حركات sale/return_sale — مجمّع per مادة أو per فاتورة';
+
+-- =============================================================================
+-- BEGIN patch_inventory_phase5.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_inventory_phase5.sql — حد أدنى per مستودع + ملخص حركات المخزون
+-- =============================================================================
+-- يتطلب: patch_inventory_phase4.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- حد أدنى per مادة + مستودع
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.warehouse_material_limits (
+  id uuid primary key default gen_random_uuid(),
+  warehouse_id uuid not null references public.warehouses(id) on delete cascade,
+  material_id uuid not null references public.materials(id) on delete cascade,
+  min_stock numeric(18, 6) not null default 0 check (min_stock >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint warehouse_material_limits_unique unique (warehouse_id, material_id)
+);
+
+comment on table public.warehouse_material_limits is
+  'حد أدنى للمخزون per مادة ومستودع — يتفوّق على min_stock في بطاقة المادة';
+
+create index if not exists idx_warehouse_material_limits_wh
+  on public.warehouse_material_limits(warehouse_id);
+create index if not exists idx_warehouse_material_limits_mat
+  on public.warehouse_material_limits(material_id);
+
+alter table public.warehouse_material_limits enable row level security;
+
+drop policy if exists "warehouse_material_limits_select_all" on public.warehouse_material_limits;
+create policy "warehouse_material_limits_select_all" on public.warehouse_material_limits
+  for select to authenticated using (true);
+drop policy if exists "warehouse_material_limits_insert_all" on public.warehouse_material_limits;
+create policy "warehouse_material_limits_insert_all" on public.warehouse_material_limits
+  for insert to authenticated with check (true);
+drop policy if exists "warehouse_material_limits_update_all" on public.warehouse_material_limits;
+create policy "warehouse_material_limits_update_all" on public.warehouse_material_limits
+  for update to authenticated using (true) with check (true);
+drop policy if exists "warehouse_material_limits_delete_all" on public.warehouse_material_limits;
+create policy "warehouse_material_limits_delete_all" on public.warehouse_material_limits
+  for delete to authenticated using (true);
+
+-- ---------------------------------------------------------------------------
+-- تحليل نواقص — أولوية: مستودع > بطاقة مادة > حد عام
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.get_inventory_analysis(date, numeric, int, uuid, uuid) cascade;
+
+create or replace function public.get_inventory_analysis(
+  p_as_of_date date default current_date,
+  p_shortage_max_qty numeric default 0,
+  p_stagnant_days int default 90,
+  p_warehouse_id uuid default null,
+  p_branch_id uuid default null
+)
+returns table (
+  analysis_kind varchar,
+  material_id uuid,
+  material_code varchar,
+  material_name_ar varchar,
+  warehouse_id uuid,
+  warehouse_code varchar,
+  warehouse_name_ar varchar,
+  branch_code varchar,
+  quantity_base numeric,
+  min_stock numeric,
+  inventory_value numeric,
+  last_movement_date date,
+  days_idle int
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with balance as (
+    select *
+    from public.get_inventory_balance(
+      p_as_of_date,
+      null,
+      p_warehouse_id,
+      p_branch_id,
+      null,
+      false
+    )
+  ),
+  last_move as (
+    select
+      im.material_id,
+      im.warehouse_id,
+      max(im.movement_date) as last_movement_date
+    from public.inventory_movements im
+    where (p_as_of_date is null or im.movement_date <= p_as_of_date)
+    group by im.material_id, im.warehouse_id
+  ),
+  enriched as (
+    select
+      b.*,
+      coalesce(
+        nullif(wml.min_stock, 0),
+        nullif(m.min_stock, 0),
+        0
+      ) as min_stock,
+      lm.last_movement_date,
+      case
+        when lm.last_movement_date is null then null
+        else (p_as_of_date - lm.last_movement_date)::int
+      end as days_idle
+    from balance b
+    join public.materials m on m.id = b.material_id
+    left join public.warehouse_material_limits wml
+      on wml.material_id = b.material_id
+     and wml.warehouse_id = b.warehouse_id
+    left join last_move lm
+      on lm.material_id = b.material_id
+      and lm.warehouse_id = b.warehouse_id
+  )
+  select
+    'shortage'::varchar as analysis_kind,
+    e.material_id,
+    e.material_code,
+    e.material_name_ar,
+    e.warehouse_id,
+    e.warehouse_code,
+    e.warehouse_name_ar,
+    e.branch_code,
+    e.quantity_base,
+    e.min_stock,
+    e.inventory_value,
+    e.last_movement_date,
+    e.days_idle
+  from enriched e
+  where (
+    (e.min_stock > 0 and e.quantity_base < e.min_stock)
+    or (e.min_stock = 0 and e.quantity_base <= coalesce(p_shortage_max_qty, 0))
+  )
+
+  union all
+
+  select
+    'stagnant'::varchar as analysis_kind,
+    e.material_id,
+    e.material_code,
+    e.material_name_ar,
+    e.warehouse_id,
+    e.warehouse_code,
+    e.warehouse_name_ar,
+    e.branch_code,
+    e.quantity_base,
+    e.min_stock,
+    e.inventory_value,
+    e.last_movement_date,
+    e.days_idle
+  from enriched e
+  where e.quantity_base > 0
+    and coalesce(p_stagnant_days, 0) > 0
+    and (
+      e.last_movement_date is null
+      or e.last_movement_date <= p_as_of_date - p_stagnant_days
+    )
+
+  order by analysis_kind, material_code, warehouse_code;
+$$;
+
+comment on function public.get_inventory_analysis is
+  'نواقص (حد مستودع/مادة أو حد عام) ومواد راكدة';
+
+-- ---------------------------------------------------------------------------
+-- ملخص حركات المخزون — per نوع حركة ونوع فاتورة
+-- ---------------------------------------------------------------------------
+
+drop function if exists public.get_inventory_movements_summary(date, date, uuid, uuid, uuid) cascade;
+
+create or replace function public.get_inventory_movements_summary(
+  p_from_date date default null,
+  p_to_date date default null,
+  p_material_id uuid default null,
+  p_warehouse_id uuid default null,
+  p_branch_id uuid default null
+)
+returns table (
+  movement_kind varchar,
+  source_type varchar,
+  commercial_kind varchar,
+  movement_count bigint,
+  quantity_in_base numeric,
+  quantity_out_base numeric,
+  total_value numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    im.movement_kind,
+    im.source_type,
+    coalesce(ip.commercial_kind, im.source_type)::varchar as commercial_kind,
+    count(*)::bigint as movement_count,
+    coalesce(
+      sum(case when im.quantity_base_delta > 0 then im.quantity_base_delta else 0 end),
+      0
+    )::numeric(18, 6) as quantity_in_base,
+    coalesce(
+      sum(case when im.quantity_base_delta < 0 then abs(im.quantity_base_delta) else 0 end),
+      0
+    )::numeric(18, 6) as quantity_out_base,
+    coalesce(sum(coalesce(im.total_cost, 0)), 0)::numeric(18, 2) as total_value
+  from public.inventory_movements im
+  inner join public.materials m on m.id = im.material_id
+  left join public.invoices i
+    on im.source_type = 'invoice' and i.id = im.source_id
+  left join public.invoice_patterns ip on ip.id = i.pattern_id
+  where m.is_active = true
+    and (p_from_date is null or im.movement_date >= p_from_date)
+    and (p_to_date is null or im.movement_date <= p_to_date)
+    and (p_material_id is null or im.material_id = p_material_id)
+    and (p_warehouse_id is null or im.warehouse_id = p_warehouse_id)
+    and (p_branch_id is null or im.branch_id = p_branch_id)
+  group by im.movement_kind, im.source_type, coalesce(ip.commercial_kind, im.source_type)
+  order by commercial_kind, movement_kind;
+$$;
+
+comment on function public.get_inventory_movements_summary is
+  'ملخص حركات المخزون مجمّع per نوع حركة ونوع فاتورة/مصدر';
 
 -- =============================================================================
 -- 06_storage.sql — Supabase Storage (شعار الشركة + مرفقات السندات مستقبلاً)

@@ -18,6 +18,7 @@ const EMPTY_VALUES: MaterialFormValues = {
   purchase_price: 0,
   sale_price: 0,
   inventory_account_id: "",
+  min_stock: 0,
   is_active: true,
 };
 

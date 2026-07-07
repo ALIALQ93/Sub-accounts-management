@@ -17,7 +17,13 @@ $patchFiles = @(
     'patch_invoice_reference_close.sql',
     'patch_opening_entry.sql',
     'patch_trial_balance_opening.sql',
-    'patch_accounting_periods.sql'
+    'patch_accounting_periods.sql',
+    'patch_period_enforcement.sql',
+    'patch_inventory_reports.sql',
+    'patch_inventory_phase2.sql',
+    'patch_inventory_phase3.sql',
+    'patch_inventory_phase4.sql',
+    'patch_inventory_phase5.sql'
 )
 
 $out = Join-Path $here 'setup_all.sql'

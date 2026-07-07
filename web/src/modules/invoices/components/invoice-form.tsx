@@ -26,6 +26,7 @@ import {
 } from "@/modules/invoices/services/reference-invoice-api";
 import { ReferenceLinesPicker } from "@/modules/invoices/components/reference-lines-picker";
 import { InvoiceOpenMovementsPanel } from "@/modules/invoices/components/invoice-open-movements-panel";
+import { InvoiceInventoryMovementsPanel } from "@/modules/invoices/components/invoice-inventory-movements-panel";
 import {
   invoicePatternApi,
   DEFAULT_PATTERN_CONDITIONS,
@@ -1108,6 +1109,9 @@ export function InvoiceForm({
       pattern.commercial_kind === "return_sale" ||
       pattern.commercial_kind === "return_purchase");
 
+  const showInventoryPanel =
+    status === "posted" && !!savedId && materialLines.length > 0;
+
   const req = (flag: boolean, label: string) => (flag ? `${label} *` : label);
 
   return (
@@ -1170,6 +1174,13 @@ export function InvoiceForm({
           vendorId={vendorId}
           dueDate={dueDate}
           paymentTermsDays={paymentTermsDays}
+        />
+      )}
+
+      {showInventoryPanel && (
+        <InvoiceInventoryMovementsPanel
+          invoiceId={savedId}
+          invoiceNo={invoiceNo}
         />
       )}
 
