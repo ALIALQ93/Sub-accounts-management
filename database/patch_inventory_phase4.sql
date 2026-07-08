@@ -70,7 +70,7 @@ as $$
       else max(s.material_code)
     end::varchar as group_key,
     case
-      when coalesce(p_group_by, 'material') = 'invoice' then max(s.invoice_id)
+      when coalesce(p_group_by, 'material') = 'invoice' then (max(s.invoice_id::text))::uuid
       else null::uuid
     end as invoice_id,
     case
@@ -82,7 +82,7 @@ as $$
       else null::date
     end as invoice_date,
     case
-      when coalesce(p_group_by, 'material') = 'material' then max(s.material_id)
+      when coalesce(p_group_by, 'material') = 'material' then (max(s.material_id::text))::uuid
       else null::uuid
     end as material_id,
     case
