@@ -24,6 +24,11 @@ export interface MaterialTrackingFlags {
   require_serial_on_outbound?: boolean;
 }
 
+export interface PatternLineTracking {
+  track_expiry_on_lines?: boolean;
+  track_serial_on_lines?: boolean;
+}
+
 function flags(material: MaterialTrackingFlags | null | undefined) {
   return {
     has_expiry_date: Boolean(material?.has_expiry_date),
@@ -38,7 +43,9 @@ function flags(material: MaterialTrackingFlags | null | undefined) {
 export function showExpiryOnLine(
   material: MaterialTrackingFlags | null | undefined,
   commercialKind: string,
+  pattern?: PatternLineTracking | null,
 ): boolean {
+  if (pattern && pattern.track_expiry_on_lines === false) return false;
   if (!flags(material).has_expiry_date) return false;
   if (isInboundStockMovement(commercialKind)) return true;
   if (isOutboundStockMovement(commercialKind)) return true;
@@ -48,7 +55,9 @@ export function showExpiryOnLine(
 export function showSerialOnLine(
   material: MaterialTrackingFlags | null | undefined,
   commercialKind: string,
+  pattern?: PatternLineTracking | null,
 ): boolean {
+  if (pattern && pattern.track_serial_on_lines === false) return false;
   if (!flags(material).has_serial_number) return false;
   if (isInboundStockMovement(commercialKind)) return true;
   if (isOutboundStockMovement(commercialKind)) return true;

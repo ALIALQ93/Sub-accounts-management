@@ -46,7 +46,7 @@ import type {
   MaterialUnitOption,
   SalesRepOption,
 } from "@/modules/invoices/types";
-import { partyKindForCommercial, defaultUnitPrice, computeLineNetAmount, computeLineDiscountAmount, computeLineExtraAmount } from "@/modules/invoices/utils/invoice-line-utils";
+import { partyKindForCommercial, resolveMaterialUnitPrice, computeLineNetAmount, computeLineDiscountAmount, computeLineExtraAmount } from "@/modules/invoices/utils/invoice-line-utils";
 import {
   applyRounding,
   roundingDelta,
@@ -73,6 +73,17 @@ import {
   validateReferenceQuantities,
 } from "@/modules/invoices/utils/reference-line-caps";
 import { validateReferenceMatch } from "@/modules/invoices/utils/validate-reference-match";
+import {
+  buildExpiryBalanceMap,
+  buildSerialBalanceMap,
+  buildStockBalanceMap,
+  lotBalancesKey,
+  validateOutboundStockLines,
+} from "@/modules/invoices/utils/validate-outbound-stock";
+import { invoiceStockApi } from "@/modules/invoices/services/invoice-stock-api";
+import type { InventoryLotBalance } from "@/modules/invoices/services/invoice-stock-api";
+import { inventoryReportApi } from "@/modules/reports/services/inventory-report-api";
+import { isOutboundStockMovement } from "@/modules/materials/utils/material-tracking-utils";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { CustomerSearchField } from "@/modules/vouchers/components/customer-search-field";
 import { VendorSearchField } from "@/modules/vouchers/components/vendor-search-field";
@@ -254,6 +265,12 @@ export function InvoiceForm({
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingReference, setIsLoadingReference] = useState(false);
+  const [stockBalanceByKey, setStockBalanceByKey] = useState<Record<string, number>>(
+    {},
+  );
+  const [lotsByMwKey, setLotsByMwKey] = useState<
+    Record<string, InventoryLotBalance[]>
+  >({});
   const [error, setError] = useState("");
 
   const readOnly = status !== "draft" || !canEdit;
@@ -283,6 +300,14 @@ export function InvoiceForm({
     !!pattern?.discount_enabled && pattern.discount_applies_to === "line";
 
   const showLineExtra = !!pattern?.line_extra_enabled;
+
+  const showOutboundStock = useMemo(
+    () =>
+      !!pattern?.warehouse_movement &&
+      (pattern.enforce_stock_availability ?? true) &&
+      isOutboundStockMovement(pattern.commercial_kind),
+    [pattern],
+  );
 
   const showInvoiceDiscount =
     !!pattern?.discount_enabled && pattern.discount_applies_to === "invoice";
@@ -379,6 +404,74 @@ export function InvoiceForm({
         allowedCategoryIds,
       ),
     [materials, allowedMaterialIds, allowedCategoryIds],
+  );
+
+  useEffect(() => {
+    if (!showOutboundStock || readOnly) {
+      setStockBalanceByKey({});
+      setLotsByMwKey({});
+      return;
+    }
+
+    let cancelled = false;
+    void inventoryReportApi
+      .listBalanceRows({ asOfDate: invoiceDate, hideZero: false })
+      .then((rows) => {
+        if (!cancelled) {
+          setStockBalanceByKey(buildStockBalanceMap(rows));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setStockBalanceByKey({});
+      });
+
+    const pairs = new Map<string, { materialId: string; warehouseId: string }>();
+    for (const line of materialLines) {
+      if (!line.material_id || !line.warehouse_id) continue;
+      const key = lotBalancesKey(line.material_id, line.warehouse_id);
+      pairs.set(key, {
+        materialId: line.material_id,
+        warehouseId: line.warehouse_id,
+      });
+    }
+
+    void Promise.all(
+      [...pairs.entries()].map(async ([key, pair]) => {
+        const lots = await invoiceStockApi.listLotBalances({
+          materialId: pair.materialId,
+          warehouseId: pair.warehouseId,
+          asOfDate: invoiceDate,
+        });
+        return [key, lots] as const;
+      }),
+    )
+      .then((entries) => {
+        if (!cancelled) {
+          setLotsByMwKey(Object.fromEntries(entries));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLotsByMwKey({});
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showOutboundStock, readOnly, invoiceDate, materialLines]);
+
+  const expiryBalanceByKey = useMemo(
+    () => buildExpiryBalanceMap(lotsByMwKey),
+    [lotsByMwKey],
+  );
+
+  const serialBalanceByKey = useMemo(
+    () => buildSerialBalanceMap(lotsByMwKey),
+    [lotsByMwKey],
+  );
+
+  const materialLabelById = useMemo(
+    () => Object.fromEntries(materials.map((m) => [m.id, m.name_ar])),
+    [materials],
   );
 
   const defaultWarehouseId = useMemo(() => {
@@ -627,10 +720,11 @@ export function InvoiceForm({
               quantity: qty,
               unit_price:
                 material && unit
-                  ? defaultUnitPrice(
-                      patternData.commercial_kind,
+                  ? resolveMaterialUnitPrice(
+                      patternData.pricing_material_mode,
                       material,
-                      unit.factor_to_base,
+                      unit,
+                      patternData.commercial_kind,
                     )
                   : 0,
               line_description: null,
@@ -972,6 +1066,22 @@ export function InvoiceForm({
         return "حساب الإضافي مطلوب عند ترحيل فاتورة فيها إضافي على الأسطر.";
       }
 
+      if (pattern && showOutboundStock) {
+        const stockError = validateOutboundStockLines({
+          commercialKind: pattern.commercial_kind,
+          enforceStockAvailability: pattern.enforce_stock_availability ?? true,
+          forPost,
+          lines: materialLines,
+          materials,
+          unitsByMaterial,
+          balanceByKey: stockBalanceByKey,
+          expiryBalanceByKey,
+          serialBalanceByKey,
+          materialLabelById,
+        });
+        if (stockError) return stockError;
+      }
+
       return null;
     },
     [
@@ -1002,6 +1112,13 @@ export function InvoiceForm({
       showLineExtra,
       lineExtraTotal,
       extraAccountId,
+      showOutboundStock,
+      stockBalanceByKey,
+      lotsByMwKey,
+      expiryBalanceByKey,
+      serialBalanceByKey,
+      unitsByMaterial,
+      materialLabelById,
     ],
   );
 
@@ -1666,7 +1783,15 @@ export function InvoiceForm({
 
       {pattern.warehouse_movement && (
         <section className="rounded-xl border border-slate-200 p-4">
-          <h2 className="mb-3 text-sm font-bold text-slate-800">أسطر المواد</h2>
+          <h2 className="mb-1 text-sm font-bold text-slate-800">أسطر المواد</h2>
+          {(pattern.track_expiry_on_lines || pattern.track_serial_on_lines) && (
+            <p className="mb-3 text-xs text-slate-500">
+              {pattern.track_expiry_on_lines &&
+                "تاريخ انتهاء الصلاحية يُدخل في السطر — الإجبار من بطاقة المادة. "}
+              {pattern.track_serial_on_lines &&
+                "الرقم التسلسلي يُدخل في السطر — الإجبار من بطاقة المادة."}
+            </p>
+          )}
           <InvoiceMaterialLinesTable
             lines={materialLines}
             materials={filteredMaterials}
@@ -1676,10 +1801,18 @@ export function InvoiceForm({
             defaultCostCenterId={costCenterId}
             defaultWarehouseId={defaultWarehouseId}
             commercialKind={pattern.commercial_kind}
+            pricingMaterialMode={pattern.pricing_material_mode}
             readOnly={readOnly}
             showQtyReceived={pattern.commercial_kind === "transfer_in"}
             showLineDiscount={showLineDiscount}
             showLineExtra={showLineExtra}
+            lineTracking={{
+              track_expiry_on_lines: pattern.track_expiry_on_lines ?? true,
+              track_serial_on_lines: pattern.track_serial_on_lines ?? true,
+            }}
+            stockBalanceByKey={stockBalanceByKey}
+            lotsByMwKey={lotsByMwKey}
+            showOutboundStock={showOutboundStock && !readOnly}
             referenceLineCaps={referenceLineCaps}
             lineAttributes={lineAttrFlags}
             onChange={setMaterialLines}

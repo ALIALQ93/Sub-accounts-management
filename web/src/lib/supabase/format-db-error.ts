@@ -102,6 +102,26 @@ export function formatDbError(message: string | null | undefined): string {
     return "حساب الإضافي مطلوب — حدّده في الفاتورة أو في نمط الفاتورة.";
   }
 
+  if (/Insufficient lot stock for material/i.test(raw)) {
+    const m = raw.match(
+      /Insufficient lot stock for material (.+?) in warehouse (.+?)\. Expiry: (.+?), serial: (.+?), available: ([\d.]+), requested: ([\d.]+)/i,
+    );
+    if (m) {
+      return `رصيد الدفعة غير كافٍ — المادة ${m[1]} / المستودع ${m[2]}: صلاحية ${m[3]}، تسلسلي ${m[4]} — المتاح ${m[5]} والمطلوب ${m[6]}.`;
+    }
+    return "رصيد الدفعة (صلاحية/تسلسلي) غير كافٍ — راجع الاختيار من المخزون المتاح.";
+  }
+
+  if (/Insufficient stock for material/i.test(raw)) {
+    const m = raw.match(
+      /Insufficient stock for material (.+?) in warehouse (.+?)\. Available: ([\d.]+), requested: ([\d.]+)/i,
+    );
+    if (m) {
+      return `الرصيد غير كافٍ — المادة ${m[1]} في المستودع ${m[2]}: المتاح ${m[3]} والمطلوب ${m[4]}.`;
+    }
+    return "الرصيد غير كافٍ لإتمام حركة الإخراج — راجع الكميات والمستودع.";
+  }
+
   if (/Invoice settlement vouchers cannot be reversed automatically/i.test(raw)) {
     return "لا يمكن عكس سند إغلاق الحركات تلقائياً — راجع إعداد قاعدة البيانات.";
   }

@@ -8,6 +8,8 @@ export interface InvoiceReferenceSettings {
   hide_closed_references: boolean;
   load_discount_extra: boolean;
   load_net_unit_price: boolean;
+  load_expiry_date: boolean;
+  load_serial_number: boolean;
   allow_manual_reference_close: boolean;
   max_reference_age_days: number | null;
   load_party: boolean;
@@ -30,6 +32,8 @@ export const DEFAULT_REFERENCE_SETTINGS: InvoiceReferenceSettings = {
   hide_closed_references: true,
   load_discount_extra: false,
   load_net_unit_price: false,
+  load_expiry_date: true,
+  load_serial_number: true,
   allow_manual_reference_close: false,
   max_reference_age_days: null,
   load_party: true,
@@ -58,6 +62,8 @@ export function parseReferenceSettings(
     hide_closed_references: raw.hide_closed_references !== false,
     load_discount_extra: Boolean(raw.load_discount_extra),
     load_net_unit_price: Boolean(raw.load_net_unit_price),
+    load_expiry_date: raw.load_expiry_date !== false,
+    load_serial_number: raw.load_serial_number !== false,
     allow_manual_reference_close: Boolean(raw.allow_manual_reference_close),
     max_reference_age_days:
       typeof raw.max_reference_age_days === "number"

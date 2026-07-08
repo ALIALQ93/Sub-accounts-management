@@ -130,6 +130,14 @@ function mapReferenceMaterialLine(
     discount_amount: discountAmount,
     extra_percent: extraPercent,
     extra_amount: extraAmount,
+    expiry_date: settings.load_expiry_date ? (line.expiry_date ?? null) : null,
+    serial_number: settings.load_serial_number
+      ? (line.serial_number?.trim() || null)
+      : null,
+    color: line.color ?? null,
+    size: line.size ?? null,
+    source: line.source ?? null,
+    caliber: line.caliber ?? null,
   };
 }
 

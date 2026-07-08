@@ -55,6 +55,12 @@ export interface InvoicePattern {
   discount_applies_to: "line" | "invoice" | null;
   line_extra_enabled: boolean;
   line_adjustments_affect_material_cost: boolean;
+  pricing_material_mode: string | null;
+  pricing_cost_mode: string | null;
+  pricing_consumed_mode: string | null;
+  track_expiry_on_lines: boolean;
+  track_serial_on_lines: boolean;
+  enforce_stock_availability: boolean;
   reservation_enabled: boolean;
   reserve_on_save: boolean;
   release_on_cancel: boolean;
@@ -179,6 +185,10 @@ export interface InvoiceMaterialLine {
   line_description: string | null;
   expiry_date?: string | null;
   serial_number?: string | null;
+  color?: string | null;
+  size?: string | null;
+  source?: string | null;
+  caliber?: string | null;
   material_code?: string;
   material_name_ar?: string;
   unit_name_ar?: string;
@@ -232,6 +242,10 @@ export interface MaterialUnitOption {
   is_base_unit: boolean;
   factor_to_base: number;
   is_active: boolean;
+  purchase_price?: number | null;
+  sale_price?: number | null;
+  semi_wholesale_price?: number | null;
+  wholesale_price?: number | null;
 }
 
 export interface MaterialCategoryOption {

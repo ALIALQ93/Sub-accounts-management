@@ -135,6 +135,8 @@ export interface CompanyInventorySettings {
   costing_method: CostingMethod | null;
   cost_per_warehouse: boolean;
   cost_per_cost_center: boolean;
+  cost_per_expiry_date: boolean;
+  cost_per_serial_number: boolean;
   track_quantity_on_movement: boolean;
   foundation_locked: boolean;
   foundation_locked_at: string | null;
@@ -146,4 +148,6 @@ export interface InventorySettingsFormValues {
   costing_method: CostingMethod | "";
   cost_per_warehouse: boolean;
   cost_per_cost_center: boolean;
+  cost_per_expiry_date: boolean;
+  cost_per_serial_number: boolean;
 }

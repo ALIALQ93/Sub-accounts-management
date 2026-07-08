@@ -27,6 +27,8 @@ function toFormValues(settings: CompanyInventorySettings): InventorySettingsForm
     costing_method: settings.costing_method ?? "",
     cost_per_warehouse: settings.cost_per_warehouse,
     cost_per_cost_center: settings.cost_per_cost_center,
+    cost_per_expiry_date: settings.cost_per_expiry_date ?? false,
+    cost_per_serial_number: settings.cost_per_serial_number ?? false,
   };
 }
 
@@ -39,6 +41,8 @@ export default function InventorySettingsPage() {
     costing_method: "",
     cost_per_warehouse: false,
     cost_per_cost_center: false,
+    cost_per_expiry_date: false,
+    cost_per_serial_number: false,
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -196,6 +200,41 @@ export default function InventorySettingsPage() {
               />
               <span>فصل التكلفة لكل مركز كلف</span>
             </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={values.cost_per_expiry_date}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    cost_per_expiry_date: event.target.checked,
+                  }))
+                }
+                disabled={!canEdit || locked || isSaving}
+              />
+              <span>فصل التكلفة على أساس تاريخ الصلاحية</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={values.cost_per_serial_number}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    cost_per_serial_number: event.target.checked,
+                  }))
+                }
+                disabled={!canEdit || locked || isSaving}
+              />
+              <span>فصل التكلفة على أساس الرقم التسلسلي</span>
+            </label>
+
+            <p className="text-xs text-slate-500">
+              فصل التكلفة بالصلاحية أو التسلسلي يتطلب تفعيل التتبع في بطاقة المادة
+              وإظهاره في نمط الفاتورة. يُستخدم عند ترحيل الحركات المخزنية.
+            </p>
 
             {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
             {success && (

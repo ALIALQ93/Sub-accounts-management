@@ -15,6 +15,11 @@ import {
   parseReferenceSettings,
   type InvoiceReferenceSettings,
 } from "@/modules/invoices/utils/reference-settings";
+import {
+  defaultPricingConsumedMode,
+  defaultPricingCostMode,
+  defaultPricingMaterialMode,
+} from "@/modules/invoices/utils/pricing-modes";
 
 function throwIfSupabaseError(error: PostgrestError | null): void {
   if (error) {
@@ -86,6 +91,13 @@ export interface InvoicePatternFormValues {
   discount_applies_to: "line" | "invoice" | null;
   line_extra_enabled: boolean;
   line_adjustments_affect_material_cost: boolean;
+  pricing_material_mode: string | null;
+  pricing_cost_mode: string | null;
+  pricing_consumed_mode: string | null;
+  track_expiry_on_lines: boolean;
+  track_serial_on_lines: boolean;
+  enforce_stock_availability: boolean;
+  load_party_currency: boolean;
   reservation_enabled: boolean;
   reserve_on_save: boolean;
   release_on_cancel: boolean;
@@ -151,6 +163,25 @@ function buildPatternPayload(values: InvoicePatternFormValues) {
     discount_applies_to: values.discount_enabled ? values.discount_applies_to : null,
     line_extra_enabled: values.line_extra_enabled,
     line_adjustments_affect_material_cost: values.line_adjustments_affect_material_cost,
+    pricing_material_mode: values.warehouse_movement
+      ? values.pricing_material_mode
+      : null,
+    pricing_cost_mode:
+      values.warehouse_movement && values.direction === "input"
+        ? values.pricing_cost_mode
+        : null,
+    pricing_consumed_mode:
+      values.warehouse_movement && values.direction === "output"
+        ? values.pricing_consumed_mode
+        : null,
+    track_expiry_on_lines: values.warehouse_movement
+      ? values.track_expiry_on_lines
+      : false,
+    track_serial_on_lines: values.warehouse_movement
+      ? values.track_serial_on_lines
+      : false,
+    enforce_stock_availability: values.enforce_stock_availability,
+    load_party_currency: values.load_party_currency,
     reservation_enabled: values.reservation_enabled,
     reserve_on_save: values.reservation_enabled ? values.reserve_on_save : true,
     release_on_cancel: values.reservation_enabled ? values.release_on_cancel : true,
@@ -408,6 +439,19 @@ export function patternToFormValues(
     line_extra_enabled: pattern.line_extra_enabled ?? false,
     line_adjustments_affect_material_cost:
       pattern.line_adjustments_affect_material_cost ?? true,
+    pricing_material_mode:
+      pattern.pricing_material_mode ??
+      defaultPricingMaterialMode(pattern.commercial_kind),
+    pricing_cost_mode:
+      pattern.pricing_cost_mode ??
+      (pattern.direction === "input" ? defaultPricingCostMode() : null),
+    pricing_consumed_mode:
+      pattern.pricing_consumed_mode ??
+      (pattern.direction === "output" ? defaultPricingConsumedMode() : null),
+    track_expiry_on_lines: pattern.track_expiry_on_lines ?? true,
+    track_serial_on_lines: pattern.track_serial_on_lines ?? true,
+    enforce_stock_availability: pattern.enforce_stock_availability ?? true,
+    load_party_currency: pattern.load_party_currency ?? false,
     reservation_enabled: pattern.reservation_enabled ?? false,
     reserve_on_save: pattern.reserve_on_save ?? true,
     release_on_cancel: pattern.release_on_cancel ?? true,
@@ -477,6 +521,13 @@ export const DEFAULT_INVOICE_PATTERN_FORM: InvoicePatternFormValues = {
   discount_applies_to: "line",
   line_extra_enabled: false,
   line_adjustments_affect_material_cost: true,
+  pricing_material_mode: "sale",
+  pricing_cost_mode: null,
+  pricing_consumed_mode: "weighted_avg",
+  track_expiry_on_lines: true,
+  track_serial_on_lines: true,
+  enforce_stock_availability: true,
+  load_party_currency: false,
   reservation_enabled: false,
   reserve_on_save: true,
   release_on_cancel: true,

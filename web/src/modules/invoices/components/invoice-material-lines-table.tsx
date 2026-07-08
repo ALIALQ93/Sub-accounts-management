@@ -5,8 +5,15 @@ import type { MaterialOption, MaterialUnitOption } from "@/modules/invoices/type
 import type { InvoiceMaterialLineInput } from "@/modules/invoices/services/invoice-api";
 import {
   computeLineNetAmount,
-  defaultUnitPrice,
+  resolveMaterialUnitPrice,
 } from "@/modules/invoices/utils/invoice-line-utils";
+import { lineQuantityBase, stockBalanceKey } from "@/modules/invoices/utils/validate-outbound-stock";
+import {
+  expiryOptionsFromLots,
+  lotBalancesKey,
+  serialOptionsFromLots,
+  type InventoryLotBalance,
+} from "@/modules/invoices/services/invoice-stock-api";
 import { referenceCapForLine } from "@/modules/invoices/utils/reference-line-caps";
 import type { WarehouseOption } from "@/modules/invoices/services/invoice-pattern-api";
 import {
@@ -18,6 +25,7 @@ import {
   isSerialRequiredOnLine,
   showExpiryOnLine,
   showSerialOnLine,
+  isOutboundStockMovement,
 } from "@/modules/materials/utils/material-tracking-utils";
 
 export type DraftMaterialLine = InvoiceMaterialLineInput & {
@@ -40,10 +48,15 @@ interface InvoiceMaterialLinesTableProps {
   defaultCostCenterId: string;
   defaultWarehouseId: string;
   commercialKind: string;
+  pricingMaterialMode?: string | null;
   readOnly: boolean;
   showQtyReceived?: boolean;
   showLineDiscount?: boolean;
   showLineExtra?: boolean;
+  lineTracking?: { track_expiry_on_lines: boolean; track_serial_on_lines: boolean };
+  stockBalanceByKey?: Record<string, number>;
+  lotsByMwKey?: Record<string, InventoryLotBalance[]>;
+  showOutboundStock?: boolean;
   referenceLineCaps?: Record<string, number> | null;
   lineAttributes?: MaterialLineAttributeFlags;
   onChange: (lines: DraftMaterialLine[]) => void;
@@ -83,10 +96,15 @@ export function InvoiceMaterialLinesTable({
   defaultCostCenterId,
   defaultWarehouseId,
   commercialKind,
+  pricingMaterialMode = null,
   readOnly,
   showQtyReceived = false,
   showLineDiscount = false,
   showLineExtra = false,
+  lineTracking = { track_expiry_on_lines: true, track_serial_on_lines: true },
+  stockBalanceByKey = {},
+  lotsByMwKey = {},
+  showOutboundStock = false,
   referenceLineCaps = null,
   lineAttributes,
   onChange,
@@ -110,13 +128,21 @@ export function InvoiceMaterialLinesTable({
   );
 
   const showExpiryColumn = useMemo(
-    () => materials.some((material) => showExpiryOnLine(material, commercialKind)),
-    [materials, commercialKind],
+    () =>
+      lineTracking.track_expiry_on_lines &&
+      materials.some((material) =>
+        showExpiryOnLine(material, commercialKind, lineTracking),
+      ),
+    [materials, commercialKind, lineTracking],
   );
 
   const showSerialColumn = useMemo(
-    () => materials.some((material) => showSerialOnLine(material, commercialKind)),
-    [materials, commercialKind],
+    () =>
+      lineTracking.track_serial_on_lines &&
+      materials.some((material) =>
+        showSerialOnLine(material, commercialKind, lineTracking),
+      ),
+    [materials, commercialKind, lineTracking],
   );
 
   const warehousesForBranch = (branchId: string) =>
@@ -170,10 +196,11 @@ export function InvoiceMaterialLinesTable({
       );
       return;
     }
-    const unitPrice = defaultUnitPrice(
-      commercialKind,
+    const unitPrice = resolveMaterialUnitPrice(
+      pricingMaterialMode,
       material,
-      baseUnit.factor_to_base,
+      baseUnit,
+      commercialKind,
     );
 
     updateLine(clientId, {
@@ -196,10 +223,11 @@ export function InvoiceMaterialLinesTable({
     }
     updateLine(clientId, {
       material_unit_id: unitId,
-      unit_price: defaultUnitPrice(
-        commercialKind,
+      unit_price: resolveMaterialUnitPrice(
+        pricingMaterialMode,
         material,
-        unit.factor_to_base,
+        unit,
+        commercialKind,
       ),
     });
   };
@@ -280,7 +308,7 @@ export function InvoiceMaterialLinesTable({
                 <th className="border border-slate-200 p-2">العيار</th>
               )}
               {showExpiryColumn && (
-                <th className="border border-slate-200 p-2">تاريخ الصلاحية</th>
+                <th className="border border-slate-200 p-2">تاريخ انتهاء الصلاحية</th>
               )}
               {showSerialColumn && (
                 <th className="border border-slate-200 p-2">الرقم التسلسلي</th>
@@ -322,6 +350,42 @@ export function InvoiceMaterialLinesTable({
                 line.extra_percent,
                 line.extra_amount,
               );
+              const stockKey =
+                line.material_id && line.warehouse_id
+                  ? stockBalanceKey(line.material_id, line.warehouse_id)
+                  : null;
+              const availableStock =
+                stockKey != null ? (stockBalanceByKey[stockKey] ?? 0) : null;
+              const lineQtyBase = showOutboundStock
+                ? lineQuantityBase(line, unitsByMaterial)
+                : 0;
+              const stockInsufficient =
+                showOutboundStock &&
+                availableStock != null &&
+                lineQtyBase > availableStock + 0.000001;
+              const outbound = isOutboundStockMovement(commercialKind);
+              const mwLotKey =
+                line.material_id && line.warehouse_id
+                  ? lotBalancesKey(line.material_id, line.warehouse_id)
+                  : null;
+              const lineLots = mwLotKey ? (lotsByMwKey[mwLotKey] ?? []) : [];
+              const expiryOpts =
+                outbound && material?.has_expiry_date
+                  ? expiryOptionsFromLots(lineLots)
+                  : [];
+              const serialOpts =
+                outbound && material?.has_serial_number
+                  ? serialOptionsFromLots(lineLots)
+                  : [];
+              const selectedExpiryQty =
+                line.expiry_date && outbound
+                  ? expiryOpts.find((o) => o.expiry_date === line.expiry_date)
+                      ?.quantity_base
+                  : null;
+              const selectedSerialLot =
+                line.serial_number && outbound
+                  ? serialOpts.find((o) => o.serial_number === line.serial_number)
+                  : null;
 
               return (
                 <tr key={line.clientId} className="odd:bg-white even:bg-slate-50/60">
@@ -391,6 +455,19 @@ export function InvoiceMaterialLinesTable({
                         حد المرجع: {referenceCapForLine(line, referenceLineCaps)}
                       </p>
                     )}
+                    {showOutboundStock &&
+                      line.material_id &&
+                      line.warehouse_id &&
+                      availableStock != null && (
+                        <p
+                          className={`mt-0.5 text-xs ${
+                            stockInsufficient ? "text-red-700" : "text-slate-500"
+                          }`}
+                        >
+                          المتاح: {availableStock.toFixed(4)}
+                          {stockInsufficient && " — يتجاوز الرصيد"}
+                        </p>
+                      )}
                   </td>
                   <td className="border border-slate-100 p-2">
                     <input
@@ -420,19 +497,47 @@ export function InvoiceMaterialLinesTable({
                     renderAttrInput(line, "caliber", "العيار")}
                   {showExpiryColumn && (
                     <td className="border border-slate-100 p-2">
-                      {showExpiryOnLine(material, commercialKind) ? (
-                        <input
-                          type="date"
-                          disabled={readOnly}
-                          required={expiryRequired}
-                          className={inputClass}
-                          value={line.expiry_date ?? ""}
-                          onChange={(e) =>
-                            updateLine(line.clientId, {
-                              expiry_date: e.target.value || null,
-                            })
-                          }
-                        />
+                      {showExpiryOnLine(material, commercialKind, lineTracking) ? (
+                        outbound && material?.has_expiry_date && expiryOpts.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            <select
+                              disabled={readOnly}
+                              required={expiryRequired}
+                              className={inputClass}
+                              value={line.expiry_date ?? ""}
+                              onChange={(e) =>
+                                updateLine(line.clientId, {
+                                  expiry_date: e.target.value || null,
+                                })
+                              }
+                            >
+                              <option value="">— اختر دفعة —</option>
+                              {expiryOpts.map((opt) => (
+                                <option key={opt.expiry_date} value={opt.expiry_date}>
+                                  {opt.expiry_date} ({opt.quantity_base.toFixed(2)})
+                                </option>
+                              ))}
+                            </select>
+                            {selectedExpiryQty != null && (
+                              <span className="text-xs text-slate-500">
+                                متاح للدفعة: {selectedExpiryQty.toFixed(4)}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <input
+                            type="date"
+                            disabled={readOnly}
+                            required={expiryRequired}
+                            className={inputClass}
+                            value={line.expiry_date ?? ""}
+                            onChange={(e) =>
+                              updateLine(line.clientId, {
+                                expiry_date: e.target.value || null,
+                              })
+                            }
+                          />
+                        )
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}
@@ -440,19 +545,60 @@ export function InvoiceMaterialLinesTable({
                   )}
                   {showSerialColumn && (
                     <td className="border border-slate-100 p-2">
-                      {showSerialOnLine(material, commercialKind) ? (
-                        <input
-                          disabled={readOnly}
-                          required={serialRequired}
-                          className={`${inputClass} font-mono`}
-                          placeholder="SN"
-                          value={line.serial_number ?? ""}
-                          onChange={(e) =>
-                            updateLine(line.clientId, {
-                              serial_number: e.target.value || null,
-                            })
-                          }
-                        />
+                      {showSerialOnLine(material, commercialKind, lineTracking) ? (
+                        outbound &&
+                        material?.has_serial_number &&
+                        serialOpts.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            <select
+                              disabled={readOnly}
+                              required={serialRequired}
+                              className={`${inputClass} font-mono`}
+                              value={line.serial_number ?? ""}
+                              onChange={(e) => {
+                                const serial = e.target.value || null;
+                                const lot = serialOpts.find(
+                                  (row) => row.serial_number === serial,
+                                );
+                                updateLine(line.clientId, {
+                                  serial_number: serial,
+                                  expiry_date:
+                                    lot?.expiry_date ?? line.expiry_date ?? null,
+                                });
+                              }}
+                            >
+                              <option value="">— اختر —</option>
+                              {serialOpts.map((opt) => (
+                                <option
+                                  key={opt.serial_number ?? ""}
+                                  value={opt.serial_number ?? ""}
+                                >
+                                  {opt.serial_number} ({opt.quantity_base.toFixed(2)})
+                                </option>
+                              ))}
+                            </select>
+                            {selectedSerialLot && (
+                              <span className="text-xs text-slate-500">
+                                {selectedSerialLot.expiry_date
+                                  ? `صلاحية: ${selectedSerialLot.expiry_date}`
+                                  : "بدون تاريخ صلاحية"}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <input
+                            disabled={readOnly}
+                            required={serialRequired}
+                            className={`${inputClass} font-mono`}
+                            placeholder="SN"
+                            value={line.serial_number ?? ""}
+                            onChange={(e) =>
+                              updateLine(line.clientId, {
+                                serial_number: e.target.value || null,
+                              })
+                            }
+                          />
+                        )
                       ) : (
                         <span className="text-xs text-slate-400">—</span>
                       )}

@@ -15,6 +15,15 @@ import { AccountSearchField } from "@/modules/vouchers/components/account-search
 import { PatternAllowedSection } from "@/modules/invoices/components/pattern-allowed-section";
 import type { InvoicePatternConditionsFormValues } from "@/modules/invoices/services/invoice-pattern-api";
 import type { InvoicePatternListItem, MaterialCategoryOption, MaterialOption } from "@/modules/invoices/types";
+import {
+  PRICING_CONSUMED_MODE_LABELS,
+  PRICING_COST_MODE_LABELS,
+  PRICING_MATERIAL_MODE_LABELS,
+  defaultPricingConsumedMode,
+  defaultPricingCostMode,
+  defaultPricingMaterialMode,
+  isInboundCommercialKind,
+} from "@/modules/invoices/utils/pricing-modes";
 
 interface InvoicePatternFormProps {
   mode: "create" | "edit";
@@ -128,7 +137,13 @@ export function InvoicePatternForm({
       warehouse_movement:
         kind !== "opening_stock" ? values.warehouse_movement : true,
       reference_settings: isReturn
-        ? { ...values.reference_settings, enabled: true, require_reference: true }
+        ? {
+            ...values.reference_settings,
+            enabled: true,
+            require_reference: true,
+            load_expiry_date: true,
+            load_serial_number: true,
+          }
         : values.reference_settings,
     });
   };
@@ -539,6 +554,8 @@ export function InvoicePatternForm({
               ["load_invoice_date", "تحميل تاريخ الفاتورة"],
               ["load_discount_extra", "تحميل الحسم / الإضافي"],
               ["load_net_unit_price", "تحميل السعر الصافي (بعد الخصم)"],
+              ["load_expiry_date", "تحميل تاريخ انتهاء الصلاحية"],
+              ["load_serial_number", "تحميل الرقم التسلسلي"],
             ] as const
           ).map(([key, label]) => (
             <label key={key} className="flex items-center gap-2 text-sm">
@@ -598,6 +615,107 @@ export function InvoicePatternForm({
           disabled={formDisabled}
         />
       </Section>
+
+      {values.warehouse_movement && (
+        <Section title="التسعير والتكلفة">
+          <Field label="السعر المحمّل من بطاقة المادة">
+            <select
+              disabled={formDisabled}
+              className={inputClass}
+              value={values.pricing_material_mode ?? defaultPricingMaterialMode(values.commercial_kind)}
+              onChange={(e) =>
+                update({
+                  pricing_material_mode: e.target.value || null,
+                })
+              }
+            >
+              {Object.entries(PRICING_MATERIAL_MODE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="text-xs text-slate-500 md:col-span-2">
+            يُحمَّل السعر تلقائياً عند اختيار المادة/الوحدة. المستخدم ذو صلاحية تعديل
+            الفاتورة يستطيع تغيير السعر يدوياً في السطر.
+          </p>
+
+          {isInboundCommercialKind(values.commercial_kind) && (
+            <>
+              <Field label="تأثير السطر على تكلفة المخزون (إدخال)">
+                <select
+                  disabled={formDisabled}
+                  className={inputClass}
+                  value={values.pricing_cost_mode ?? defaultPricingCostMode()}
+                  onChange={(e) =>
+                    update({
+                      pricing_cost_mode: e.target.value || null,
+                    })
+                  }
+                >
+                  {Object.entries(PRICING_COST_MODE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex flex-wrap items-center gap-4 md:col-span-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    disabled={formDisabled}
+                    checked={values.line_adjustments_affect_material_cost}
+                    onChange={(e) =>
+                      update({
+                        line_adjustments_affect_material_cost: e.target.checked,
+                      })
+                    }
+                  />
+                  خصم/إضافي السطر يدخل في تكلفة الوحدة (عند «صافي السطر»)
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 md:col-span-2">
+                ينطبق على فواتير الإدخال: مشتريات، مرتجع مبيعات، بضاعة أول مدة، مناقلة
+                واردة. عند «إجمالي السطر» تُحسب التكلفة من الكمية × السعر دون خصم/إضافي.
+              </p>
+            </>
+          )}
+
+          {!isInboundCommercialKind(values.commercial_kind) && (
+            <>
+              <Field label="استهلاك التكلفة عند الإخراج">
+                <select
+                  disabled={formDisabled}
+                  className={inputClass}
+                  value={
+                    values.pricing_consumed_mode ?? defaultPricingConsumedMode()
+                  }
+                  onChange={(e) =>
+                    update({
+                      pricing_consumed_mode: e.target.value || null,
+                    })
+                  }
+                >
+                  {Object.entries(PRICING_CONSUMED_MODE_LABELS).map(
+                    ([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </Field>
+              <p className="text-xs text-slate-500 md:col-span-2">
+                ينطبق على فواتير الإخراج: مبيعات، مرتجع مشتريات، مناقلة صادرة. «تكلفة
+                الدفعة» تُستخدم عند تفعيل فصل التكلفة بالصلاحية أو التسلسلي في إعدادات
+                المخزون.
+              </p>
+            </>
+          )}
+        </Section>
+      )}
 
       <Section title="التخفيض">
         <div className="flex flex-wrap items-center gap-4 md:col-span-2">
@@ -666,17 +784,6 @@ export function InvoicePatternForm({
             />
             تفعيل حقول الإضافي على أسطر المواد
           </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              disabled={formDisabled}
-              checked={values.line_adjustments_affect_material_cost}
-              onChange={(e) =>
-                update({ line_adjustments_affect_material_cost: e.target.checked })
-              }
-            />
-            خصم/إضافي السطر يؤثر على تكلفة المخزون (مشتريات، بضاعة أول مدة، مرتجع مبيعات)
-          </label>
         </div>
         <AccountSearchField
           label="حساب الإضافي الافتراضي"
@@ -686,8 +793,55 @@ export function InvoicePatternForm({
           disabled={formDisabled || !values.line_extra_enabled}
         />
         <p className="text-xs text-slate-500 md:col-span-2">
-          الإضافي يُدخل كنسبة أو مبلغ ثابت لكل سطر. عند تعطيل التأثير على التكلفة يُسجَّل
-          الإضافي كقيد منفصل ولا يدخل في تكلفة الوحدة بالمخزون.
+          الإضافي يُدخل كنسبة أو مبلغ ثابت لكل سطر. تأثير الخصم/الإضافي على تكلفة
+          المخزون يُضبط في قسم «التسعير والتكلفة» لفواتير الإدخال.
+        </p>
+      </Section>
+
+      <Section title="تتبع الصلاحية والتسلسلي">
+        <div className="flex flex-wrap items-center gap-4 md:col-span-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={formDisabled || !values.warehouse_movement}
+              checked={values.track_expiry_on_lines}
+              onChange={(e) => update({ track_expiry_on_lines: e.target.checked })}
+            />
+            إظهار تاريخ انتهاء الصلاحية على الأسطر
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={formDisabled || !values.warehouse_movement}
+              checked={values.track_serial_on_lines}
+              onChange={(e) => update({ track_serial_on_lines: e.target.checked })}
+            />
+            إظهار الرقم التسلسلي على الأسطر
+          </label>
+        </div>
+        <p className="text-xs text-slate-500 md:col-span-2">
+          الإجبار ونوع التتبع (إدخال/إخراج) يُضبط من بطاقة المادة. هنا يُحدَّد فقط إظهار
+          الحقول في فواتير هذا النمط — والقيم تُدخل يدوياً في كل سطر.
+        </p>
+      </Section>
+
+      <Section title="توفر المخزون">
+        <div className="flex flex-wrap items-center gap-4 md:col-span-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={formDisabled || !values.warehouse_movement}
+              checked={values.enforce_stock_availability}
+              onChange={(e) =>
+                update({ enforce_stock_availability: e.target.checked })
+              }
+            />
+            منع ترحيل الإخراج إذا الكمية تتجاوز الرصيد المتاح (مادة + مستودع)
+          </label>
+        </div>
+        <p className="text-xs text-slate-500 md:col-span-2">
+          ينطبق على المبيعات، مرتجع المشتريات، والمناقلة الصادرة. يتحقق من الرصيد الإجمالي
+          ودفعات الصلاحية والأرقام التسلسلية المتوفرة في المخزون.
         </p>
       </Section>
 
@@ -894,6 +1048,15 @@ export function InvoicePatternForm({
               onChange={(e) => update({ cc_on_goods: e.target.checked })}
             />
             مركز كلفة على المواد
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              disabled={formDisabled}
+              checked={values.load_party_currency}
+              onChange={(e) => update({ load_party_currency: e.target.checked })}
+            />
+            تحميل عملة الطرف تلقائياً
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input

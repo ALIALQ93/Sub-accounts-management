@@ -1,3 +1,5 @@
+import { defaultPricingMaterialMode } from "@/modules/invoices/utils/pricing-modes";
+
 export function unitPriceFromBase(
   basePrice: number,
   factorToBase: number,
@@ -81,16 +83,61 @@ export function partyKindForCommercial(
   return "none";
 }
 
+export interface MaterialUnitPriceSource {
+  factor_to_base: number;
+  purchase_price?: number | null;
+  sale_price?: number | null;
+  semi_wholesale_price?: number | null;
+  wholesale_price?: number | null;
+}
+
+export function resolveMaterialUnitPrice(
+  pricingMaterialMode: string | null | undefined,
+  material: { sale_price: number; purchase_price: number },
+  unit: MaterialUnitPriceSource | null,
+  commercialKind: string,
+): number {
+  const mode = pricingMaterialMode ?? defaultPricingMaterialMode(commercialKind);
+  if (mode === "none") return 0;
+
+  const factor = unit?.factor_to_base ?? 1;
+  let basePrice = 0;
+
+  switch (mode) {
+    case "purchase":
+      basePrice = unit?.purchase_price ?? material.purchase_price;
+      break;
+    case "sale":
+      basePrice = unit?.sale_price ?? material.sale_price;
+      break;
+    case "semi_wholesale":
+      basePrice =
+        unit?.semi_wholesale_price ??
+        unit?.sale_price ??
+        material.sale_price;
+      break;
+    case "wholesale":
+      basePrice =
+        unit?.wholesale_price ?? unit?.sale_price ?? material.sale_price;
+      break;
+    default:
+      basePrice = defaultPricingMaterialMode(commercialKind) === "purchase"
+        ? (unit?.purchase_price ?? material.purchase_price)
+        : (unit?.sale_price ?? material.sale_price);
+  }
+
+  return unitPriceFromBase(Number(basePrice) || 0, factor);
+}
+
 export function defaultUnitPrice(
   commercialKind: string,
   material: { sale_price: number; purchase_price: number },
   factorToBase: number,
 ): number {
-  const base =
-    commercialKind === "purchase" ||
-    commercialKind === "return_sale" ||
-    commercialKind === "opening_stock"
-      ? material.purchase_price
-      : material.sale_price;
-  return unitPriceFromBase(base, factorToBase);
+  return resolveMaterialUnitPrice(
+    null,
+    material,
+    { factor_to_base: factorToBase },
+    commercialKind,
+  );
 }

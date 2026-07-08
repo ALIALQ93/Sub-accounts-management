@@ -134,6 +134,11 @@ database/setup_all.sql
 | `patch_materials_tracking.sql` | صلاحية + رقم تسلسلي + إجبار إدخال/إخراج | **#32 — مواد** |
 | `patch_invoice_line_adjustments.sql` | خصم/إضافي per سطر + تأثير على تكلفة المخزون | **#33 — فواتير** |
 | `patch_expiry_from_invoice.sql` | تاريخ الانتهاء في سطر الفاتورة؛ الإعدادات من بطاقة المادة | **#34 — فواتير/مواد** |
+| `patch_invoice_pattern_tracking.sql` | إظهار صلاحية/تسلسلي على أسطر النمط + تحميل من المرجع | **#35 — فواتير** |
+| `patch_outbound_stock_check.sql` | منع إخراج يتجاوز الرصيد (مادة + مستودع) | **#36 — مخزون** |
+| `patch_outbound_lot_stock.sql` | رصيد دفعات صلاحية/تسلسلي + قوائم الاختيار | **#37 — مخزون** |
+| `patch_inventory_cost_dimensions.sql` | فصل تكلفة بالصلاحية/التسلسلي + قفل الإعدادات | **#38 — تكلفة** |
+| `patch_invoice_pricing_cost.sql` | ربط pricing_*_mode بـ post_invoice وحركات المخزون | **#39 — تسعير** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql
