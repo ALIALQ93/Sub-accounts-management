@@ -86,6 +86,14 @@ export default function MaterialsPage() {
         {!isLoading && error && (
           <p className="text-sm text-[var(--danger)]">{error}</p>
         )}
+        {!isLoading &&
+          !error &&
+          materials.some((material) => material.has_base_unit === false) && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              توجد مواد بدون وحدة أساس — أكمل بطاقة المادة قبل استخدامها في
+              الفواتير. المواد المتأثرة مُعلَّمة في القائمة.
+            </div>
+          )}
         {!isLoading && !error && materials.length === 0 && (
           <p className="text-sm text-slate-600">
             لا توجد مواد — شغّل <code className="text-xs">setup_all.sql</code> أو أضف
@@ -120,6 +128,11 @@ export default function MaterialsPage() {
                       {material.name_en && (
                         <span className="block text-xs font-normal text-slate-500">
                           {material.name_en}
+                        </span>
+                      )}
+                      {material.has_base_unit === false && (
+                        <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900">
+                          بدون وحدة أساس
                         </span>
                       )}
                     </td>

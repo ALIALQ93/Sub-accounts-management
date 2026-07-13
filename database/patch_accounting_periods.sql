@@ -35,8 +35,38 @@ comment on table public.accounting_periods is
 alter table public.accounting_periods enable row level security;
 
 drop policy if exists "accounting_periods_all" on public.accounting_periods;
-create policy "accounting_periods_all" on public.accounting_periods
-  for all to authenticated using (true) with check (true);
+drop policy if exists "accounting_periods_select_all" on public.accounting_periods;
+drop policy if exists "accounting_periods_insert_admin" on public.accounting_periods;
+drop policy if exists "accounting_periods_update_admin" on public.accounting_periods;
+drop policy if exists "accounting_periods_delete_admin" on public.accounting_periods;
+
+create policy "accounting_periods_select_all" on public.accounting_periods
+  for select to authenticated using (true);
+
+create policy "accounting_periods_insert_admin" on public.accounting_periods
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "accounting_periods_update_admin" on public.accounting_periods
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "accounting_periods_delete_admin" on public.accounting_periods
+  for delete to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
 
 create or replace function public.accounting_periods_set_updated_at()
 returns trigger

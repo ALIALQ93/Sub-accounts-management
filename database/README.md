@@ -138,7 +138,10 @@ database/setup_all.sql
 | `patch_outbound_stock_check.sql` | منع إخراج يتجاوز الرصيد (مادة + مستودع) | **#36 — مخزون** |
 | `patch_outbound_lot_stock.sql` | رصيد دفعات صلاحية/تسلسلي + قوائم الاختيار | **#37 — مخزون** |
 | `patch_inventory_cost_dimensions.sql` | فصل تكلفة بالصلاحية/التسلسلي + قفل الإعدادات | **#38 — تكلفة** |
-| `patch_invoice_pricing_cost.sql` | ربط pricing_*_mode بـ post_invoice وحركات المخزون | **#39 — تسعير** |
+| `patch_invoice_pricing_cost.sql` | ربط pricing_*_mode بـ post_invoice + **إصلاح خصم شراء / استلام جزئي** | **#39/#43 — تسعير** |
+| `patch_audit_governance_security.sql` | فهرس افتتاحي بدون فرع + RLS فترات/فروع + reference_links | **#40 — تدقيق أمني** |
+| `patch_revoke_anon_table_access.sql` | إزالة `anon` من سياسات الجداول (استثناء company_settings SELECT) | **#41 — أمني حرج** |
+| `patch_create_material_with_base_unit.sql` | إنشاء مادة + وحدة أساس ذرّياً | **#42 — مواد** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

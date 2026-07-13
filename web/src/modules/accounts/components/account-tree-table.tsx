@@ -192,11 +192,13 @@ export function AccountTreeTable({
                       <ActionButton
                         label="+ فرع"
                         tone="emerald"
-                        disabled={isSaving || !node.is_active}
+                        disabled={isSaving || !node.is_active || parentHasMovements}
                         title={
                           parentHasMovements
-                            ? "عليه حركة — سيُرفض إذا لم تُزَل الحركات"
-                            : undefined
+                            ? "عليه حركة محاسبية — لا يمكن إضافة فرع"
+                            : !node.is_active
+                              ? "الحساب معطّل"
+                              : undefined
                         }
                         onClick={() => onAddChild(node)}
                       />

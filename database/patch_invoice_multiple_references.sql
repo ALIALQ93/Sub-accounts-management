@@ -24,6 +24,12 @@ create index if not exists idx_invoice_reference_links_invoice_id
 create index if not exists idx_invoice_reference_links_reference_invoice_id
   on public.invoice_reference_links(reference_invoice_id);
 
+alter table public.invoice_reference_links enable row level security;
+
+drop policy if exists "invoice_reference_links_all" on public.invoice_reference_links;
+create policy "invoice_reference_links_all" on public.invoice_reference_links
+  for all to authenticated using (true) with check (true);
+
 -- ---------------------------------------------------------------------------
 -- مزامنة المراجع الإضافية (المرجع الرئيسي يبقى في invoices.reference_invoice_id)
 -- ---------------------------------------------------------------------------

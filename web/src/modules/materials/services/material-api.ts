@@ -373,9 +373,10 @@ export const materialApi = {
   async listMaterials(): Promise<MaterialListItem[]> {
     const supabase = getSupabaseClient();
     const attempts = [
-      `${MATERIAL_SELECT_TRACKING}, material_categories ( category_code, name_ar )`,
-      `${MATERIAL_SELECT_EXTENDED}, material_categories ( category_code, name_ar )`,
-      `${MATERIAL_SELECT_WITH_MIN}, material_categories ( category_code, name_ar )`,
+      `${MATERIAL_SELECT_TRACKING}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
+      `${MATERIAL_SELECT_EXTENDED}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
+      `${MATERIAL_SELECT_WITH_MIN}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
+      `${MATERIAL_SELECT_CORE}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
       `${MATERIAL_SELECT_CORE}, material_categories ( category_code, name_ar )`,
     ];
 
@@ -396,9 +397,9 @@ export const materialApi = {
       if (
         !isMissingColumn(result.error, "min_stock") &&
         !isMissingColumn(result.error, "max_stock") &&
-      !isMissingColumn(result.error, "barcode") &&
-      !isMissingColumn(result.error, "has_expiry_date")
-    ) {
+        !isMissingColumn(result.error, "barcode") &&
+        !isMissingColumn(result.error, "has_expiry_date")
+      ) {
         break;
       }
     }
@@ -412,11 +413,20 @@ export const materialApi = {
         | { category_code: string; name_ar: string }[]
         | null;
       const categoryRow = Array.isArray(category) ? category[0] : category;
+      const units = row.material_units as
+        | { id: string; is_base_unit: boolean }[]
+        | null
+        | undefined;
       const material = mapMaterial(row as unknown as Material);
+      const hasBaseUnit =
+        units == null
+          ? undefined
+          : units.some((unit) => unit.is_base_unit);
       return {
         ...material,
         category_code: categoryRow?.category_code ?? null,
         category_name_ar: categoryRow?.name_ar ?? null,
+        has_base_unit: hasBaseUnit,
       };
     });
   },
@@ -472,9 +482,40 @@ export const materialApi = {
     baseUnit: MaterialUnitFormValues,
   ): Promise<Material> {
     const supabase = getSupabaseClient();
-    const insertPayload = buildMaterialInsertPayload(payload);
-    const material = await mutateMaterialRow("insert", insertPayload);
+    const materialPayload = buildMaterialInsertPayload(payload);
+    const unitPayload = {
+      unit_code: baseUnit.unit_code,
+      name_ar: baseUnit.name_ar,
+      name_en: baseUnit.name_en,
+      is_active: baseUnit.is_active,
+      purchase_price: baseUnit.purchase_price ?? payload.purchase_price,
+      sale_price: baseUnit.sale_price ?? payload.sale_price,
+      semi_wholesale_price: baseUnit.semi_wholesale_price,
+      wholesale_price: baseUnit.wholesale_price,
+    };
 
+    const { data: rpcId, error: rpcError } = await supabase.rpc(
+      "create_material_with_base_unit",
+      {
+        p_material: materialPayload,
+        p_base_unit: unitPayload,
+      },
+    );
+
+    if (!rpcError && rpcId) {
+      const created = await this.getMaterialById(String(rpcId));
+      if (created) return created;
+    }
+
+    if (rpcError && !isMissingTable(rpcError)) {
+      // دالة موجودة لكن فشل التحقق — لا نسقط إلى المسار غير الذرّي
+      if (rpcError.code !== "PGRST202" && rpcError.code !== "42883") {
+        throwIfSupabaseError(rpcError);
+      }
+    }
+
+    // مسار احتياطي لقواعد قديمة بدون الـ RPC
+    const material = await mutateMaterialRow("insert", materialPayload);
     try {
       await this.createMaterialUnit(material.id, {
         ...baseUnit,

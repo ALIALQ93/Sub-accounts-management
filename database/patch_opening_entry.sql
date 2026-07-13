@@ -24,15 +24,16 @@ create index if not exists idx_journal_entries_is_opening_entry
   on public.journal_entries(is_opening_entry)
   where is_opening_entry = true;
 
--- قيد افتتاحي مرحّل واحد per (فرع، سنة)
+-- قيد افتتاحي مرحّل واحد per (فرع أو بدون فرع، سنة)
+-- coalesce يغطي branch_id null — نفس نمط idx_accounting_periods_code_branch
+drop index if exists public.idx_vouchers_opening_per_branch_year;
 create unique index if not exists idx_vouchers_opening_per_branch_year
   on public.vouchers (
-    branch_id,
+    coalesce(branch_id, '00000000-0000-0000-0000-000000000000'::uuid),
     (extract(year from voucher_date)::int)
   )
   where is_opening_entry = true
-    and status = 'posted'
-    and branch_id is not null;
+    and status = 'posted';
 
 -- نسخ العلامة إلى القيد عند الترحيل
 create or replace function public.sync_voucher_journal_opening_flag()

@@ -413,6 +413,8 @@ declare
   v_line_gross numeric(18, 2);
   v_line_disc numeric(18, 2);
   v_line_extra numeric(18, 2);
+  v_qty_recv numeric(18, 6);
+  v_qty_base_recv numeric(18, 6);
   v_round_step numeric(18, 4);
   v_party_total numeric(18, 2);
   v_rounded_total numeric(18, 2);
@@ -678,7 +680,9 @@ begin
       v_line_disc := coalesce(v_row.discount_amount, 0);
       v_line_extra := coalesce(v_row.extra_amount, 0);
 
-      if v_line_disc > 0 and v_discount_acct is null then
+      if v_line_disc > 0
+         and not coalesce(v_pat.line_adjustments_affect_material_cost, true)
+         and v_discount_acct is null then
         raise exception 'Line discount requires discount_account_id on invoice or pattern.';
       end if;
       if v_line_extra > 0
@@ -721,7 +725,9 @@ begin
         );
       end if;
 
-      if v_line_disc > 0 then
+      -- خصم منفصل فقط عندما لا يدخل في تكلفة المخزون (نفس منطق الإضافي)
+      if v_line_disc > 0
+         and not coalesce(v_pat.line_adjustments_affect_material_cost, true) then
         perform public._invoice_add_journal_line(
           v_je_id, v_discount_acct, 0, v_line_disc,
           'خصم سطر — ' || v_inv.invoice_no,
@@ -839,6 +845,19 @@ begin
       where iml.invoice_id = p_invoice_id
       order by iml.line_no
     loop
+      v_qty_recv := coalesce(v_row.qty_received, v_row.quantity);
+      if v_qty_recv < 0 then
+        raise exception 'qty_received cannot be negative.';
+      end if;
+      if v_qty_recv > v_row.quantity then
+        raise exception 'qty_received cannot exceed ordered quantity.';
+      end if;
+
+      v_qty_base_recv := public.material_quantity_to_base(
+        v_row.material_unit_id,
+        v_qty_recv
+      );
+
       v_line_gross := round((v_row.quantity * v_row.unit_price)::numeric, 2);
       v_line_cost := public.calc_inbound_inventory_amount(
         v_pat.pricing_cost_mode,
@@ -861,6 +880,15 @@ begin
           v_row.expiry_date,
           v_row.serial_number,
           v_inv.invoice_date
+        );
+      end if;
+
+      -- تناسب التكلفة مع الكمية المستلمة عند الاستلام الجزئي
+      if v_row.quantity_base > 0
+         and v_qty_base_recv is distinct from v_row.quantity_base then
+        v_line_cost := round(
+          (v_line_cost * v_qty_base_recv / v_row.quantity_base)::numeric,
+          2
         );
       end if;
 
@@ -889,9 +917,13 @@ begin
       )
       values (
         v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
-        coalesce(v_row.qty_received, v_row.quantity),
-        v_row.quantity_base,
-        v_row.purchase_price, v_line_cost,
+        v_qty_recv,
+        v_qty_base_recv,
+        case
+          when v_qty_base_recv > 0 then round((v_line_cost / v_qty_base_recv)::numeric, 4)
+          else v_row.purchase_price
+        end,
+        v_line_cost,
         'transfer_in', 'invoice', p_invoice_id, v_row.id
       );
     end loop;

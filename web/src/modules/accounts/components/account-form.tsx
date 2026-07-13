@@ -152,7 +152,11 @@ export function AccountForm({
           >
             <option value="">اختر الحساب الأب</option>
             {parentAccounts.map((account) => (
-              <option key={account.id} value={account.id}>
+              <option
+                key={account.id}
+                value={account.id}
+                disabled={accountsWithMovements?.has(account.id)}
+              >
                 {formatParentOptionLabel(account, accountsWithMovements)}
               </option>
             ))}

@@ -16,7 +16,7 @@ const INVENTORY_METHOD_LABELS = {
 
 const COSTING_METHOD_LABELS = {
   weighted_avg: "متوسط مرجح",
-  fifo: "FIFO — الوارد أولاً",
+  // fifo: غير منفَّذ في محرك الترحيل بعد — لا يُعرض حتى يُنفَّذ فعلياً
   standard: "تكلفة معيارية",
   last_purchase: "آخر شراء",
 } as const;
@@ -163,12 +163,26 @@ export default function InventorySettingsPage() {
                 required
               >
                 <option value="">— اختر —</option>
+                {values.costing_method === "fifo" && (
+                  <option value="fifo" disabled>
+                    FIFO — غير متاح حالياً (محفوظ سابقاً)
+                  </option>
+                )}
                 {Object.entries(COSTING_METHOD_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
               </select>
+              {settings?.costing_method === "fifo" && (
+                <span className="text-xs text-amber-700">
+                  القيمة الحالية «FIFO» محفوظة لكن المحرك يطبّق متوسطاً مرجّحاً حتى
+                  يُنفَّذ FIFO لاحقاً — لا تختر FIFO من جديد.
+                </span>
+              )}
+              <span className="text-xs text-slate-500">
+                يُقفَل بعد أول عملية مخزنية مرحّلة.
+              </span>
             </label>
 
             <label className="flex items-center gap-2 text-sm">

@@ -398,13 +398,13 @@ export default function TrialBalancePage() {
               }}
               className="rounded-md border border-slate-300 px-3 py-2"
             >
-              <option value="all">كل العملات (أصلية لكل حساب)</option>
+              <option value="all">كل العملات (عرض بعملة كل حساب)</option>
               {currencies.map((currency) => (
                 <option key={currency.id} value={currency.id}>
                   {currency.code} — {currency.name_ar}
                 </option>
               ))}
-              <option value="base">محوّلة للعملة الأساسية</option>
+              <option value="base">العملة الأساسية (بدون تحويل — كما في القيود)</option>
             </select>
           </label>
 

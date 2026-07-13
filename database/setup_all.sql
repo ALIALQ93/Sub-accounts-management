@@ -3010,12 +3010,35 @@ create policy "branches_select_all" on public.branches
   for select to authenticated using (true);
 
 drop policy if exists "branches_insert_all" on public.branches;
-create policy "branches_insert_all" on public.branches
-  for insert to authenticated with check (true);
-
 drop policy if exists "branches_update_all" on public.branches;
-create policy "branches_update_all" on public.branches
-  for update to authenticated using (true) with check (true);
+drop policy if exists "branches_insert_admin" on public.branches;
+drop policy if exists "branches_update_admin" on public.branches;
+drop policy if exists "branches_delete_admin" on public.branches;
+
+create policy "branches_insert_admin" on public.branches
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "branches_update_admin" on public.branches
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "branches_delete_admin" on public.branches
+  for delete to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
 
 drop policy if exists "company_settlement_accounts_select_all" on public.company_settlement_accounts;
 create policy "company_settlement_accounts_select_all" on public.company_settlement_accounts
@@ -6072,6 +6095,12 @@ create index if not exists idx_invoice_reference_links_invoice_id
 create index if not exists idx_invoice_reference_links_reference_invoice_id
   on public.invoice_reference_links(reference_invoice_id);
 
+alter table public.invoice_reference_links enable row level security;
+
+drop policy if exists "invoice_reference_links_all" on public.invoice_reference_links;
+create policy "invoice_reference_links_all" on public.invoice_reference_links
+  for all to authenticated using (true) with check (true);
+
 -- ---------------------------------------------------------------------------
 -- مزامنة المراجع الإضافية (المرجع الرئيسي يبقى في invoices.reference_invoice_id)
 -- ---------------------------------------------------------------------------
@@ -6197,15 +6226,16 @@ create index if not exists idx_journal_entries_is_opening_entry
   on public.journal_entries(is_opening_entry)
   where is_opening_entry = true;
 
--- قيد افتتاحي مرحّل واحد per (فرع، سنة)
+-- قيد افتتاحي مرحّل واحد per (فرع أو بدون فرع، سنة)
+-- coalesce يغطي branch_id null — نفس نمط idx_accounting_periods_code_branch
+drop index if exists public.idx_vouchers_opening_per_branch_year;
 create unique index if not exists idx_vouchers_opening_per_branch_year
   on public.vouchers (
-    branch_id,
+    coalesce(branch_id, '00000000-0000-0000-0000-000000000000'::uuid),
     (extract(year from voucher_date)::int)
   )
   where is_opening_entry = true
-    and status = 'posted'
-    and branch_id is not null;
+    and status = 'posted';
 
 -- نسخ العلامة إلى القيد عند الترحيل
 create or replace function public.sync_voucher_journal_opening_flag()
@@ -6397,8 +6427,38 @@ comment on table public.accounting_periods is
 alter table public.accounting_periods enable row level security;
 
 drop policy if exists "accounting_periods_all" on public.accounting_periods;
-create policy "accounting_periods_all" on public.accounting_periods
-  for all to authenticated using (true) with check (true);
+drop policy if exists "accounting_periods_select_all" on public.accounting_periods;
+drop policy if exists "accounting_periods_insert_admin" on public.accounting_periods;
+drop policy if exists "accounting_periods_update_admin" on public.accounting_periods;
+drop policy if exists "accounting_periods_delete_admin" on public.accounting_periods;
+
+create policy "accounting_periods_select_all" on public.accounting_periods
+  for select to authenticated using (true);
+
+create policy "accounting_periods_insert_admin" on public.accounting_periods
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "accounting_periods_update_admin" on public.accounting_periods
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "accounting_periods_delete_admin" on public.accounting_periods
+  for delete to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
 
 create or replace function public.accounting_periods_set_updated_at()
 returns trigger
@@ -12402,6 +12462,8 @@ declare
   v_line_gross numeric(18, 2);
   v_line_disc numeric(18, 2);
   v_line_extra numeric(18, 2);
+  v_qty_recv numeric(18, 6);
+  v_qty_base_recv numeric(18, 6);
   v_round_step numeric(18, 4);
   v_party_total numeric(18, 2);
   v_rounded_total numeric(18, 2);
@@ -12667,7 +12729,9 @@ begin
       v_line_disc := coalesce(v_row.discount_amount, 0);
       v_line_extra := coalesce(v_row.extra_amount, 0);
 
-      if v_line_disc > 0 and v_discount_acct is null then
+      if v_line_disc > 0
+         and not coalesce(v_pat.line_adjustments_affect_material_cost, true)
+         and v_discount_acct is null then
         raise exception 'Line discount requires discount_account_id on invoice or pattern.';
       end if;
       if v_line_extra > 0
@@ -12710,7 +12774,9 @@ begin
         );
       end if;
 
-      if v_line_disc > 0 then
+      -- خصم منفصل فقط عندما لا يدخل في تكلفة المخزون (نفس منطق الإضافي)
+      if v_line_disc > 0
+         and not coalesce(v_pat.line_adjustments_affect_material_cost, true) then
         perform public._invoice_add_journal_line(
           v_je_id, v_discount_acct, 0, v_line_disc,
           'خصم سطر — ' || v_inv.invoice_no,
@@ -12828,6 +12894,19 @@ begin
       where iml.invoice_id = p_invoice_id
       order by iml.line_no
     loop
+      v_qty_recv := coalesce(v_row.qty_received, v_row.quantity);
+      if v_qty_recv < 0 then
+        raise exception 'qty_received cannot be negative.';
+      end if;
+      if v_qty_recv > v_row.quantity then
+        raise exception 'qty_received cannot exceed ordered quantity.';
+      end if;
+
+      v_qty_base_recv := public.material_quantity_to_base(
+        v_row.material_unit_id,
+        v_qty_recv
+      );
+
       v_line_gross := round((v_row.quantity * v_row.unit_price)::numeric, 2);
       v_line_cost := public.calc_inbound_inventory_amount(
         v_pat.pricing_cost_mode,
@@ -12850,6 +12929,15 @@ begin
           v_row.expiry_date,
           v_row.serial_number,
           v_inv.invoice_date
+        );
+      end if;
+
+      -- تناسب التكلفة مع الكمية المستلمة عند الاستلام الجزئي
+      if v_row.quantity_base > 0
+         and v_qty_base_recv is distinct from v_row.quantity_base then
+        v_line_cost := round(
+          (v_line_cost * v_qty_base_recv / v_row.quantity_base)::numeric,
+          2
         );
       end if;
 
@@ -12878,9 +12966,13 @@ begin
       )
       values (
         v_inv.invoice_date, v_row.material_id, v_row.warehouse_id, v_row.branch_id, v_row.cost_center_id,
-        coalesce(v_row.qty_received, v_row.quantity),
-        v_row.quantity_base,
-        v_row.purchase_price, v_line_cost,
+        v_qty_recv,
+        v_qty_base_recv,
+        case
+          when v_qty_base_recv > 0 then round((v_line_cost / v_qty_base_recv)::numeric, 4)
+          else v_row.purchase_price
+        end,
+        v_line_cost,
         'transfer_in', 'invoice', p_invoice_id, v_row.id
       );
     end loop;
@@ -13274,6 +13366,405 @@ $$;
 
 
 grant execute on function public.post_invoice(uuid) to authenticated;
+
+-- =============================================================================
+-- BEGIN patch_audit_governance_security.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_audit_governance_security.sql (#40)
+-- =============================================================================
+-- تدقيق: قيد افتتاحي بدون فرع + RLS فترات/فروع + invoice_reference_links
+-- يتطلب: patch_invoice_pricing_cost.sql
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 1) قيد افتتاحي مرحّل واحد per (فرع أو بدون فرع، سنة)
+--    الفهرس السابق استثنى branch_id is null — ثغرة تكرار للشركات بدون فروع
+-- ---------------------------------------------------------------------------
+
+drop index if exists public.idx_vouchers_opening_per_branch_year;
+
+create unique index if not exists idx_vouchers_opening_per_branch_year
+  on public.vouchers (
+    coalesce(branch_id, '00000000-0000-0000-0000-000000000000'::uuid),
+    (extract(year from voucher_date)::int)
+  )
+  where is_opening_entry = true
+    and status = 'posted';
+
+comment on index public.idx_vouchers_opening_per_branch_year is
+  'قيد افتتاحي مرحّل واحد per سنة — يشمل branch_id null عبر coalesce (نفس نمط الفترات المحاسبية)';
+
+-- ---------------------------------------------------------------------------
+-- 2) accounting_periods — تقييد الكتابة بصلاحية إعدادات الشركة
+-- ---------------------------------------------------------------------------
+
+drop policy if exists "accounting_periods_all" on public.accounting_periods;
+drop policy if exists "accounting_periods_select_all" on public.accounting_periods;
+drop policy if exists "accounting_periods_insert_admin" on public.accounting_periods;
+drop policy if exists "accounting_periods_update_admin" on public.accounting_periods;
+drop policy if exists "accounting_periods_delete_admin" on public.accounting_periods;
+
+create policy "accounting_periods_select_all" on public.accounting_periods
+  for select to authenticated using (true);
+
+create policy "accounting_periods_insert_admin" on public.accounting_periods
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "accounting_periods_update_admin" on public.accounting_periods
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "accounting_periods_delete_admin" on public.accounting_periods
+  for delete to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+-- ---------------------------------------------------------------------------
+-- 3) branches — نفس معيار company_settlement_accounts
+-- ---------------------------------------------------------------------------
+
+drop policy if exists "branches_insert_all" on public.branches;
+drop policy if exists "branches_update_all" on public.branches;
+drop policy if exists "branches_insert_admin" on public.branches;
+drop policy if exists "branches_update_admin" on public.branches;
+drop policy if exists "branches_delete_admin" on public.branches;
+
+create policy "branches_insert_admin" on public.branches
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "branches_update_admin" on public.branches
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "branches_delete_admin" on public.branches
+  for delete to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+-- ---------------------------------------------------------------------------
+-- 4) invoice_reference_links — تفعيل RLS (كان الجدول بدون حماية)
+-- ---------------------------------------------------------------------------
+
+alter table public.invoice_reference_links enable row level security;
+
+drop policy if exists "invoice_reference_links_all" on public.invoice_reference_links;
+create policy "invoice_reference_links_all" on public.invoice_reference_links
+  for all to authenticated using (true) with check (true);
+
+-- =============================================================================
+-- BEGIN patch_revoke_anon_table_access.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_revoke_anon_table_access.sql (#41)
+-- =============================================================================
+-- أمني حرج: إزالة دور anon من سياسات RLS على الجداول المحاسبية.
+-- الاستثناء الوحيد: SELECT على company_settings (شعار/اسم الشركة بصفحة الدخول).
+-- storage company-assets يبقى قراءة عامة كما في 06_storage.sql.
+--
+-- شغّل هذا الملف على قواعد موجودة (إنتاج) حتى لو كان setup_all محدّثاً
+-- لأن السياسات القديمة بـ anon تبقى حتى تُعاد كتابتها.
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 1) إلغاء صلاحيات الجدول المباشرة من anon
+-- ---------------------------------------------------------------------------
+
+revoke all on all tables in schema public from anon;
+revoke all on all sequences in schema public from anon;
+revoke execute on all functions in schema public from anon;
+
+-- صفحة الدخول تحتاج قراءة إعدادات الشركة فقط
+grant select on public.company_settings to anon;
+
+-- ---------------------------------------------------------------------------
+-- 2) إعادة كتابة أي سياسة RLS ما زالت تمنح anon (ما عدا company_settings SELECT)
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  r record;
+  v_cmd text;
+  v_perm text;
+  v_sql text;
+begin
+  for r in
+    select
+      schemaname,
+      tablename,
+      policyname,
+      permissive,
+      cmd,
+      qual,
+      with_check
+    from pg_policies
+    where schemaname = 'public'
+      and roles @> array['anon']::name[]
+  loop
+    if r.tablename = 'company_settings' and upper(r.cmd) = 'SELECT' then
+      continue;
+    end if;
+
+    execute format(
+      'drop policy if exists %I on %I.%I',
+      r.policyname,
+      r.schemaname,
+      r.tablename
+    );
+
+    v_cmd := case upper(r.cmd)
+      when '*' then 'ALL'
+      else upper(r.cmd)
+    end;
+
+    v_perm := case
+      when r.permissive = 'RESTRICTIVE' then 'RESTRICTIVE'
+      else 'PERMISSIVE'
+    end;
+
+    if v_cmd = 'INSERT' then
+      v_sql := format(
+        'create policy %I on %I.%I as %s for insert to authenticated with check (%s)',
+        r.policyname,
+        r.schemaname,
+        r.tablename,
+        v_perm,
+        coalesce(r.with_check, 'true')
+      );
+    elsif v_cmd = 'SELECT' then
+      v_sql := format(
+        'create policy %I on %I.%I as %s for select to authenticated using (%s)',
+        r.policyname,
+        r.schemaname,
+        r.tablename,
+        v_perm,
+        coalesce(r.qual, 'true')
+      );
+    elsif v_cmd = 'DELETE' then
+      v_sql := format(
+        'create policy %I on %I.%I as %s for delete to authenticated using (%s)',
+        r.policyname,
+        r.schemaname,
+        r.tablename,
+        v_perm,
+        coalesce(r.qual, 'true')
+      );
+    elsif v_cmd = 'UPDATE' then
+      v_sql := format(
+        'create policy %I on %I.%I as %s for update to authenticated using (%s) with check (%s)',
+        r.policyname,
+        r.schemaname,
+        r.tablename,
+        v_perm,
+        coalesce(r.qual, 'true'),
+        coalesce(r.with_check, coalesce(r.qual, 'true'))
+      );
+    else
+      -- ALL
+      v_sql := format(
+        'create policy %I on %I.%I as %s for all to authenticated using (%s) with check (%s)',
+        r.policyname,
+        r.schemaname,
+        r.tablename,
+        v_perm,
+        coalesce(r.qual, 'true'),
+        coalesce(r.with_check, coalesce(r.qual, 'true'))
+      );
+    end if;
+
+    execute v_sql;
+  end loop;
+end;
+$$;
+
+-- تأكيد استثناء صفحة الدخول
+drop policy if exists "company_settings_select" on public.company_settings;
+create policy "company_settings_select" on public.company_settings
+  for select to authenticated, anon
+  using (true);
+
+-- =============================================================================
+-- BEGIN patch_create_material_with_base_unit.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_create_material_with_base_unit.sql (#42)
+-- =============================================================================
+-- إنشاء مادة + وحدة الأساس في معاملة واحدة (يمنع مادة بدون وحدة).
+-- يتطلب: patch_materials_item_card.sql / patch_materials_tracking.sql
+-- =============================================================================
+
+create or replace function public.create_material_with_base_unit(
+  p_material jsonb,
+  p_base_unit jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_material_id uuid;
+  v_unit_code text;
+  v_unit_name text;
+begin
+  if coalesce(nullif(trim(p_material->>'material_code'), ''), '') = '' then
+    raise exception 'material_code is required.';
+  end if;
+  if coalesce(nullif(trim(p_material->>'name_ar'), ''), '') = '' then
+    raise exception 'name_ar is required.';
+  end if;
+
+  v_unit_code := upper(trim(coalesce(p_base_unit->>'unit_code', '')));
+  v_unit_name := trim(coalesce(p_base_unit->>'name_ar', ''));
+  if v_unit_code = '' or v_unit_name = '' then
+    raise exception 'Base unit code and name_ar are required.';
+  end if;
+
+  insert into public.materials (
+    material_code,
+    name_ar,
+    name_en,
+    category_id,
+    purchase_price,
+    sale_price,
+    inventory_account_id,
+    is_active,
+    min_stock,
+    max_stock,
+    barcode,
+    manufacturer,
+    supplier_name,
+    color,
+    size,
+    weight,
+    notes,
+    has_expiry_date,
+    require_expiry_on_inbound,
+    require_expiry_on_outbound,
+    expiry_days,
+    has_serial_number,
+    require_serial_on_inbound,
+    require_serial_on_outbound
+  )
+  values (
+    upper(trim(p_material->>'material_code')),
+    trim(p_material->>'name_ar'),
+    nullif(trim(coalesce(p_material->>'name_en', '')), ''),
+    nullif(p_material->>'category_id', '')::uuid,
+    coalesce((p_material->>'purchase_price')::numeric, 0),
+    coalesce((p_material->>'sale_price')::numeric, 0),
+    nullif(p_material->>'inventory_account_id', '')::uuid,
+    coalesce((p_material->>'is_active')::boolean, true),
+    coalesce((p_material->>'min_stock')::numeric, 0),
+    coalesce((p_material->>'max_stock')::numeric, 0),
+    nullif(trim(coalesce(p_material->>'barcode', '')), ''),
+    nullif(trim(coalesce(p_material->>'manufacturer', '')), ''),
+    nullif(trim(coalesce(p_material->>'supplier_name', '')), ''),
+    nullif(trim(coalesce(p_material->>'color', '')), ''),
+    nullif(trim(coalesce(p_material->>'size', '')), ''),
+    nullif(p_material->>'weight', '')::numeric,
+    nullif(trim(coalesce(p_material->>'notes', '')), ''),
+    coalesce((p_material->>'has_expiry_date')::boolean, false),
+    coalesce((p_material->>'require_expiry_on_inbound')::boolean, false),
+    coalesce((p_material->>'require_expiry_on_outbound')::boolean, false),
+    null,
+    coalesce((p_material->>'has_serial_number')::boolean, false),
+    coalesce((p_material->>'require_serial_on_inbound')::boolean, false),
+    coalesce((p_material->>'require_serial_on_outbound')::boolean, false)
+  )
+  returning id into v_material_id;
+
+  insert into public.material_units (
+    material_id,
+    unit_code,
+    name_ar,
+    name_en,
+    is_base_unit,
+    factor_to_base,
+    is_active,
+    purchase_price,
+    sale_price,
+    semi_wholesale_price,
+    wholesale_price,
+    sort_order
+  )
+  values (
+    v_material_id,
+    v_unit_code,
+    v_unit_name,
+    nullif(trim(coalesce(p_base_unit->>'name_en', '')), ''),
+    true,
+    1,
+    coalesce((p_base_unit->>'is_active')::boolean, true),
+    coalesce(
+      nullif(p_base_unit->>'purchase_price', '')::numeric,
+      (p_material->>'purchase_price')::numeric
+    ),
+    coalesce(
+      nullif(p_base_unit->>'sale_price', '')::numeric,
+      (p_material->>'sale_price')::numeric
+    ),
+    nullif(p_base_unit->>'semi_wholesale_price', '')::numeric,
+    nullif(p_base_unit->>'wholesale_price', '')::numeric,
+    0
+  );
+
+  return v_material_id;
+end;
+$$;
+
+comment on function public.create_material_with_base_unit(jsonb, jsonb) is
+  'إنشاء مادة مع وحدة الأساس ذرّياً — يمنع مادة بدون وحدة قياس';
+
+grant execute on function public.create_material_with_base_unit(jsonb, jsonb)
+  to authenticated;
+
+-- مساعد: مواد بدون وحدة أساس (للواجهة والتقارير)
+create or replace function public.list_material_ids_missing_base_unit()
+returns table (material_id uuid)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select m.id
+  from public.materials m
+  where not exists (
+    select 1
+    from public.material_units mu
+    where mu.material_id = m.id
+      and mu.is_base_unit = true
+  );
+$$;
+
+grant execute on function public.list_material_ids_missing_base_unit()
+  to authenticated;
 
 -- =============================================================================
 -- 06_storage.sql — Supabase Storage (شعار الشركة + مرفقات السندات مستقبلاً)

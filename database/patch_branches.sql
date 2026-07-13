@@ -111,12 +111,35 @@ create policy "branches_select_all" on public.branches
   for select to authenticated using (true);
 
 drop policy if exists "branches_insert_all" on public.branches;
-create policy "branches_insert_all" on public.branches
-  for insert to authenticated with check (true);
-
 drop policy if exists "branches_update_all" on public.branches;
-create policy "branches_update_all" on public.branches
-  for update to authenticated using (true) with check (true);
+drop policy if exists "branches_insert_admin" on public.branches;
+drop policy if exists "branches_update_admin" on public.branches;
+drop policy if exists "branches_delete_admin" on public.branches;
+
+create policy "branches_insert_admin" on public.branches
+  for insert to authenticated
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "branches_update_admin" on public.branches
+  for update to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  )
+  with check (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
+
+create policy "branches_delete_admin" on public.branches
+  for delete to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('settings.company.edit')
+  );
 
 drop policy if exists "company_settlement_accounts_select_all" on public.company_settlement_accounts;
 create policy "company_settlement_accounts_select_all" on public.company_settlement_accounts

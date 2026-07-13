@@ -132,7 +132,10 @@ export default function AccountsPage() {
     [tree, expandedIds],
   );
 
-  const parentOptions = useMemo(() => getParentOptions(accounts), [accounts]);
+  const parentOptions = useMemo(
+    () => getParentOptions(accounts, undefined, accountsWithMovements),
+    [accounts, accountsWithMovements],
+  );
 
   const fullTree = useMemo(() => buildAccountTree(accounts), [accounts]);
 
@@ -153,6 +156,12 @@ export default function AccountsPage() {
     }
     if (!values.parent_id) {
       setFormError("يجب اختيار حساب أب. الحسابات الرئيسية السبعة ثابتة.");
+      return;
+    }
+    if (accountsWithMovements.has(values.parent_id)) {
+      setFormError(
+        "الحساب الأب عليه حركة محاسبية — لا يمكن إضافة فرع تحته.",
+      );
       return;
     }
     if (!values.currency_id) {

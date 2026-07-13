@@ -28,6 +28,7 @@ export interface Material {
 export interface MaterialListItem extends Material {
   category_code?: string | null;
   category_name_ar?: string | null;
+  has_base_unit?: boolean;
 }
 
 export interface MaterialFormValues {

@@ -160,54 +160,77 @@ export function applyHideZeroRows(rows: TrialBalanceRow[]): TrialBalanceRow[] {
   return rows.filter(hasTrialBalanceActivity);
 }
 
+/**
+ * يعرض صفوف ميزان المراجعة بعملة مناسبة.
+ *
+ * مهم: `get_trial_balance` يُرجع كل المبالغ بعملة الشركة الأساسية
+ * (`debit_base` / `credit_base`) دائماً. `currency_id` على الصف وصف لعملة الحساب فقط.
+ *
+ * - `base`: إبقاء الأرقام كما هي + وسم عملة الأساس (بدون تحويل إضافي).
+ * - `native` / `all`: تحويل من الأساس → عملة الحساب للعرض، ثم وسم عملة الحساب.
+ */
 export function applyTrialBalanceCurrencyDisplay(
   rows: TrialBalanceRow[],
   currencies: Currency[],
   mode: TrialBalanceCurrencyMode,
 ): { rows: TrialBalanceRow[]; displayCurrency?: Currency } {
-  if (mode !== "base") {
-    const withCodes = rows.map((row) => {
-      const currency = row.currency_id
-        ? currencies.find((item) => item.id === row.currency_id)
-        : undefined;
-      return {
-        ...row,
-        currency_code: currency?.code,
-      };
-    });
-    return { rows: withCodes };
-  }
-
   const baseCurrency = currencies.find((currency) => currency.is_base) ?? currencies[0];
   if (!baseCurrency) return { rows };
 
-  const converted = rows.map((row) => {
+  const baseRate = baseCurrency.exchange_rate > 0 ? baseCurrency.exchange_rate : 1;
+
+  if (mode === "base") {
+    const converted = rows.map((row) =>
+      normalizeRow({
+        ...row,
+        currency_id: baseCurrency.id,
+        currency_code: baseCurrency.code,
+      }),
+    );
+    return { rows: converted, displayCurrency: baseCurrency };
+  }
+
+  // native / all — المبالغ واردة بعملة الأساس؛ حوّل لعملة الحساب عند العرض
+  const withNative = rows.map((row) => {
     const accountCurrency = row.currency_id
-      ? currencies.find((currency) => currency.id === row.currency_id)
+      ? currencies.find((item) => item.id === row.currency_id)
       : undefined;
-    const fromRate = accountCurrency?.exchange_rate ?? 1;
-    const toRate = baseCurrency.exchange_rate ?? 1;
+
+    const isAlreadyBase =
+      !accountCurrency ||
+      accountCurrency.is_base ||
+      accountCurrency.id === baseCurrency.id;
+
+    if (isAlreadyBase) {
+      return normalizeRow({
+        ...row,
+        currency_id: accountCurrency?.id ?? baseCurrency.id,
+        currency_code: accountCurrency?.code ?? baseCurrency.code,
+      });
+    }
+
+    const toRate =
+      accountCurrency.exchange_rate > 0 ? accountCurrency.exchange_rate : 1;
+
+    const convertFromBase = (amount: number) =>
+      convertAmount(amount, baseRate, toRate);
 
     return normalizeRow({
       ...row,
-      currency_id: baseCurrency.id,
-      currency_code: baseCurrency.code,
-      opening_entry_balance: convertAmount(
-        row.opening_entry_balance ?? 0,
-        fromRate,
-        toRate,
-      ),
-      opening_balance: convertAmount(row.opening_balance, fromRate, toRate),
-      period_debit: convertAmount(row.period_debit, fromRate, toRate),
-      period_credit: convertAmount(row.period_credit, fromRate, toRate),
-      closing_balance: convertAmount(row.closing_balance, fromRate, toRate),
-      debit: convertAmount(row.period_debit, fromRate, toRate),
-      credit: convertAmount(row.period_credit, fromRate, toRate),
-      balance: convertAmount(row.closing_balance, fromRate, toRate),
+      currency_id: accountCurrency.id,
+      currency_code: accountCurrency.code,
+      opening_entry_balance: convertFromBase(row.opening_entry_balance ?? 0),
+      opening_balance: convertFromBase(row.opening_balance),
+      period_debit: convertFromBase(row.period_debit),
+      period_credit: convertFromBase(row.period_credit),
+      closing_balance: convertFromBase(row.closing_balance),
+      debit: convertFromBase(row.period_debit),
+      credit: convertFromBase(row.period_credit),
+      balance: convertFromBase(row.closing_balance),
     });
   });
 
-  return { rows: converted, displayCurrency: baseCurrency };
+  return { rows: withNative };
 }
 
 export function filterTrialBalanceSearch(
