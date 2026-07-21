@@ -109,6 +109,9 @@ export function validateOutboundStockLines(params: {
     if (!line.material_id || !line.warehouse_id || line.quantity <= 0) continue;
 
     const material = materialById.get(line.material_id);
+    // المواد التجميعية تُفكّك على الخادم إلى مكوّنات — لا نفحص رصيد الأب
+    if (material?.material_kind === "composite") continue;
+
     const qtyBase = lineQuantityBase(line, unitsByMaterial);
     const mwKey = stockBalanceKey(line.material_id, line.warehouse_id);
 

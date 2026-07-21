@@ -1,9 +1,28 @@
+export type MaterialKind = "normal" | "composite";
+export type UnitConversionOp = "multiply" | "divide";
+
+export interface UnitCatalogItem {
+  id: string;
+  unit_code: string;
+  name_ar: string;
+  name_en: string | null;
+  is_active: boolean;
+}
+
+export interface UnitCatalogFormValues {
+  unit_code: string;
+  name_ar: string;
+  name_en: string;
+  is_active: boolean;
+}
+
 export interface Material {
   id: string;
   material_code: string;
   name_ar: string;
   name_en: string | null;
   category_id: string | null;
+  material_kind: MaterialKind;
   purchase_price: number;
   sale_price: number;
   inventory_account_id: string | null;
@@ -36,6 +55,7 @@ export interface MaterialFormValues {
   name_ar: string;
   name_en: string;
   category_id: string;
+  material_kind: MaterialKind;
   purchase_price: number;
   sale_price: number;
   inventory_account_id: string;
@@ -60,10 +80,13 @@ export interface MaterialFormValues {
 export interface MaterialUnit {
   id: string;
   material_id: string;
+  unit_id: string | null;
   unit_code: string;
   name_ar: string;
   name_en: string | null;
   is_base_unit: boolean;
+  conversion_op: UnitConversionOp;
+  conversion_factor: number;
   factor_to_base: number;
   purchase_price: number | null;
   sale_price: number | null;
@@ -75,16 +98,42 @@ export interface MaterialUnit {
 
 export interface MaterialUnitFormValues {
   id?: string;
+  unit_id: string;
   unit_code: string;
   name_ar: string;
   name_en: string;
   is_base_unit: boolean;
+  conversion_op: UnitConversionOp;
+  conversion_factor: number;
   factor_to_base: number;
   purchase_price: number | null;
   sale_price: number | null;
   semi_wholesale_price: number | null;
   wholesale_price: number | null;
   is_active: boolean;
+}
+
+export interface MaterialBomComponent {
+  id: string;
+  parent_material_id: string;
+  component_material_id: string;
+  quantity: number;
+  component_unit_id: string | null;
+  quantity_base: number;
+  sort_order: number;
+  notes: string | null;
+  component_code?: string;
+  component_name_ar?: string;
+  unit_code?: string | null;
+  unit_name_ar?: string | null;
+}
+
+export interface MaterialBomFormValues {
+  id?: string;
+  component_material_id: string;
+  quantity: number;
+  component_unit_id: string;
+  notes: string;
 }
 
 export interface MaterialCategory {

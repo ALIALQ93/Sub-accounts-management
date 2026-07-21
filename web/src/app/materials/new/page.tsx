@@ -5,8 +5,17 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialForm } from "@/modules/materials/components/material-form";
 import { MaterialsNav } from "@/modules/materials/components/materials-nav";
+import { materialBomApi } from "@/modules/materials/services/material-bom-api";
 import { materialApi } from "@/modules/materials/services/material-api";
-import type { MaterialCategory, MaterialFormValues, MaterialUnitFormValues } from "@/modules/materials/types";
+import { unitApi } from "@/modules/materials/services/unit-api";
+import type {
+  MaterialBomFormValues,
+  MaterialCategory,
+  MaterialFormValues,
+  MaterialListItem,
+  MaterialUnitFormValues,
+  UnitCatalogItem,
+} from "@/modules/materials/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { Account } from "@/modules/vouchers/types";
 
@@ -15,6 +24,7 @@ const EMPTY_VALUES: MaterialFormValues = {
   name_ar: "",
   name_en: "",
   category_id: "",
+  material_kind: "normal",
   purchase_price: 0,
   sale_price: 0,
   inventory_account_id: "",
@@ -41,6 +51,8 @@ export default function NewMaterialPage() {
   const { hasPermission } = useAuth();
   const canEdit = hasPermission("materials.create");
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
+  const [catalogUnits, setCatalogUnits] = useState<UnitCatalogItem[]>([]);
+  const [normalMaterials, setNormalMaterials] = useState<MaterialListItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -50,11 +62,15 @@ export default function NewMaterialPage() {
     let cancelled = false;
     void Promise.all([
       materialApi.listMaterialCategories(),
+      unitApi.listUnits().catch(() => [] as UnitCatalogItem[]),
+      materialApi.listMaterials(),
       voucherApi.listAllAccounts(),
     ])
-      .then(([categoriesData, accountsData]) => {
+      .then(([categoriesData, unitsData, materialsData, accountsData]) => {
         if (!cancelled) {
           setCategories(categoriesData);
+          setCatalogUnits(unitsData);
+          setNormalMaterials(materialsData);
           setAccounts(accountsData);
         }
       })
@@ -74,6 +90,7 @@ export default function NewMaterialPage() {
   const onSubmit = async (
     values: MaterialFormValues,
     units: MaterialUnitFormValues[],
+    bom: MaterialBomFormValues[],
   ) => {
     if (!canEdit) return;
     const baseUnit = units.find((unit) => unit.is_base_unit);
@@ -88,6 +105,9 @@ export default function NewMaterialPage() {
       const material = await materialApi.createMaterial(values, baseUnit);
       for (const unit of units.filter((row) => !row.is_base_unit)) {
         await materialApi.createMaterialUnit(material.id, unit);
+      }
+      if (values.material_kind === "composite") {
+        await materialBomApi.replaceComponents(material.id, bom);
       }
       router.push(`/materials/${material.id}`);
     } catch (err) {
@@ -112,6 +132,8 @@ export default function NewMaterialPage() {
             initialValues={EMPTY_VALUES}
             initialUnits={[]}
             categories={categories}
+            catalogUnits={catalogUnits}
+            normalMaterials={normalMaterials}
             accounts={accounts}
             canEdit={canEdit}
             isSaving={isSaving}

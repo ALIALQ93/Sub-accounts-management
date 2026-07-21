@@ -222,6 +222,7 @@ export interface MaterialOption {
   name_ar: string;
   name_en: string | null;
   category_id: string | null;
+  material_kind?: "normal" | "composite";
   sale_price: number;
   purchase_price: number;
   is_active: boolean;

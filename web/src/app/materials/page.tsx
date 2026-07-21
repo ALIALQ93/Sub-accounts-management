@@ -5,8 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
+import { MaterialBulkImportModal } from "@/modules/materials/components/material-bulk-import-modal";
 import { materialApi } from "@/modules/materials/services/material-api";
+import { getSectionContextMenu } from "@/modules/materials/utils/section-context-menus";
 import type { MaterialListItem } from "@/modules/materials/types";
+import type { PermissionKey } from "@/modules/settings/permissions/permission-catalog";
+import { ContextMenu } from "@/modules/ui/context-menu";
 
 export default function MaterialsPage() {
   const { hasPermission } = useAuth();
@@ -16,6 +20,12 @@ export default function MaterialsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+
+  const contextItems = getSectionContextMenu("materials").filter((item) => {
+    if (!item.permission) return true;
+    return hasPermission(item.permission as PermissionKey);
+  });
 
   const reload = useCallback(async () => {
     const data = await materialApi.listMaterials();
@@ -67,126 +77,168 @@ export default function MaterialsPage() {
 
       <InventoryShortageAlert />
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-slate-600">
-            بطاقات المواد — مواصفات، وحدات وأسعار، وأرصدة المخزون.
-          </p>
-          {canCreate && (
-            <Link href="/materials/new" className="btn btn-primary">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              مادة جديدة
-            </Link>
-          )}
-        </div>
+      <ContextMenu
+        items={contextItems}
+        onAction={(action) => {
+          if (action === "bulk-import" && canCreate) {
+            setBulkImportOpen(true);
+          }
+        }}
+      >
+        <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-600">
+              بطاقات المواد — مواصفات، وحدات وأسعار، وأرصدة المخزون. انقر يميناً
+              لخيارات سريعة.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={() => setBulkImportOpen(true)}
+                  className="btn btn-outline"
+                >
+                  استيراد جماعي
+                </button>
+              )}
+              {canCreate && (
+                <Link href="/materials/new" className="btn btn-primary">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  مادة جديدة
+                </Link>
+              )}
+            </div>
+          </div>
 
-        {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
-        {!isLoading && error && (
-          <p className="text-sm text-[var(--danger)]">{error}</p>
-        )}
-        {!isLoading &&
-          !error &&
-          materials.some((material) => material.has_base_unit === false) && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              توجد مواد بدون وحدة أساس — أكمل بطاقة المادة قبل استخدامها في
-              الفواتير. المواد المتأثرة مُعلَّمة في القائمة.
+          {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
+          {!isLoading && error && (
+            <p className="text-sm text-[var(--danger)]">{error}</p>
+          )}
+          {!isLoading &&
+            !error &&
+            materials.some((material) => material.has_base_unit === false) && (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                توجد مواد بدون وحدة أساس — أكمل بطاقة المادة قبل استخدامها في
+                الفواتير. المواد المتأثرة مُعلَّمة في القائمة.
+              </div>
+            )}
+          {!isLoading && !error && materials.length === 0 && (
+            <p className="text-sm text-slate-600">
+              لا توجد مواد — شغّل <code className="text-xs">setup_all.sql</code> أو
+              أضف مادة جديدة.
+            </p>
+          )}
+
+          {!isLoading && !error && materials.length > 0 && (
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="data-table min-w-[880px]">
+                <thead>
+                  <tr>
+                    <th>الرمز</th>
+                    <th>الاسم</th>
+                    <th>الصنف</th>
+                    <th>باركود</th>
+                    <th>شراء</th>
+                    <th>بيع</th>
+                    <th>حد أدنى</th>
+                    <th>الحالة</th>
+                    {(canEdit || canCreate) && <th>إجراء</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {materials.map((material) => (
+                    <tr key={material.id}>
+                      <td className="font-mono text-slate-600">
+                        {material.material_code}
+                      </td>
+                      <td className="font-medium text-slate-900">
+                        {material.name_ar}
+                        {material.name_en && (
+                          <span className="block text-xs font-normal text-slate-500">
+                            {material.name_en}
+                          </span>
+                        )}
+                        {material.has_base_unit === false && (
+                          <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900">
+                            بدون وحدة أساس
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-xs text-slate-600">
+                        {material.category_name_ar ?? "—"}
+                      </td>
+                      <td className="font-mono text-xs text-slate-500">
+                        {material.barcode ?? "—"}
+                      </td>
+                      <td className="font-mono text-xs tabular-nums">
+                        {material.purchase_price.toFixed(4)}
+                      </td>
+                      <td className="font-mono text-xs tabular-nums">
+                        {material.sale_price.toFixed(4)}
+                      </td>
+                      <td className="font-mono text-xs tabular-nums">
+                        {material.min_stock > 0
+                          ? material.min_stock.toFixed(4)
+                          : "—"}
+                      </td>
+                      <td>
+                        {material.is_active ? (
+                          <span className="badge badge-success">نشطة</span>
+                        ) : (
+                          <span className="badge badge-muted">معطّلة</span>
+                        )}
+                      </td>
+                      {(canEdit || canCreate) && (
+                        <td>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Link
+                              href={`/materials/${material.id}`}
+                              className="btn btn-sm btn-outline"
+                            >
+                              {canEdit ? "تعديل" : "عرض"}
+                            </Link>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => void toggleActive(material)}
+                                disabled={isSaving}
+                                className="btn btn-sm btn-outline text-[var(--warning)]"
+                              >
+                                {material.is_active ? "تعطيل" : "تفعيل"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
-        {!isLoading && !error && materials.length === 0 && (
-          <p className="text-sm text-slate-600">
-            لا توجد مواد — شغّل <code className="text-xs">setup_all.sql</code> أو أضف
-            مادة جديدة.
-          </p>
-        )}
+        </section>
+      </ContextMenu>
 
-        {!isLoading && !error && materials.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
-            <table className="data-table min-w-[880px]">
-              <thead>
-                <tr>
-                  <th>الرمز</th>
-                  <th>الاسم</th>
-                  <th>الصنف</th>
-                  <th>باركود</th>
-                  <th>شراء</th>
-                  <th>بيع</th>
-                  <th>حد أدنى</th>
-                  <th>الحالة</th>
-                  {(canEdit || canCreate) && <th>إجراء</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {materials.map((material) => (
-                  <tr key={material.id}>
-                    <td className="font-mono text-slate-600">
-                      {material.material_code}
-                    </td>
-                    <td className="font-medium text-slate-900">
-                      {material.name_ar}
-                      {material.name_en && (
-                        <span className="block text-xs font-normal text-slate-500">
-                          {material.name_en}
-                        </span>
-                      )}
-                      {material.has_base_unit === false && (
-                        <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900">
-                          بدون وحدة أساس
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-xs text-slate-600">
-                      {material.category_name_ar ?? "—"}
-                    </td>
-                    <td className="font-mono text-xs text-slate-500">
-                      {material.barcode ?? "—"}
-                    </td>
-                    <td className="font-mono text-xs tabular-nums">
-                      {material.purchase_price.toFixed(4)}
-                    </td>
-                    <td className="font-mono text-xs tabular-nums">
-                      {material.sale_price.toFixed(4)}
-                    </td>
-                    <td className="font-mono text-xs tabular-nums">
-                      {material.min_stock > 0 ? material.min_stock.toFixed(4) : "—"}
-                    </td>
-                    <td>
-                      {material.is_active ? (
-                        <span className="badge badge-success">نشطة</span>
-                      ) : (
-                        <span className="badge badge-muted">معطّلة</span>
-                      )}
-                    </td>
-                    {(canEdit || canCreate) && (
-                      <td>
-                        <div className="flex flex-wrap gap-1.5">
-                          <Link
-                            href={`/materials/${material.id}`}
-                            className="btn btn-sm btn-outline"
-                          >
-                            {canEdit ? "تعديل" : "عرض"}
-                          </Link>
-                          {canEdit && (
-                            <button
-                              type="button"
-                              onClick={() => void toggleActive(material)}
-                              disabled={isSaving}
-                              className="btn btn-sm btn-outline text-[var(--warning)]"
-                            >
-                              {material.is_active ? "تعطيل" : "تفعيل"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <MaterialBulkImportModal
+        open={bulkImportOpen}
+        isSaving={isSaving}
+        onClose={() => setBulkImportOpen(false)}
+        onImported={async () => {
+          await reload();
+        }}
+      />
     </main>
   );
 }

@@ -5,13 +5,18 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialForm } from "@/modules/materials/components/material-form";
 import { MaterialsNav } from "@/modules/materials/components/materials-nav";
+import { materialBomApi } from "@/modules/materials/services/material-bom-api";
 import { materialApi } from "@/modules/materials/services/material-api";
+import { unitApi } from "@/modules/materials/services/unit-api";
 import type {
   Material,
+  MaterialBomFormValues,
   MaterialCategory,
   MaterialFormValues,
+  MaterialListItem,
   MaterialUnit,
   MaterialUnitFormValues,
+  UnitCatalogItem,
 } from "@/modules/materials/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { Account } from "@/modules/vouchers/types";
@@ -22,6 +27,7 @@ function toFormValues(material: Material): MaterialFormValues {
     name_ar: material.name_ar,
     name_en: material.name_en ?? "",
     category_id: material.category_id ?? "",
+    material_kind: material.material_kind ?? "normal",
     purchase_price: material.purchase_price,
     sale_price: material.sale_price,
     inventory_account_id: material.inventory_account_id ?? "",
@@ -51,7 +57,10 @@ export default function EditMaterialPage() {
   const canEdit = hasPermission("materials.edit");
   const [material, setMaterial] = useState<Material | null>(null);
   const [units, setUnits] = useState<MaterialUnit[]>([]);
+  const [bomRows, setBomRows] = useState<MaterialBomFormValues[]>([]);
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
+  const [catalogUnits, setCatalogUnits] = useState<UnitCatalogItem[]>([]);
+  const [normalMaterials, setNormalMaterials] = useState<MaterialListItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -62,20 +71,44 @@ export default function EditMaterialPage() {
     void Promise.all([
       materialApi.getMaterialById(materialId),
       materialApi.listMaterialUnits(materialId),
+      materialBomApi.listComponents(materialId).catch(() => []),
       materialApi.listMaterialCategories(),
+      unitApi.listUnits().catch(() => [] as UnitCatalogItem[]),
+      materialApi.listMaterials(),
       voucherApi.listAllAccounts(),
     ])
-      .then(([materialData, unitsData, categoriesData, accountsData]) => {
-        if (!cancelled) {
-          setMaterial(materialData);
-          setUnits(unitsData);
-          setCategories(categoriesData);
-          setAccounts(accountsData);
-          if (!materialData) {
-            setError("المادة غير موجودة.");
+      .then(
+        ([
+          materialData,
+          unitsData,
+          bomData,
+          categoriesData,
+          unitsCatalog,
+          materialsData,
+          accountsData,
+        ]) => {
+          if (!cancelled) {
+            setMaterial(materialData);
+            setUnits(unitsData);
+            setBomRows(
+              bomData.map((row) => ({
+                id: row.id,
+                component_material_id: row.component_material_id,
+                quantity: row.quantity,
+                component_unit_id: row.component_unit_id ?? "",
+                notes: row.notes ?? "",
+              })),
+            );
+            setCategories(categoriesData);
+            setCatalogUnits(unitsCatalog);
+            setNormalMaterials(materialsData);
+            setAccounts(accountsData);
+            if (!materialData) {
+              setError("المادة غير موجودة.");
+            }
           }
-        }
-      })
+        },
+      )
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "فشل تحميل المادة.");
@@ -92,12 +125,17 @@ export default function EditMaterialPage() {
   const onSubmit = async (
     values: MaterialFormValues,
     unitDrafts: MaterialUnitFormValues[],
+    bom: MaterialBomFormValues[],
   ) => {
     if (!canEdit || !material) return;
 
     setIsSaving(true);
     setError("");
     try {
+      if (values.material_kind === "normal") {
+        await materialBomApi.replaceComponents(material.id, []);
+      }
+
       await materialApi.updateMaterial(material.id, values);
 
       for (const draft of unitDrafts) {
@@ -108,12 +146,27 @@ export default function EditMaterialPage() {
         }
       }
 
-      const [updatedMaterial, updatedUnits] = await Promise.all([
+      if (values.material_kind === "composite") {
+        // يجب أن يكون النوع تجميعي قبل إدراج المكوّنات
+        await materialBomApi.replaceComponents(material.id, bom);
+      }
+
+      const [updatedMaterial, updatedUnits, updatedBom] = await Promise.all([
         materialApi.getMaterialById(material.id),
         materialApi.listMaterialUnits(material.id),
+        materialBomApi.listComponents(material.id).catch(() => []),
       ]);
       setMaterial(updatedMaterial);
       setUnits(updatedUnits);
+      setBomRows(
+        updatedBom.map((row) => ({
+          id: row.id,
+          component_material_id: row.component_material_id,
+          quantity: row.quantity,
+          component_unit_id: row.component_unit_id ?? "",
+          notes: row.notes ?? "",
+        })),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل حفظ المادة.");
     } finally {
@@ -127,6 +180,7 @@ export default function EditMaterialPage() {
       {material && (
         <p className="mb-4 font-mono text-sm text-slate-500">
           {material.material_code} — {material.name_ar}
+          {material.material_kind === "composite" ? " (تجميعية)" : ""}
         </p>
       )}
       <MaterialsNav />
@@ -141,7 +195,10 @@ export default function EditMaterialPage() {
             materialId={material.id}
             initialValues={toFormValues(material)}
             initialUnits={units}
+            initialBom={bomRows}
             categories={categories}
+            catalogUnits={catalogUnits}
+            normalMaterials={normalMaterials}
             accounts={accounts}
             canEdit={canEdit}
             isSaving={isSaving}

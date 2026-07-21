@@ -31,7 +31,9 @@ function isMissingColumn(error: PostgrestError | null, column: string): boolean 
 const MATERIAL_SELECT_CORE =
   "id, material_code, name_ar, name_en, category_id, sale_price, purchase_price, inventory_account_id, is_active";
 
-const MATERIAL_SELECT_WITH_MIN = `${MATERIAL_SELECT_CORE}, min_stock`;
+const MATERIAL_SELECT_WITH_KIND = `${MATERIAL_SELECT_CORE}, material_kind`;
+
+const MATERIAL_SELECT_WITH_MIN = `${MATERIAL_SELECT_WITH_KIND}, min_stock`;
 
 const MATERIAL_SELECT_EXTENDED = `${MATERIAL_SELECT_WITH_MIN}, max_stock, barcode, manufacturer, supplier_name, color, size, weight, notes`;
 
@@ -40,11 +42,14 @@ const MATERIAL_SELECT_TRACKING = `${MATERIAL_SELECT_EXTENDED}, has_expiry_date, 
 const UNIT_SELECT_CORE =
   "id, material_id, unit_code, name_ar, name_en, is_base_unit, factor_to_base, is_active, sort_order";
 
-const UNIT_SELECT_WITH_PRICES = `${UNIT_SELECT_CORE}, purchase_price, sale_price, semi_wholesale_price, wholesale_price`;
+const UNIT_SELECT_WITH_CONVERSION = `${UNIT_SELECT_CORE}, unit_id, conversion_op, conversion_factor`;
+
+const UNIT_SELECT_WITH_PRICES = `${UNIT_SELECT_WITH_CONVERSION}, purchase_price, sale_price, semi_wholesale_price, wholesale_price`;
 
 function mapMaterial(row: Material & { min_stock?: number | null }): Material {
   return {
     ...row,
+    material_kind: row.material_kind === "composite" ? "composite" : "normal",
     purchase_price: Number(row.purchase_price),
     sale_price: Number(row.sale_price),
     min_stock: Number(row.min_stock ?? 0),
@@ -66,8 +71,15 @@ function mapMaterial(row: Material & { min_stock?: number | null }): Material {
 }
 
 function mapMaterialUnit(row: MaterialUnit): MaterialUnit {
+  const conversionOp = row.conversion_op === "divide" ? "divide" : "multiply";
+  const conversionFactor = Number(
+    row.conversion_factor ?? (row.is_base_unit ? 1 : row.factor_to_base),
+  );
   return {
     ...row,
+    unit_id: row.unit_id ?? null,
+    conversion_op: conversionOp,
+    conversion_factor: conversionFactor,
     factor_to_base: Number(row.factor_to_base),
     purchase_price:
       row.purchase_price == null ? null : Number(row.purchase_price),
@@ -89,6 +101,7 @@ function buildMaterialInsertPayload(
     name_ar: payload.name_ar.trim(),
     name_en: payload.name_en.trim() || null,
     category_id: payload.category_id || null,
+    material_kind: payload.material_kind || "normal",
     purchase_price: payload.purchase_price,
     sale_price: payload.sale_price,
     inventory_account_id: payload.inventory_account_id || null,
@@ -126,6 +139,14 @@ function stripTrackingMaterialFields(
   return next;
 }
 
+function stripMaterialKindField(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...payload };
+  delete next.material_kind;
+  return next;
+}
+
 function stripExtendedMaterialFields(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -160,6 +181,7 @@ function buildMaterialPatch(
   if (payload.name_ar != null) patch.name_ar = payload.name_ar.trim();
   if (payload.name_en != null) patch.name_en = payload.name_en.trim() || null;
   if (payload.category_id != null) patch.category_id = payload.category_id || null;
+  if (payload.material_kind != null) patch.material_kind = payload.material_kind;
   if (payload.purchase_price != null) patch.purchase_price = payload.purchase_price;
   if (payload.sale_price != null) patch.sale_price = payload.sale_price;
   if (payload.inventory_account_id != null) {
@@ -210,13 +232,26 @@ function buildUnitInsertPayload(
   materialId: string,
   payload: MaterialUnitFormValues,
 ): Record<string, unknown> {
+  const conversionOp = payload.is_base_unit
+    ? "multiply"
+    : payload.conversion_op || "multiply";
+  const conversionFactor = payload.is_base_unit
+    ? 1
+    : payload.conversion_factor || payload.factor_to_base || 1;
   return {
     material_id: materialId,
+    unit_id: payload.unit_id || null,
     unit_code: payload.unit_code.trim().toUpperCase(),
     name_ar: payload.name_ar.trim(),
     name_en: payload.name_en.trim() || null,
     is_base_unit: payload.is_base_unit,
-    factor_to_base: payload.is_base_unit ? 1 : payload.factor_to_base,
+    conversion_op: conversionOp,
+    conversion_factor: conversionFactor,
+    factor_to_base: payload.is_base_unit
+      ? 1
+      : conversionOp === "divide"
+        ? 1 / conversionFactor
+        : conversionFactor,
     is_active: payload.is_active,
     purchase_price: payload.purchase_price,
     sale_price: payload.sale_price,
@@ -236,6 +271,16 @@ function stripUnitPriceFields(
   return next;
 }
 
+function stripUnitConversionFields(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...payload };
+  delete next.unit_id;
+  delete next.conversion_op;
+  delete next.conversion_factor;
+  return next;
+}
+
 function buildUnitPatch(
   payload: Partial<MaterialUnitFormValues>,
 ): Record<string, unknown> {
@@ -243,12 +288,19 @@ function buildUnitPatch(
     updated_at: new Date().toISOString(),
   };
 
+  if (payload.unit_id !== undefined) patch.unit_id = payload.unit_id || null;
   if (payload.unit_code != null) {
     patch.unit_code = payload.unit_code.trim().toUpperCase();
   }
   if (payload.name_ar != null) patch.name_ar = payload.name_ar.trim();
   if (payload.name_en != null) patch.name_en = payload.name_en.trim() || null;
   if (payload.is_active != null) patch.is_active = payload.is_active;
+  if (payload.conversion_op != null && !payload.is_base_unit) {
+    patch.conversion_op = payload.conversion_op;
+  }
+  if (payload.conversion_factor != null && !payload.is_base_unit) {
+    patch.conversion_factor = payload.conversion_factor;
+  }
   if (payload.factor_to_base != null && !payload.is_base_unit) {
     patch.factor_to_base = payload.factor_to_base;
   }
@@ -291,8 +343,24 @@ async function mutateMaterialRow(
       select: MATERIAL_SELECT_EXTENDED,
       payload: stripTrackingMaterialFields(payload),
     },
-    { select: MATERIAL_SELECT_WITH_MIN, payload: stripExtendedMaterialFields(stripTrackingMaterialFields(payload)) },
-    { select: MATERIAL_SELECT_CORE, payload: stripMinStockField(stripExtendedMaterialFields(stripTrackingMaterialFields(payload))) },
+    {
+      select: MATERIAL_SELECT_WITH_MIN,
+      payload: stripExtendedMaterialFields(stripTrackingMaterialFields(payload)),
+    },
+    {
+      select: MATERIAL_SELECT_WITH_KIND,
+      payload: stripMinStockField(
+        stripExtendedMaterialFields(stripTrackingMaterialFields(payload)),
+      ),
+    },
+    {
+      select: MATERIAL_SELECT_CORE,
+      payload: stripMaterialKindField(
+        stripMinStockField(
+          stripExtendedMaterialFields(stripTrackingMaterialFields(payload)),
+        ),
+      ),
+    },
   ];
 
   let lastError: PostgrestError | null = null;
@@ -338,7 +406,14 @@ async function mutateUnitRow(
   const supabase = getSupabaseClient();
   const attempts = [
     { select: UNIT_SELECT_WITH_PRICES, payload },
-    { select: UNIT_SELECT_CORE, payload: stripUnitPriceFields(payload) },
+    {
+      select: UNIT_SELECT_WITH_CONVERSION,
+      payload: stripUnitPriceFields(payload),
+    },
+    {
+      select: UNIT_SELECT_CORE,
+      payload: stripUnitConversionFields(stripUnitPriceFields(payload)),
+    },
   ];
 
   let lastError: PostgrestError | null = null;
@@ -484,6 +559,7 @@ export const materialApi = {
     const supabase = getSupabaseClient();
     const materialPayload = buildMaterialInsertPayload(payload);
     const unitPayload = {
+      unit_id: baseUnit.unit_id || null,
       unit_code: baseUnit.unit_code,
       name_ar: baseUnit.name_ar,
       name_en: baseUnit.name_en,
@@ -538,7 +614,11 @@ export const materialApi = {
 
   async listMaterialUnits(materialId: string): Promise<MaterialUnit[]> {
     const supabase = getSupabaseClient();
-    const attempts = [UNIT_SELECT_WITH_PRICES, UNIT_SELECT_CORE];
+    const attempts = [
+      UNIT_SELECT_WITH_PRICES,
+      UNIT_SELECT_WITH_CONVERSION,
+      UNIT_SELECT_CORE,
+    ];
 
     let rows: MaterialUnit[] | null = null;
     let error: PostgrestError | null = null;
@@ -558,7 +638,13 @@ export const materialApi = {
         break;
       }
       error = result.error;
-      if (!isMissingColumn(result.error, "purchase_price")) break;
+      if (
+        !isMissingColumn(result.error, "purchase_price") &&
+        !isMissingColumn(result.error, "conversion_op") &&
+        !isMissingColumn(result.error, "unit_id")
+      ) {
+        break;
+      }
     }
 
     if (isMissingTable(error)) return [];
@@ -580,5 +666,25 @@ export const materialApi = {
   ): Promise<MaterialUnit> {
     const patch = buildUnitPatch(payload);
     return mutateUnitRow("update", patch, unitId);
+  },
+
+  async suggestNextMaterialCode(categoryId?: string | null): Promise<string> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("suggest_next_material_code", {
+      p_category_id: categoryId || null,
+    });
+    if (!error && data) return String(data);
+
+    const prefix = "MAT";
+    const { data: rows } = await supabase
+      .from("materials")
+      .select("material_code")
+      .ilike("material_code", `${prefix}%`)
+      .order("material_code", { ascending: false })
+      .limit(1);
+    const last = rows?.[0]?.material_code as string | undefined;
+    const match = last?.match(/(\d+)$/);
+    const next = (match ? Number(match[1]) : 0) + 1;
+    return `${prefix}-${String(next).padStart(4, "0")}`;
   },
 };

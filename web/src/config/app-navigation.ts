@@ -64,6 +64,7 @@ export const APP_NAV_SECTIONS: NavSection[] = [
     children: [
       { href: "/materials", label: "بطاقات المواد" },
       { href: "/materials/categories", label: "الأصناف" },
+      { href: "/materials/units", label: "الوحدات" },
       { href: "/materials/warehouses", label: "المستودعات" },
       { href: "/materials/warehouse-limits", label: "حدود المخزون" },
       { href: "/materials/settings", label: "إعدادات الجرد" },

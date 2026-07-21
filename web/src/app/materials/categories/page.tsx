@@ -1,37 +1,62 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialCategoryFormModal } from "@/modules/materials/components/material-category-form-modal";
 import { MaterialsNav } from "@/modules/materials/components/materials-nav";
+import { materialApi } from "@/modules/materials/services/material-api";
 import { materialCategoryApi } from "@/modules/materials/services/material-category-api";
-import type { MaterialCategory, MaterialCategoryFormValues } from "@/modules/materials/types";
+import type {
+  MaterialCategory,
+  MaterialCategoryFormValues,
+  MaterialListItem,
+} from "@/modules/materials/types";
+import {
+  buildCategoryMaterialTree,
+  collectExpandableCategoryIds,
+  flattenCategoryMaterialTree,
+  toggleExpandedId,
+  type CategoryMaterialTreeNode,
+} from "@/modules/materials/utils/category-material-tree";
 
 export default function MaterialCategoriesPage() {
   const { hasPermission } = useAuth();
   const canEdit = hasPermission("materials.edit");
   const [categories, setCategories] = useState<MaterialCategory[]>([]);
+  const [materials, setMaterials] = useState<MaterialListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [formError, setFormError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
-  const [editingCategory, setEditingCategory] = useState<MaterialCategory | null>(null);
+  const [editingCategory, setEditingCategory] = useState<MaterialCategory | null>(
+    null,
+  );
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const reload = useCallback(async () => {
-    const data = await materialCategoryApi.listCategories();
-    setCategories(data);
-    return data;
+    const [categoriesData, materialsData] = await Promise.all([
+      materialCategoryApi.listCategories(),
+      materialApi.listMaterials(),
+    ]);
+    setCategories(categoriesData);
+    setMaterials(materialsData);
+    const tree = buildCategoryMaterialTree(categoriesData, materialsData);
+    setExpandedIds(new Set(collectExpandableCategoryIds(tree)));
+    return { categoriesData, materialsData };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    void materialCategoryApi
-      .listCategories()
-      .then((data) => {
-        if (!cancelled) setCategories(data);
-      })
+    void reload()
       .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "فشل تحميل الأصناف.");
@@ -43,7 +68,16 @@ export default function MaterialCategoriesPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reload]);
+
+  const tree = useMemo(
+    () => buildCategoryMaterialTree(categories, materials),
+    [categories, materials],
+  );
+  const rows = useMemo(
+    () => flattenCategoryMaterialTree(tree, expandedIds),
+    [tree, expandedIds],
+  );
 
   const openCreate = () => {
     setModalMode("create");
@@ -98,34 +132,69 @@ export default function MaterialCategoriesPage() {
     }
   };
 
-  const parentName = (parentId: string | null) => {
-    if (!parentId) return "—";
-    return categories.find((category) => category.id === parentId)?.name_ar ?? "—";
+  const onRowContextMenu = (
+    event: ReactMouseEvent,
+    node: CategoryMaterialTreeNode,
+  ) => {
+    if (node.kind === "category" && node.category && canEdit) {
+      event.preventDefault();
+      openEdit(node.category);
+    }
   };
 
   return (
     <main className="mx-auto w-full max-w-5xl">
-      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">أصناف المواد</h1>
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+        أصناف المواد
+      </h1>
       <MaterialsNav />
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-600">
-            تصنيف شجري اختياري — يُستخدم في بطاقات المواد وأنماط الفواتير.
+            شجرة الأصناف مع المواد التابعة — انقر يميناً على صنف لتعديله.
           </p>
-          {canEdit && (
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={openCreate}
-              disabled={isSaving}
-              className="btn btn-primary"
+              onClick={() =>
+                setExpandedIds(new Set(collectExpandableCategoryIds(tree)))
+              }
+              className="btn btn-outline"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              صنف جديد
+              توسيع الكل
             </button>
-          )}
+            <button
+              type="button"
+              onClick={() => setExpandedIds(new Set())}
+              className="btn btn-outline"
+            >
+              طي الكل
+            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={openCreate}
+                disabled={isSaving}
+                className="btn btn-primary"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                صنف جديد
+              </button>
+            )}
+          </div>
         </div>
 
         {isLoading && <p className="text-sm text-slate-600">جاري التحميل...</p>}
@@ -133,55 +202,118 @@ export default function MaterialCategoriesPage() {
           <p className="text-sm text-[var(--danger)]">{error}</p>
         )}
 
-        {!isLoading && !error && categories.length > 0 && (
+        {!isLoading && !error && rows.length === 0 && (
+          <p className="text-sm text-slate-600">لا توجد أصناف أو مواد بعد.</p>
+        )}
+
+        {!isLoading && !error && rows.length > 0 && (
           <div className="overflow-x-auto rounded-lg border border-slate-200">
             <table className="data-table min-w-[720px]">
               <thead>
                 <tr>
-                  <th>الرمز</th>
-                  <th>الاسم</th>
-                  <th>الأب</th>
+                  <th>الرمز / الاسم</th>
+                  <th>النوع</th>
                   <th>الحالة</th>
-                  {canEdit && <th>إجراء</th>}
+                  <th>إجراء</th>
                 </tr>
               </thead>
               <tbody>
-                {categories.map((category) => (
-                  <tr key={category.id}>
-                    <td className="font-mono">{category.category_code}</td>
-                    <td>{category.name_ar}</td>
-                    <td className="text-xs">{parentName(category.parent_id)}</td>
-                    <td>
-                      {category.is_active ? (
-                        <span className="badge badge-success">نشط</span>
-                      ) : (
-                        <span className="badge badge-muted">معطّل</span>
-                      )}
-                    </td>
-                    {canEdit && (
+                {rows.map(({ node, depth }) => {
+                  const hasChildren = node.children.length > 0;
+                  const isExpanded = expandedIds.has(node.id);
+                  return (
+                    <tr
+                      key={`${node.kind}-${node.id}`}
+                      onContextMenu={(event) => onRowContextMenu(event, node)}
+                    >
                       <td>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(category)}
-                            disabled={isSaving}
-                            className="btn btn-sm btn-outline"
-                          >
-                            تعديل
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void toggleActive(category)}
-                            disabled={isSaving}
-                            className="btn btn-sm btn-outline"
-                          >
-                            {category.is_active ? "تعطيل" : "تفعيل"}
-                          </button>
+                        <div
+                          className="flex items-center gap-1.5"
+                          style={{ paddingInlineStart: `${depth * 1.25}rem` }}
+                        >
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedIds((current) =>
+                                  toggleExpandedId(current, node.id),
+                                )
+                              }
+                              className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-300 text-slate-600 hover:bg-slate-50"
+                              aria-label={isExpanded ? "طي" : "توسيع"}
+                            >
+                              {isExpanded ? "−" : "+"}
+                            </button>
+                          ) : (
+                            <span className="inline-block h-6 w-6" />
+                          )}
+                          <div>
+                            {node.code ? (
+                              <span className="me-2 font-mono text-xs text-slate-500">
+                                {node.code}
+                              </span>
+                            ) : null}
+                            <span
+                              className={
+                                node.kind === "material"
+                                  ? "font-medium text-slate-900"
+                                  : "font-semibold text-slate-800"
+                              }
+                            >
+                              {node.label}
+                            </span>
+                          </div>
                         </div>
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="text-xs text-slate-600">
+                        {node.kind === "material"
+                          ? "مادة"
+                          : node.kind === "uncategorized"
+                            ? "مجموعة"
+                            : "صنف"}
+                      </td>
+                      <td>
+                        {node.is_active ? (
+                          <span className="badge badge-success">نشط</span>
+                        ) : (
+                          <span className="badge badge-muted">معطّل</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-2">
+                          {node.kind === "category" && node.category && canEdit && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEdit(node.category!)}
+                                disabled={isSaving}
+                                className="btn btn-sm btn-outline"
+                              >
+                                تعديل
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void toggleActive(node.category!)}
+                                disabled={isSaving}
+                                className="btn btn-sm btn-outline"
+                              >
+                                {node.category.is_active ? "تعطيل" : "تفعيل"}
+                              </button>
+                            </>
+                          )}
+                          {node.kind === "material" && (
+                            <Link
+                              href={`/materials/${node.id}`}
+                              className="btn btn-sm btn-outline"
+                            >
+                              فتح المادة
+                            </Link>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -1,20 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { MaterialOverviewPanel } from "@/modules/materials/components/material-overview-panel";
-import type { MaterialCategory } from "@/modules/materials/types";
+import { materialApi } from "@/modules/materials/services/material-api";
 import type {
+  MaterialBomFormValues,
+  MaterialCategory,
   MaterialFormValues,
+  MaterialListItem,
   MaterialUnit,
   MaterialUnitFormValues,
+  UnitCatalogItem,
 } from "@/modules/materials/types";
 import type { Account } from "@/modules/vouchers/types";
 
 type MaterialCardTab =
   | "specifications"
   | "units-prices"
+  | "bom"
   | "tracking"
   | "accounts"
   | "limits"
@@ -25,7 +30,10 @@ interface MaterialFormProps {
   materialId?: string;
   initialValues: MaterialFormValues;
   initialUnits: MaterialUnit[];
+  initialBom?: MaterialBomFormValues[];
   categories: MaterialCategory[];
+  catalogUnits: UnitCatalogItem[];
+  normalMaterials: MaterialListItem[];
   accounts: Account[];
   canEdit: boolean;
   isSaving: boolean;
@@ -33,14 +41,18 @@ interface MaterialFormProps {
   onSubmit: (
     values: MaterialFormValues,
     units: MaterialUnitFormValues[],
+    bom: MaterialBomFormValues[],
   ) => void | Promise<void>;
 }
 
 const EMPTY_BASE_UNIT: MaterialUnitFormValues = {
+  unit_id: "",
   unit_code: "PCS",
   name_ar: "قطعة",
   name_en: "",
   is_base_unit: true,
+  conversion_op: "multiply",
+  conversion_factor: 1,
   factor_to_base: 1,
   purchase_price: 0,
   sale_price: 0,
@@ -55,10 +67,13 @@ function unitToDraft(
 ): MaterialUnitFormValues {
   return {
     id: unit.id,
+    unit_id: unit.unit_id ?? "",
     unit_code: unit.unit_code,
     name_ar: unit.name_ar,
     name_en: unit.name_en ?? "",
     is_base_unit: unit.is_base_unit,
+    conversion_op: unit.conversion_op ?? "multiply",
+    conversion_factor: unit.conversion_factor ?? unit.factor_to_base ?? 1,
     factor_to_base: unit.factor_to_base,
     purchase_price:
       unit.purchase_price ??
@@ -95,12 +110,25 @@ function TabButton({
   );
 }
 
+function computeFactorToBase(
+  isBase: boolean,
+  op: "multiply" | "divide",
+  factor: number,
+): number {
+  if (isBase) return 1;
+  if (factor <= 0) return 1;
+  return op === "divide" ? 1 / factor : factor;
+}
+
 export function MaterialForm({
   mode,
   materialId,
   initialValues,
   initialUnits,
+  initialBom = [],
   categories,
+  catalogUnits,
+  normalMaterials,
   accounts,
   canEdit,
   isSaving,
@@ -116,23 +144,70 @@ export function MaterialForm({
         ? [EMPTY_BASE_UNIT]
         : [],
   );
+  const [bomRows, setBomRows] = useState<MaterialBomFormValues[]>(initialBom);
   const [localError, setLocalError] = useState("");
+  const [codeTouched, setCodeTouched] = useState(mode === "edit");
+  const suggestingCode = useRef(false);
 
   const activeCategories = useMemo(
     () => categories.filter((category) => category.is_active),
     [categories],
   );
+  const activeCatalogUnits = useMemo(
+    () => catalogUnits.filter((unit) => unit.is_active),
+    [catalogUnits],
+  );
+  const bomCandidates = useMemo(
+    () =>
+      normalMaterials.filter(
+        (material) =>
+          material.is_active &&
+          material.material_kind !== "composite" &&
+          material.id !== materialId,
+      ),
+    [normalMaterials, materialId],
+  );
 
   const tabs: { id: MaterialCardTab; label: string }[] = [
     { id: "specifications", label: "مواصفات المادة" },
     { id: "units-prices", label: "الوحدات والأسعار" },
+  ];
+  if (values.material_kind === "composite") {
+    tabs.push({ id: "bom", label: "مكوّنات التجميع" });
+  }
+  tabs.push(
     { id: "tracking", label: "تتبع المادة" },
     { id: "accounts", label: "الحسابات" },
     { id: "limits", label: "الحد الأدنى والأعلى" },
-  ];
+  );
   if (mode === "edit" && materialId) {
     tabs.push({ id: "overview", label: "لمحة عن المادة" });
   }
+
+  useEffect(() => {
+    if (mode !== "create" || codeTouched || suggestingCode.current) return;
+    suggestingCode.current = true;
+    void materialApi
+      .suggestNextMaterialCode(values.category_id || null)
+      .then((code) => {
+        setValues((current) =>
+          codeTouched ? current : { ...current, material_code: code },
+        );
+      })
+      .finally(() => {
+        suggestingCode.current = false;
+      });
+  }, [mode, values.category_id, codeTouched]);
+
+  const applyCatalogUnit = (index: number, unitId: string) => {
+    const catalog = catalogUnits.find((row) => row.id === unitId);
+    updateUnit(index, {
+      unit_id: unitId,
+      unit_code: catalog?.unit_code ?? "",
+      name_ar: catalog?.name_ar ?? "",
+      name_en: catalog?.name_en ?? "",
+    });
+  };
 
   const updateUnit = (
     index: number,
@@ -142,7 +217,17 @@ export function MaterialForm({
       const next = current.map((unit, i) => {
         if (i !== index) return unit;
         const updated = { ...unit, ...patch };
-        if (updated.is_base_unit) updated.factor_to_base = 1;
+        if (updated.is_base_unit) {
+          updated.conversion_op = "multiply";
+          updated.conversion_factor = 1;
+          updated.factor_to_base = 1;
+        } else {
+          updated.factor_to_base = computeFactorToBase(
+            false,
+            updated.conversion_op,
+            updated.conversion_factor,
+          );
+        }
         return updated;
       });
 
@@ -168,10 +253,7 @@ export function MaterialForm({
     });
   };
 
-  const syncBaseUnitPrices = (
-    purchasePrice: number,
-    salePrice: number,
-  ) => {
+  const syncBaseUnitPrices = (purchasePrice: number, salePrice: number) => {
     setUnits((current) =>
       current.map((unit) =>
         unit.is_base_unit
@@ -182,19 +264,35 @@ export function MaterialForm({
   };
 
   const addUnit = () => {
+    const first = activeCatalogUnits[0];
     setUnits((current) => [
       ...current,
       {
-        unit_code: "",
-        name_ar: "",
-        name_en: "",
+        unit_id: first?.id ?? "",
+        unit_code: first?.unit_code ?? "",
+        name_ar: first?.name_ar ?? "",
+        name_en: first?.name_en ?? "",
         is_base_unit: false,
+        conversion_op: "multiply",
+        conversion_factor: 1,
         factor_to_base: 1,
         purchase_price: null,
         sale_price: null,
         semi_wholesale_price: null,
         wholesale_price: null,
         is_active: true,
+      },
+    ]);
+  };
+
+  const addBomRow = () => {
+    setBomRows((current) => [
+      ...current,
+      {
+        component_material_id: "",
+        quantity: 1,
+        component_unit_id: "",
+        notes: "",
       },
     ]);
   };
@@ -215,14 +313,29 @@ export function MaterialForm({
 
     for (const unit of units) {
       if (!unit.unit_code.trim() || !unit.name_ar.trim()) {
-        setLocalError("رمز واسم كل وحدة مطلوبان.");
+        setLocalError("اختر وحدة من الكتالوج أو أدخل الرمز والاسم.");
         setActiveTab("units-prices");
         return false;
       }
-      if (!unit.is_base_unit && unit.factor_to_base <= 0) {
+      if (!unit.is_base_unit && unit.conversion_factor <= 0) {
         setLocalError("معامل التحويل يجب أن يكون أكبر من صفر.");
         setActiveTab("units-prices");
         return false;
+      }
+    }
+
+    if (values.material_kind === "composite") {
+      if (bomRows.length === 0) {
+        setLocalError("المادة التجميعية تحتاج مكوّناً واحداً على الأقل.");
+        setActiveTab("bom");
+        return false;
+      }
+      for (const row of bomRows) {
+        if (!row.component_material_id || row.quantity <= 0) {
+          setLocalError("كل مكوّن يحتاج مادة عادية وكمية أكبر من صفر.");
+          setActiveTab("bom");
+          return false;
+        }
       }
     }
 
@@ -233,7 +346,7 @@ export function MaterialForm({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canEdit || !validate()) return;
-    void onSubmit(values, units);
+    void onSubmit(values, units, bomRows);
   };
 
   return (
@@ -245,16 +358,22 @@ export function MaterialForm({
             <span className="font-medium">رمز المادة *</span>
             <input
               value={values.material_code}
-              onChange={(event) =>
+              onChange={(event) => {
+                setCodeTouched(true);
                 setValues((current) => ({
                   ...current,
                   material_code: event.target.value,
-                }))
-              }
+                }));
+              }}
               disabled={!canEdit || isSaving}
               className="rounded-md border border-slate-300 px-3 py-2 font-mono uppercase"
               required
             />
+            {mode === "create" && (
+              <span className="text-xs text-slate-500">
+                يُقترح تلقائياً من رمز الصنف — يمكن تعديله.
+              </span>
+            )}
           </label>
           <label className="grid gap-1 text-sm md:col-span-2">
             <span className="font-medium">الاسم العربي *</span>
@@ -300,6 +419,27 @@ export function MaterialForm({
               dir="ltr"
             />
           </label>
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium">نوع المادة</span>
+            <select
+              value={values.material_kind}
+              onChange={(event) => {
+                const kind = event.target.value as "normal" | "composite";
+                setValues((current) => ({ ...current, material_kind: kind }));
+                if (kind === "normal") setBomRows([]);
+                if (kind === "composite" && activeTab === "bom") {
+                  /* keep */
+                } else if (kind !== "composite" && activeTab === "bom") {
+                  setActiveTab("specifications");
+                }
+              }}
+              disabled={!canEdit || isSaving}
+              className="rounded-md border border-slate-300 px-3 py-2"
+            >
+              <option value="normal">عادية</option>
+              <option value="composite">تجميعية</option>
+            </select>
+          </label>
         </div>
       </section>
 
@@ -328,12 +468,14 @@ export function MaterialForm({
                 <span className="font-medium">الصنف</span>
                 <select
                   value={values.category_id}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const categoryId = event.target.value;
+                    if (mode === "create") setCodeTouched(false);
                     setValues((current) => ({
                       ...current,
-                      category_id: event.target.value,
-                    }))
-                  }
+                      category_id: categoryId,
+                    }));
+                  }}
                   disabled={!canEdit || isSaving}
                   className="rounded-md border border-slate-300 px-3 py-2"
                 >
@@ -436,6 +578,13 @@ export function MaterialForm({
                   className="rounded-md border border-slate-300 px-3 py-2"
                 />
               </label>
+              {values.material_kind === "composite" && (
+                <p className="md:col-span-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  عند استخدام المادة التجميعية في الفواتير يُستهلك مخزون المواد
+                  العادية وفق كميات المكوّنات — لا يُخزَّن رصيد للمادة التجميعية
+                  نفسها.
+                </p>
+              )}
             </div>
           )}
 
@@ -486,10 +635,11 @@ export function MaterialForm({
                 <div>
                   <h3 className="text-sm font-bold text-slate-800">جدول الوحدات</h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    التعادل: كم وحدة أساس في كل وحدة فرعية.
+                    اختر من كتالوج الوحدات، وحدّد التعادل ضرباً أو قسمة بالنسبة
+                    لوحدة الأساس.
                   </p>
                 </div>
-                {canEdit && mode === "edit" && (
+                {canEdit && (
                   <button
                     type="button"
                     onClick={addUnit}
@@ -502,12 +652,14 @@ export function MaterialForm({
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[960px] border-collapse text-sm">
+                <table className="w-full min-w-[1100px] border-collapse text-sm">
                   <thead className="bg-slate-50">
                     <tr className="text-right text-slate-700">
-                      <th className="border-b border-slate-200 p-2">الرمز</th>
                       <th className="border-b border-slate-200 p-2">الوحدة</th>
-                      <th className="border-b border-slate-200 p-2">التعادل</th>
+                      <th className="border-b border-slate-200 p-2">أساس؟</th>
+                      <th className="border-b border-slate-200 p-2">العملية</th>
+                      <th className="border-b border-slate-200 p-2">المعامل</th>
+                      <th className="border-b border-slate-200 p-2">= أساس</th>
                       <th className="border-b border-slate-200 p-2">الشراء</th>
                       <th className="border-b border-slate-200 p-2">المبيع</th>
                       <th className="border-b border-slate-200 p-2">نصف جملة</th>
@@ -522,43 +674,93 @@ export function MaterialForm({
                         className="odd:bg-white even:bg-slate-50/60"
                       >
                         <td className="border-b border-slate-100 p-2">
-                          <input
-                            value={unit.unit_code}
+                          <select
+                            value={unit.unit_id}
                             onChange={(event) =>
-                              updateUnit(index, { unit_code: event.target.value })
+                              applyCatalogUnit(index, event.target.value)
                             }
                             disabled={
                               !canEdit ||
                               isSaving ||
                               Boolean(unit.id && unit.is_base_unit)
                             }
-                            className="w-full rounded border border-slate-300 px-2 py-1 font-mono uppercase"
-                          />
+                            className="w-full rounded border border-slate-300 px-2 py-1"
+                          >
+                            <option value="">— يدوي —</option>
+                            {activeCatalogUnits.map((catalog) => (
+                              <option key={catalog.id} value={catalog.id}>
+                                {catalog.unit_code} — {catalog.name_ar}
+                              </option>
+                            ))}
+                          </select>
+                          {!unit.unit_id && (
+                            <div className="mt-1 grid grid-cols-2 gap-1">
+                              <input
+                                value={unit.unit_code}
+                                onChange={(event) =>
+                                  updateUnit(index, {
+                                    unit_code: event.target.value,
+                                  })
+                                }
+                                disabled={!canEdit || isSaving}
+                                placeholder="رمز"
+                                className="rounded border border-slate-300 px-2 py-1 font-mono uppercase"
+                              />
+                              <input
+                                value={unit.name_ar}
+                                onChange={(event) =>
+                                  updateUnit(index, {
+                                    name_ar: event.target.value,
+                                  })
+                                }
+                                disabled={!canEdit || isSaving}
+                                placeholder="اسم"
+                                className="rounded border border-slate-300 px-2 py-1"
+                              />
+                            </div>
+                          )}
+                        </td>
+                        <td className="border-b border-slate-100 p-2 text-center text-xs">
+                          {unit.is_base_unit ? "أساس" : "فرعية"}
                         </td>
                         <td className="border-b border-slate-100 p-2">
-                          <input
-                            value={unit.name_ar}
+                          <select
+                            value={unit.conversion_op}
                             onChange={(event) =>
-                              updateUnit(index, { name_ar: event.target.value })
+                              updateUnit(index, {
+                                conversion_op: event.target.value as
+                                  | "multiply"
+                                  | "divide",
+                              })
                             }
-                            disabled={!canEdit || isSaving}
+                            disabled={
+                              !canEdit || isSaving || unit.is_base_unit
+                            }
                             className="w-full rounded border border-slate-300 px-2 py-1"
-                          />
+                          >
+                            <option value="multiply">ضرب ×</option>
+                            <option value="divide">قسمة ÷</option>
+                          </select>
                         </td>
                         <td className="border-b border-slate-100 p-2">
                           <input
                             type="number"
                             min={0.000001}
                             step="0.000001"
-                            value={unit.factor_to_base}
+                            value={unit.conversion_factor}
                             onChange={(event) =>
                               updateUnit(index, {
-                                factor_to_base: Number(event.target.value),
+                                conversion_factor: Number(event.target.value),
                               })
                             }
-                            disabled={!canEdit || isSaving || unit.is_base_unit}
+                            disabled={
+                              !canEdit || isSaving || unit.is_base_unit
+                            }
                             className="w-full rounded border border-slate-300 px-2 py-1 font-mono"
                           />
+                        </td>
+                        <td className="border-b border-slate-100 p-2 font-mono text-xs text-slate-600">
+                          {unit.factor_to_base.toFixed(6)}
                         </td>
                         {(
                           [
@@ -568,7 +770,10 @@ export function MaterialForm({
                             "wholesale_price",
                           ] as const
                         ).map((field) => (
-                          <td key={field} className="border-b border-slate-100 p-2">
+                          <td
+                            key={field}
+                            className="border-b border-slate-100 p-2"
+                          >
                             <input
                               type="number"
                               min={0}
@@ -592,10 +797,141 @@ export function MaterialForm({
                             type="checkbox"
                             checked={unit.is_active}
                             onChange={(event) =>
-                              updateUnit(index, { is_active: event.target.checked })
+                              updateUnit(index, {
+                                is_active: event.target.checked,
+                              })
                             }
-                            disabled={!canEdit || isSaving || unit.is_base_unit}
+                            disabled={
+                              !canEdit || isSaving || unit.is_base_unit
+                            }
                           />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-slate-500">
+                مثال: أساس=قطعة، علبة بضرب 12 → 1 علبة = 12 قطعة. أساس=كيلو، غرام
+                بقسمة 1000 → 1 غرام = 0.001 كيلو.
+              </p>
+            </div>
+          )}
+
+          {activeTab === "bom" && values.material_kind === "composite" && (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    مكوّنات التجميع
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    الكمية لكل وحدة أساس واحدة من هذه المادة التجميعية.
+                  </p>
+                </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={addBomRow}
+                    disabled={isSaving}
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-xs"
+                  >
+                    إضافة مكوّن
+                  </button>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] border-collapse text-sm">
+                  <thead className="bg-slate-50">
+                    <tr className="text-right text-slate-700">
+                      <th className="border-b border-slate-200 p-2">المادة العادية</th>
+                      <th className="border-b border-slate-200 p-2">الكمية</th>
+                      <th className="border-b border-slate-200 p-2">ملاحظات</th>
+                      <th className="border-b border-slate-200 p-2" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bomRows.map((row, index) => (
+                      <tr key={row.id ?? `bom-${index}`}>
+                        <td className="border-b border-slate-100 p-2">
+                          <select
+                            value={row.component_material_id}
+                            onChange={(event) =>
+                              setBomRows((current) =>
+                                current.map((item, i) =>
+                                  i === index
+                                    ? {
+                                        ...item,
+                                        component_material_id:
+                                          event.target.value,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            disabled={!canEdit || isSaving}
+                            className="w-full rounded border border-slate-300 px-2 py-1"
+                          >
+                            <option value="">— اختر —</option>
+                            {bomCandidates.map((material) => (
+                              <option key={material.id} value={material.id}>
+                                {material.material_code} — {material.name_ar}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="border-b border-slate-100 p-2">
+                          <input
+                            type="number"
+                            min={0.000001}
+                            step="0.000001"
+                            value={row.quantity}
+                            onChange={(event) =>
+                              setBomRows((current) =>
+                                current.map((item, i) =>
+                                  i === index
+                                    ? {
+                                        ...item,
+                                        quantity: Number(event.target.value),
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            disabled={!canEdit || isSaving}
+                            className="w-full rounded border border-slate-300 px-2 py-1 font-mono"
+                          />
+                        </td>
+                        <td className="border-b border-slate-100 p-2">
+                          <input
+                            value={row.notes}
+                            onChange={(event) =>
+                              setBomRows((current) =>
+                                current.map((item, i) =>
+                                  i === index
+                                    ? { ...item, notes: event.target.value }
+                                    : item,
+                                ),
+                              )
+                            }
+                            disabled={!canEdit || isSaving}
+                            className="w-full rounded border border-slate-300 px-2 py-1"
+                          />
+                        </td>
+                        <td className="border-b border-slate-100 p-2">
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setBomRows((current) =>
+                                  current.filter((_, i) => i !== index),
+                                )
+                              }
+                              className="text-xs text-rose-700"
+                            >
+                              حذف
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -660,7 +996,7 @@ export function MaterialForm({
                       }
                       disabled={!canEdit || isSaving || !values.has_expiry_date}
                     />
-                    <span>إجبار تاريخ انتهاء الصلاحية عند الإدخال (في الفاتورة)</span>
+                    <span>إجبار تاريخ انتهاء الصلاحية عند الإدخال</span>
                   </label>
                   <label className="flex items-center gap-2 text-sm">
                     <input
@@ -674,12 +1010,8 @@ export function MaterialForm({
                       }
                       disabled={!canEdit || isSaving || !values.has_expiry_date}
                     />
-                    <span>إجبار تاريخ انتهاء الصلاحية عند الإخراج (في الفاتورة)</span>
+                    <span>إجبار تاريخ انتهاء الصلاحية عند الإخراج</span>
                   </label>
-                  <p className="text-xs text-slate-500">
-                    الإعدادات هنا — التاريخ الفعلي يُدخل يدوياً في كل سطر فاتورة (مشتريات،
-                    مبيعات، …) وليس بحساب بعدد أيام من البطاقة.
-                  </p>
                 </div>
               </fieldset>
 
@@ -718,7 +1050,9 @@ export function MaterialForm({
                           require_serial_on_inbound: event.target.checked,
                         }))
                       }
-                      disabled={!canEdit || isSaving || !values.has_serial_number}
+                      disabled={
+                        !canEdit || isSaving || !values.has_serial_number
+                      }
                     />
                     <span>إجبار الرقم التسلسلي عند الإدخال</span>
                   </label>
@@ -732,7 +1066,9 @@ export function MaterialForm({
                           require_serial_on_outbound: event.target.checked,
                         }))
                       }
-                      disabled={!canEdit || isSaving || !values.has_serial_number}
+                      disabled={
+                        !canEdit || isSaving || !values.has_serial_number
+                      }
                     />
                     <span>إجبار الرقم التسلسلي عند الإخراج</span>
                   </label>
@@ -757,9 +1093,6 @@ export function MaterialForm({
                   disabled={!canEdit || isSaving}
                   placeholder="حساب مخزون اختياري"
                 />
-                <span className="text-xs text-slate-500">
-                  يُستخدم عند ترحيل حركات المخزون إلى القيود المحاسبية.
-                </span>
               </div>
             </div>
           )}
@@ -767,7 +1100,7 @@ export function MaterialForm({
           {activeTab === "limits" && (
             <div className="grid max-w-xl gap-3 md:grid-cols-2">
               <label className="grid gap-1 text-sm">
-                <span className="font-medium">الحد الأدنى للمادة (وحدة أساس)</span>
+                <span className="font-medium">الحد الأدنى (وحدة أساس)</span>
                 <input
                   type="number"
                   min={0}
@@ -782,12 +1115,9 @@ export function MaterialForm({
                   disabled={!canEdit || isSaving}
                   className="rounded-md border border-slate-300 px-3 py-2 font-mono"
                 />
-                <span className="text-xs text-slate-500">
-                  يُستخدم في تقرير النواقص — صفر يعني الاعتماد على الحد العام.
-                </span>
               </label>
               <label className="grid gap-1 text-sm">
-                <span className="font-medium">الحد الأعلى للمادة (وحدة أساس)</span>
+                <span className="font-medium">الحد الأعلى (وحدة أساس)</span>
                 <input
                   type="number"
                   min={0}
@@ -827,10 +1157,17 @@ export function MaterialForm({
             disabled={isSaving}
             className="rounded-md bg-blue-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
-            {isSaving ? "جاري الحفظ..." : mode === "create" ? "إنشاء المادة" : "حفظ"}
+            {isSaving
+              ? "جاري الحفظ..."
+              : mode === "create"
+                ? "إنشاء المادة"
+                : "حفظ"}
           </button>
         )}
-        <Link href="/materials" className="rounded-md border border-slate-300 px-4 py-2 text-sm">
+        <Link
+          href="/materials"
+          className="rounded-md border border-slate-300 px-4 py-2 text-sm"
+        >
           {mode === "create" ? "إلغاء" : "قائمة المواد"}
         </Link>
       </div>
