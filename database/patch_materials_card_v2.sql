@@ -516,10 +516,11 @@ create trigger trg_inventory_movements_00_explode_composite
   execute function public.inventory_movements_explode_composite();
 
 -- تكلفة مادة عادية (المنطق السابق) ثم غلاف يدعم التجميعية
+-- أسماء المعاملات مطابقة للدالة الأصلية في patch_invoice_pricing_cost
 create or replace function public.calc_outbound_line_total_cost_normal(
-  p_pricing_consumed_mode varchar,
+  p_consumed_mode varchar,
   p_settings public.company_inventory_settings,
-  p_purchase_price numeric,
+  p_material_purchase_price numeric,
   p_line_unit_price numeric,
   p_factor_to_base numeric,
   p_quantity_base numeric,
@@ -528,19 +529,21 @@ create or replace function public.calc_outbound_line_total_cost_normal(
   p_cost_center_id uuid,
   p_expiry_date date,
   p_serial_number text,
-  p_as_of date
+  p_as_of_date date
 )
 returns numeric
 language plpgsql
 stable
+security definer
+set search_path = public
 as $$
 begin
   return round((
     abs(coalesce(p_quantity_base, 0))
     * public.calc_outbound_unit_cost(
-      p_pricing_consumed_mode,
+      p_consumed_mode,
       p_settings,
-      p_purchase_price,
+      p_material_purchase_price,
       p_line_unit_price,
       p_factor_to_base,
       p_material_id,
@@ -548,16 +551,31 @@ begin
       p_cost_center_id,
       p_expiry_date,
       p_serial_number,
-      p_as_of
+      p_as_of_date
     )
   )::numeric, 2);
 end;
 $$;
 
-create or replace function public.calc_outbound_line_total_cost(
-  p_pricing_consumed_mode varchar,
+drop function if exists public.calc_outbound_line_total_cost(
+  varchar,
+  public.company_inventory_settings,
+  numeric,
+  numeric,
+  numeric,
+  numeric,
+  uuid,
+  uuid,
+  uuid,
+  date,
+  text,
+  date
+);
+
+create function public.calc_outbound_line_total_cost(
+  p_consumed_mode varchar,
   p_settings public.company_inventory_settings,
-  p_purchase_price numeric,
+  p_material_purchase_price numeric,
   p_line_unit_price numeric,
   p_factor_to_base numeric,
   p_quantity_base numeric,
@@ -566,11 +584,13 @@ create or replace function public.calc_outbound_line_total_cost(
   p_cost_center_id uuid,
   p_expiry_date date,
   p_serial_number text,
-  p_as_of date
+  p_as_of_date date
 )
 returns numeric
 language plpgsql
 stable
+security definer
+set search_path = public
 as $$
 declare
   v_kind varchar(20);
@@ -589,7 +609,7 @@ begin
       from public.materials where id = v_comp.component_material_id;
 
       v_total := v_total + public.calc_outbound_line_total_cost_normal(
-        p_pricing_consumed_mode,
+        p_consumed_mode,
         p_settings,
         coalesce(v_comp_price, 0),
         p_line_unit_price,
@@ -600,16 +620,16 @@ begin
         p_cost_center_id,
         p_expiry_date,
         p_serial_number,
-        p_as_of
+        p_as_of_date
       );
     end loop;
     return round(v_total::numeric, 2);
   end if;
 
   return public.calc_outbound_line_total_cost_normal(
-    p_pricing_consumed_mode,
+    p_consumed_mode,
     p_settings,
-    p_purchase_price,
+    p_material_purchase_price,
     p_line_unit_price,
     p_factor_to_base,
     p_quantity_base,
@@ -618,10 +638,40 @@ begin
     p_cost_center_id,
     p_expiry_date,
     p_serial_number,
-    p_as_of
+    p_as_of_date
   );
 end;
 $$;
+
+grant execute on function public.calc_outbound_line_total_cost(
+  varchar,
+  public.company_inventory_settings,
+  numeric,
+  numeric,
+  numeric,
+  numeric,
+  uuid,
+  uuid,
+  uuid,
+  date,
+  text,
+  date
+) to authenticated;
+
+grant execute on function public.calc_outbound_line_total_cost_normal(
+  varchar,
+  public.company_inventory_settings,
+  numeric,
+  numeric,
+  numeric,
+  numeric,
+  uuid,
+  uuid,
+  uuid,
+  date,
+  text,
+  date
+) to authenticated;
 
 -- تحديث إنشاء المادة ليشمل material_kind
 create or replace function public.create_material_with_base_unit(
