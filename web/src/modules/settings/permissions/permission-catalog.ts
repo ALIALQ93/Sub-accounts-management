@@ -118,6 +118,15 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
+    id: "pos",
+    label: "نقاط البيع",
+    permissions: [
+      { key: "pos.view", label: "عرض نقاط البيع" },
+      { key: "pos.sell", label: "البيع من نقطة البيع" },
+      { key: "pos.settings", label: "تعريف وتخصيص نقاط البيع" },
+    ],
+  },
+  {
     id: "settings",
     label: "الإعدادات والإدارة",
     permissions: [
@@ -178,6 +187,9 @@ export const ROLE_PERMISSION_DEFAULTS: Record<AppRole, PermissionKey[]> = {
     "materials.create",
     "materials.edit",
     "materials.settings",
+    "pos.view",
+    "pos.sell",
+    "pos.settings",
     "settings.company.view",
   ],
   viewer: [
@@ -193,6 +205,7 @@ export const ROLE_PERMISSION_DEFAULTS: Record<AppRole, PermissionKey[]> = {
     "open_movements.view",
     "invoices.view",
     "materials.view",
+    "pos.view",
     "settings.company.view",
   ],
 };

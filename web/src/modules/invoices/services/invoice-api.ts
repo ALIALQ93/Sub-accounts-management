@@ -77,6 +77,7 @@ export interface InvoiceSavePayload {
   description: string | null;
   inventory_transfer_id?: string | null;
   transfer_role?: "out" | "in" | null;
+  pos_point_id?: string | null;
   materialLines: InvoiceMaterialLineInput[];
   accountLines: InvoiceAccountLineInput[];
 }
@@ -124,7 +125,7 @@ function mapListRow(row: InvoiceListRow): InvoiceListItem {
 }
 
 function buildHeaderPayload(payload: InvoiceSavePayload) {
-  return {
+  const header: Record<string, unknown> = {
     pattern_id: payload.pattern_id,
     invoice_date: payload.invoice_date,
     branch_id: payload.branch_id,
@@ -149,6 +150,10 @@ function buildHeaderPayload(payload: InvoiceSavePayload) {
     inventory_transfer_id: payload.inventory_transfer_id ?? null,
     transfer_role: payload.transfer_role ?? null,
   };
+  if (payload.pos_point_id !== undefined) {
+    header.pos_point_id = payload.pos_point_id || null;
+  }
+  return header;
 }
 
 export const invoiceApi = {

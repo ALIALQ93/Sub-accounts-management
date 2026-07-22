@@ -73,6 +73,16 @@ export const APP_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    id: "pos",
+    label: "نقاط البيع",
+    href: "/pos",
+    permission: "pos.view",
+    children: [
+      { href: "/pos", label: "اختيار نقطة" },
+      { href: "/pos/points", label: "تعريف النقاط", permission: "pos.settings" },
+    ],
+  },
+  {
     id: "accounts",
     label: "دليل الحسابات",
     href: "/accounts",
