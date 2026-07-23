@@ -6,6 +6,7 @@ import { PermissionGate } from "@/components/permission-gate";
 import { useNotifications } from "@/components/notifications";
 import { useAuth } from "@/modules/auth/auth-context";
 import { InvoicesNav } from "@/modules/invoices/components/invoices-nav";
+import { StuckTransfersAlert } from "@/modules/invoices/components/stuck-transfers-alert";
 import { TransfersListTable } from "@/modules/invoices/components/transfers-list-table";
 import { invoicePatternApi } from "@/modules/invoices/services/invoice-pattern-api";
 import { transferApi } from "@/modules/invoices/services/transfer-api";
@@ -76,6 +77,8 @@ export default function TransfersPage() {
           </Link>
         </PermissionGate>
       </section>
+
+      <StuckTransfersAlert />
 
       <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4">
         {isLoading ? (

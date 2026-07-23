@@ -187,10 +187,13 @@ begin
 end;
 $$;
 
+-- يجب أن يسبق enforce_stock أبجدياً حتى تُنسخ صلاحية/تسلسلي قبل فحص الدفعة
 drop trigger if exists trg_inventory_movements_fill_tracking
   on public.inventory_movements;
+drop trigger if exists trg_inventory_movements_05_fill_tracking
+  on public.inventory_movements;
 
-create trigger trg_inventory_movements_fill_tracking
+create trigger trg_inventory_movements_05_fill_tracking
   before insert on public.inventory_movements
   for each row
   execute function public.inventory_movements_fill_tracking();

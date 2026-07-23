@@ -8,6 +8,7 @@ import { MaterialSearchField } from "@/modules/materials/components/material-sea
 import { UnitFormModal } from "@/modules/materials/components/unit-form-modal";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { unitApi } from "@/modules/materials/services/unit-api";
+import { computeFactorToBase } from "@/modules/materials/utils/unit-conversion";
 import type {
   MaterialBomFormValues,
   MaterialCategory,
@@ -116,16 +117,6 @@ function TabButton({
       {children}
     </button>
   );
-}
-
-function computeFactorToBase(
-  isBase: boolean,
-  op: "multiply" | "divide",
-  factor: number,
-): number {
-  if (isBase) return 1;
-  if (factor <= 0) return 1;
-  return op === "divide" ? 1 / factor : factor;
 }
 
 export function MaterialForm({

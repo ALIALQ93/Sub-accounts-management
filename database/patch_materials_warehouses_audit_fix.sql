@@ -1,84 +1,14 @@
 -- =============================================================================
--- patch_outbound_lot_stock.sql (#37)
+-- patch_materials_warehouses_audit_fix.sql (#44)
 -- =============================================================================
--- المرحلة 2+3: رصيد per دفعة (تاريخ صلاحية / رقم تسلسلي) لفواتير الإخراج.
+-- من تدقيق 2026-07-22 (مواد/مستودعات):
+-- 1) قفل تزامن advisory عند فحص الرصيد (منع بيع زائد متزامن).
+-- 2) ترتيب تريغر: نسخ التتبع قبل enforce_stock حتى يعمل فحص الدفعة.
+-- 3) منع تعديل أسطر فاتورة مرحّلة حتى للمدير (تصحيح يتطلب مرتجعاً رسمياً).
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- رصيد دفعة: مادة + مستودع + صلاحية + تسلسلي
--- ---------------------------------------------------------------------------
-
-create or replace function public.get_inventory_lot_balance(
-  p_material_id uuid,
-  p_warehouse_id uuid,
-  p_expiry_date date,
-  p_serial_number text,
-  p_as_of_date date default current_date
-)
-returns numeric
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce(sum(im.quantity_base_delta), 0)::numeric(18, 6)
-  from public.inventory_movements im
-  where im.material_id = p_material_id
-    and im.warehouse_id = p_warehouse_id
-    and im.movement_date <= coalesce(p_as_of_date, current_date)
-    and im.expiry_date is not distinct from p_expiry_date
-    and nullif(trim(coalesce(im.serial_number, '')), '')
-      is not distinct from nullif(trim(coalesce(p_serial_number, '')), '');
-$$;
-
-comment on function public.get_inventory_lot_balance is
-  'رصيد دفعة مخزون per مادة/مستودع/صلاحية/تسلسلي';
-
-grant execute on function public.get_inventory_lot_balance(uuid, uuid, date, text, date)
-  to authenticated;
-
--- ---------------------------------------------------------------------------
--- قائمة الدفعات المتاحة (رصيد > 0)
--- ---------------------------------------------------------------------------
-
-drop function if exists public.list_inventory_lot_balances(uuid, uuid, date);
-
-create or replace function public.list_inventory_lot_balances(
-  p_material_id uuid,
-  p_warehouse_id uuid,
-  p_as_of_date date default current_date
-)
-returns table (
-  expiry_date date,
-  serial_number varchar,
-  quantity_base numeric
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select
-    im.expiry_date,
-    nullif(trim(im.serial_number), '')::varchar as serial_number,
-    sum(im.quantity_base_delta)::numeric(18, 6) as quantity_base
-  from public.inventory_movements im
-  where im.material_id = p_material_id
-    and im.warehouse_id = p_warehouse_id
-    and im.movement_date <= coalesce(p_as_of_date, current_date)
-  group by im.expiry_date, nullif(trim(im.serial_number), '')
-  having sum(im.quantity_base_delta) > 0.000001
-  order by im.expiry_date nulls last, nullif(trim(im.serial_number), '');
-$$;
-
-comment on function public.list_inventory_lot_balances is
-  'دفعات مخزون متاحة per مادة/مستودع';
-
-grant execute on function public.list_inventory_lot_balances(uuid, uuid, date)
-  to authenticated;
-
--- ---------------------------------------------------------------------------
--- محفز الإخراج — رصيد إجمالي + دفعة صلاحية/تسلسلي
+-- 1) محفز الإخراج — قفل + رصيد عام + دفعة
 -- ---------------------------------------------------------------------------
 
 create or replace function public.inventory_movements_enforce_stock()
@@ -175,3 +105,54 @@ $$;
 
 comment on function public.inventory_movements_enforce_stock() is
   'يمنع الإخراج الزائد مع قفل advisory على (مادة، مستودع)؛ يفحص رصيد الدفعة عند توفر صلاحية/تسلسلي.';
+
+-- ---------------------------------------------------------------------------
+-- 2) نسخ التتبع قبل فحص الرصيد (أبجدياً: 05_ قبل enforce)
+-- ---------------------------------------------------------------------------
+
+drop trigger if exists trg_inventory_movements_fill_tracking
+  on public.inventory_movements;
+drop trigger if exists trg_inventory_movements_05_fill_tracking
+  on public.inventory_movements;
+
+create trigger trg_inventory_movements_05_fill_tracking
+  before insert on public.inventory_movements
+  for each row
+  execute function public.inventory_movements_fill_tracking();
+
+-- ---------------------------------------------------------------------------
+-- 3) فاتورة مرحّلة: لا تعديل للأسطر حتى للمدير
+--    (رأس الفاتورة يبقى كما هو — مثلاً close_invoice_reference)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.invoice_lines_prevent_change_when_posted()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_status varchar(20);
+begin
+  select i.status into v_status
+  from public.invoices i
+  where i.id = coalesce(new.invoice_id, old.invoice_id);
+
+  if v_status = 'posted' then
+    raise exception 'Cannot modify lines of a posted invoice. Use a return/correction document.';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_invoice_material_lines_posted_guard on public.invoice_material_lines;
+create trigger trg_invoice_material_lines_posted_guard
+before insert or update or delete on public.invoice_material_lines
+for each row execute function public.invoice_lines_prevent_change_when_posted();
+
+drop trigger if exists trg_invoice_account_lines_posted_guard on public.invoice_account_lines;
+create trigger trg_invoice_account_lines_posted_guard
+before insert or update or delete on public.invoice_account_lines
+for each row execute function public.invoice_lines_prevent_change_when_posted();

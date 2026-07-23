@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
+import { StuckTransfersAlert } from "@/modules/invoices/components/stuck-transfers-alert";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { DashboardStats } from "@/modules/vouchers/types";
 
@@ -166,6 +167,7 @@ export default function Home() {
       )}
 
       <InventoryShortageAlert />
+      <StuckTransfersAlert />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard

@@ -16,9 +16,8 @@ const INVENTORY_METHOD_LABELS = {
 
 const COSTING_METHOD_LABELS = {
   weighted_avg: "متوسط مرجح",
-  // fifo: غير منفَّذ في محرك الترحيل بعد — لا يُعرض حتى يُنفَّذ فعلياً
+  // fifo / last_purchase: غير منفَّذين في محرك الترحيل — لا يُعرضان حتى يُنفَّذا
   standard: "تكلفة معيارية",
-  last_purchase: "آخر شراء",
 } as const;
 
 function toFormValues(settings: CompanyInventorySettings): InventorySettingsFormValues {
@@ -168,16 +167,24 @@ export default function InventorySettingsPage() {
                     FIFO — غير متاح حالياً (محفوظ سابقاً)
                   </option>
                 )}
+                {values.costing_method === "last_purchase" && (
+                  <option value="last_purchase" disabled>
+                    آخر شراء — غير متاح حالياً (محفوظ سابقاً)
+                  </option>
+                )}
                 {Object.entries(COSTING_METHOD_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
               </select>
-              {settings?.costing_method === "fifo" && (
+              {(settings?.costing_method === "fifo" ||
+                settings?.costing_method === "last_purchase") && (
                 <span className="text-xs text-amber-700">
-                  القيمة الحالية «FIFO» محفوظة لكن المحرك يطبّق متوسطاً مرجّحاً حتى
-                  يُنفَّذ FIFO لاحقاً — لا تختر FIFO من جديد.
+                  القيمة الحالية «
+                  {settings.costing_method === "fifo" ? "FIFO" : "آخر شراء"}»
+                  محفوظة لكن المحرك يطبّق متوسطاً مرجّحاً (أو سعر النمط) حتى
+                  يُنفَّذ الخيار لاحقاً — لا تختره من جديد.
                 </span>
               )}
               <span className="text-xs text-slate-500">

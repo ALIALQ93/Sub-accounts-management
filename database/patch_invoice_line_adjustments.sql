@@ -1002,8 +1002,8 @@ begin
   from public.invoices i
   where i.id = coalesce(new.invoice_id, old.invoice_id);
 
-  if v_status = 'posted' and not public.is_admin() then
-    raise exception 'Cannot modify lines of a posted invoice.';
+  if v_status = 'posted' then
+    raise exception 'Cannot modify lines of a posted invoice. Use a return/correction document.';
   end if;
 
   if tg_op = 'DELETE' then

@@ -131,7 +131,8 @@ export default function MaterialsPage() {
             materials.some((material) => material.has_base_unit === false) && (
               <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
                 توجد مواد بدون وحدة أساس — أكمل بطاقة المادة قبل استخدامها في
-                الفواتير. المواد المتأثرة مُعلَّمة في القائمة.
+                الفواتير (قاعدة البيانات ترفض إضافة سطر فاتورة لمادة بلا وحدة
+                أساس). المواد المتأثرة مُعلَّمة في القائمة.
               </div>
             )}
           {!isLoading && !error && materials.length === 0 && (

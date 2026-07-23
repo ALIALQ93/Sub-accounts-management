@@ -71,6 +71,8 @@ function mapMaterial(row: Material & { min_stock?: number | null }): Material {
 }
 
 function mapMaterialUnit(row: MaterialUnit): MaterialUnit {
+  // معاينة فقط — المرجع عند الحفظ: material_units_sync_conversion (SQL)
+  // والصيغة المشتركة: utils/unit-conversion.ts → computeFactorToBase
   const conversionOp = row.conversion_op === "divide" ? "divide" : "multiply";
   const conversionFactor = Number(
     row.conversion_factor ?? (row.is_base_unit ? 1 : row.factor_to_base),
@@ -686,5 +688,21 @@ export const materialApi = {
     const match = last?.match(/(\d+)$/);
     const next = (match ? Number(match[1]) : 0) + 1;
     return `${prefix}-${String(next).padStart(4, "0")}`;
+  },
+
+  /** مواد بلا وحدة أساس — RPC صيانة (تدقيق #9) */
+  async listMaterialIdsMissingBaseUnit(): Promise<string[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "list_material_ids_missing_base_unit",
+    );
+    if (error) {
+      if (isMissingTable(error) || error.code === "PGRST202") return [];
+      throwIfSupabaseError(error);
+      return [];
+    }
+    return ((data ?? []) as { material_id: string }[]).map(
+      (row) => row.material_id,
+    );
   },
 };

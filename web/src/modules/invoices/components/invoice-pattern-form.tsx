@@ -846,31 +846,36 @@ export function InvoicePatternForm({
       </Section>
 
       <Section title="الحجز">
+        <p className="text-xs text-amber-800 md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+          الحجز غير فعّال حالياً على الرصيد المتاح: يُكتب في الجدول عند حفظ المسودة
+          لكن لا يُطرح من الكمية القابلة للبيع، ولا يوجد مسار إلغاء فاتورة يحرّر
+          الحجز. الخيارات معطّلة حتى يُنفَّذ التأثير الفعلي.
+        </p>
         <div className="flex flex-wrap items-center gap-4 md:col-span-2">
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
             <input
               type="checkbox"
-              disabled={formDisabled}
+              disabled
               checked={values.reservation_enabled}
-              onChange={(e) => update({ reservation_enabled: e.target.checked })}
+              readOnly
             />
             تفعيل حجز الكميات قبل التسليم
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
             <input
               type="checkbox"
-              disabled={formDisabled || !values.reservation_enabled}
+              disabled
               checked={values.reserve_on_save}
-              onChange={(e) => update({ reserve_on_save: e.target.checked })}
+              readOnly
             />
             حجز عند حفظ المسودة
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
             <input
               type="checkbox"
-              disabled={formDisabled || !values.reservation_enabled}
+              disabled
               checked={values.release_on_cancel}
-              onChange={(e) => update({ release_on_cancel: e.target.checked })}
+              readOnly
             />
             تحرير الحجز عند الإلغاء
           </label>
@@ -879,19 +884,12 @@ export function InvoicePatternForm({
           <input
             type="number"
             min={1}
-            disabled={formDisabled || !values.reservation_enabled}
+            disabled
             className={inputClass}
             value={values.reservation_days ?? ""}
-            onChange={(e) =>
-              update({
-                reservation_days: e.target.value ? Number(e.target.value) : null,
-              })
-            }
+            readOnly
           />
         </Field>
-        <p className="text-xs text-slate-500 md:col-span-2">
-          يُزامَن الحجز تلقائياً عند حفظ مسودة الفاتورة (يتطلب patch #10).
-        </p>
       </Section>
 
       <Section title="التدوير (تقريب العملة)">

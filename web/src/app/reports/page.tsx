@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
+import { StuckTransfersAlert } from "@/modules/invoices/components/stuck-transfers-alert";
 
 type ReportStatus = "available" | "soon";
 
@@ -144,6 +145,7 @@ export default function ReportsHubPage() {
       <ReportsNav active="hub" />
 
       <InventoryShortageAlert />
+      <StuckTransfersAlert />
 
       <section className="rounded-xl border border-[var(--info)]/25 bg-[var(--info)]/8 p-4 text-sm text-[var(--info)]">
         <p className="font-semibold">مقارنة في تبويبين</p>

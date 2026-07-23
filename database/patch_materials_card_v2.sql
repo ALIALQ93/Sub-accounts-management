@@ -107,6 +107,7 @@ comment on column public.material_units.conversion_factor is
   'معامل الضرب أو القسمة الذي يحدده المستخدم (الوحدة الأساس: 1 ×)';
 
 -- مزامنة factor_to_base من الضرب/القسمة + تعبئة unit_id عند الإمكان
+-- يجب أن تطابق معاينة الواجهة: web/.../utils/unit-conversion.ts (computeFactorToBase)
 create or replace function public.material_units_sync_conversion()
 returns trigger
 language plpgsql
