@@ -521,6 +521,8 @@ create policy "invoice_patterns_select" on public.invoice_patterns
     or public.has_permission('invoices.settings')
     or public.has_permission('invoices.create')
     or public.has_permission('invoices.edit')
+    or public.has_permission('pos.view')
+    or public.has_permission('pos.sell')
   );
 
 create policy "invoice_patterns_insert" on public.invoice_patterns

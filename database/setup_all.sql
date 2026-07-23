@@ -342,6 +342,7 @@ create table public.company_settings (
     check (fiscal_year_start_month between 1 and 12),
   base_currency_id uuid null references public.currencies(id) on delete set null,
   logo_url text null,
+  is_setup_complete boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
@@ -15653,6 +15654,8 @@ create policy "invoice_patterns_select" on public.invoice_patterns
     or public.has_permission('invoices.settings')
     or public.has_permission('invoices.create')
     or public.has_permission('invoices.edit')
+    or public.has_permission('pos.view')
+    or public.has_permission('pos.sell')
   );
 
 create policy "invoice_patterns_insert" on public.invoice_patterns
@@ -15671,6 +15674,47 @@ create policy "invoice_patterns_update" on public.invoice_patterns
     public.is_admin()
     or public.has_permission('invoices.settings')
   );
+
+-- =============================================================================
+-- BEGIN hotfix_pos_invoice_patterns_rls.sql
+-- =============================================================================
+-- =============================================================================
+-- hotfix_pos_invoice_patterns_rls.sql
+-- =============================================================================
+-- يسمح لصلاحيات نقاط البيع بقراءة أنماط الفواتير (كان يسبب 406 على .single).
+-- شغّل على القاعدة الحالية دون إعادة setup_all.
+-- =============================================================================
+
+drop policy if exists "invoice_patterns_select" on public.invoice_patterns;
+
+create policy "invoice_patterns_select" on public.invoice_patterns
+  for select to authenticated
+  using (
+    public.is_admin()
+    or public.has_permission('invoices.view')
+    or public.has_permission('invoices.settings')
+    or public.has_permission('invoices.create')
+    or public.has_permission('invoices.edit')
+    or public.has_permission('pos.view')
+    or public.has_permission('pos.sell')
+  );
+
+-- =============================================================================
+-- BEGIN patch_setup_complete.sql
+-- =============================================================================
+-- إعداد أولي: علامة اكتمال ويزارد التثبيت (تشغيل على قاعدة موجودة أو ضمن setup_all)
+alter table public.company_settings
+  add column if not exists is_setup_complete boolean not null default false;
+
+comment on column public.company_settings.is_setup_complete is
+  'false = يجب إكمال /setup؛ true = اكتمل الإعداد الأولي';
+
+-- قواعد موجودة فيها مستخدمون مسبقاً: لا تُجبر على الويزارد
+update public.company_settings cs
+set is_setup_complete = true
+where cs.id = 1
+  and cs.is_setup_complete = false
+  and exists (select 1 from public.profiles limit 1);
 
 -- =============================================================================
 -- 06_storage.sql — Supabase Storage (شعار الشركة + مرفقات السندات مستقبلاً)

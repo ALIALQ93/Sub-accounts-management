@@ -258,7 +258,7 @@ export const posApi = {
           `
           id, pos_point_id, account_id, label_ar, label_en,
           is_default, is_active, sort_order,
-          account:accounts!pos_point_payment_methods_account_id_fkey ( account_code, name_ar )
+          account:accounts!pos_point_payment_methods_account_id_fkey ( code, name_ar )
         `,
         )
         .eq("pos_point_id", id)
@@ -275,7 +275,6 @@ export const posApi = {
 
     let paymentRows = payments.data as Record<string, unknown>[] | null;
     if (payments.error) {
-      // بدون embed إن فشل التلميح
       const plainPay = await supabase
         .from("pos_point_payment_methods")
         .select(
@@ -285,8 +284,6 @@ export const posApi = {
         .order("sort_order", { ascending: true });
       throwIfSupabaseError(plainPay.error);
       paymentRows = (plainPay.data ?? []) as Record<string, unknown>[];
-    } else {
-      throwIfSupabaseError(payments.error);
     }
 
     throwIfSupabaseError(materials.error);
@@ -301,17 +298,17 @@ export const posApi = {
     ];
     const accountById = new Map<
       string,
-      { account_code?: string; name_ar?: string }
+      { code?: string; name_ar?: string }
     >();
     if (accountIds.length > 0) {
       const { data: accounts, error: accountsError } = await supabase
         .from("accounts")
-        .select("id, account_code, name_ar")
+        .select("id, code, name_ar")
         .in("id", accountIds);
       throwIfSupabaseError(accountsError);
       for (const account of (accounts ?? []) as {
         id: string;
-        account_code: string;
+        code: string;
         name_ar: string;
       }[]) {
         accountById.set(account.id, account);
@@ -321,13 +318,18 @@ export const posApi = {
     const payment_methods: PosPaymentMethod[] = (paymentRows ?? []).map(
       (row) => {
         const embedded = (row.account ?? row.accounts) as
-          | { account_code?: string; name_ar?: string }
-          | { account_code?: string; name_ar?: string }[]
+          | { code?: string; account_code?: string; name_ar?: string }
+          | { code?: string; account_code?: string; name_ar?: string }[]
           | null
           | undefined;
         const embeddedRow = Array.isArray(embedded) ? embedded[0] : embedded;
-        const account =
-          embeddedRow ?? accountById.get(String(row.account_id)) ?? undefined;
+        const fallback = accountById.get(String(row.account_id));
+        const account = embeddedRow ?? fallback;
+        const accountCode =
+          (account && "code" in account ? account.code : undefined) ??
+          (account && "account_code" in account
+            ? (account.account_code as string | undefined)
+            : undefined);
         return {
           id: String(row.id),
           pos_point_id: String(row.pos_point_id),
@@ -337,7 +339,7 @@ export const posApi = {
           is_default: Boolean(row.is_default),
           is_active: Boolean(row.is_active),
           sort_order: Number(row.sort_order ?? 0),
-          account_code: account?.account_code,
+          account_code: accountCode,
           account_name_ar: account?.name_ar,
         };
       },

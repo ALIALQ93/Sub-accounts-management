@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (pathname === "/login") return;
+    if (pathname === "/login" || pathname === "/setup") return;
     let cancelled = false;
     void settingsApi
       .getCompanySettings()
@@ -49,7 +49,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   useEffect(() => {
-    if (pathname === "/login" || isLoading || authDisabled) return;
+    if (pathname === "/login" || pathname === "/setup" || isLoading || authDisabled) {
+      return;
+    }
     if (!canAccessRoute(pathname)) {
       router.replace("/");
     }
@@ -63,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     [authDisabled, hasPermission],
   );
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/setup") {
     return <>{children}</>;
   }
 

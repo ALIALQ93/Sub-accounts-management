@@ -96,7 +96,9 @@ export function canAccessRoute(
   permissions: Set<PermissionKey>,
   pathname: string,
 ): boolean {
-  if (pathname === "/login") return true;
+  if (pathname === "/login" || pathname === "/setup" || pathname.startsWith("/setup/")) {
+    return true;
+  }
   const required = getRoutePermission(pathname);
   return permissions.has(required);
 }

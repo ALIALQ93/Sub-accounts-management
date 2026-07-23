@@ -59,7 +59,8 @@ export default function LoginPage() {
           </Suspense>
 
           <p className="mt-5 text-center text-xs text-slate-500">
-            أول مستخدم يُسجَّل في النظام يصبح مديراً تلقائياً.
+            أول مستخدم يُسجَّل في النظام يصبح مديراً تلقائياً، ثم يُكمل معالج{" "}
+            <span className="font-medium">/setup</span>.
           </p>
 
           <div className="mt-6 border-t border-slate-100 pt-4">

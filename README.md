@@ -4,6 +4,8 @@
 
 **مخطط النظام والتقدم:** [`docs/README.md`](docs/README.md) · [`docs/PROGRESS.md`](docs/PROGRESS.md) — أهداف الأقسام، المزايا، العلاقات، وأين وصلنا.
 
+**نشر عميل جديد (عزل مشروع لكل عميل):** [`docs/deploy-new-client.md`](docs/deploy-new-client.md)
+
 Core accounting bootstrap files:
 
 - `database/`: SQL setup for Supabase — see `database/README.md`

@@ -50,6 +50,7 @@ $patchFiles = @(
     'patch_materials_warehouses_audit_fix.sql',
     'patch_invoice_material_require_base_unit.sql',
     'patch_invoices_audit_fix.sql',
+    'hotfix_pos_invoice_patterns_rls.sql',
     'patch_setup_complete.sql'
 )
 

@@ -247,8 +247,11 @@ export const invoicePatternApi = {
       .from("invoice_patterns")
       .select("*")
       .eq("id", id)
-      .single();
+      .maybeSingle();
     throwIfSupabaseError(error);
+    if (!data) {
+      throw new Error("نمط الفاتورة غير موجود أو لا تملك صلاحية عرضه.");
+    }
     return data as InvoicePattern;
   },
 

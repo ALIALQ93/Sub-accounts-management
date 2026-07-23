@@ -22,6 +22,7 @@ export interface CompanySettings {
   fiscal_year_start_month: number;
   base_currency_id: string | null;
   logo_url: string | null;
+  is_setup_complete?: boolean;
   updated_at?: string;
 }
 

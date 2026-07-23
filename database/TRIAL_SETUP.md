@@ -101,10 +101,12 @@ select count(*) as root_accounts from public.accounts where parent_id is null;
 2. متغيرات البيئة في `web/.env.local`:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-3. `/login` — أول مستخدم = **مدير**
-4. `/vouchers/settings` — حسابات القبض/الصرف/التصفية الافتراضية
-5. `/customers` و `/vendors` — حساب أب الذمم
-6. `/settings/company` — بيانات الشركة والشعار
+3. أنشئ أول مستخدم من لوحة Auth → يصبح **مدير**
+4. `/login` ثم معالج **`/setup`** (إلزامي حتى `is_setup_complete`)
+5. `/vouchers/settings` — حسابات القبض/الصرف/التصفية الافتراضية
+6. `/customers` و `/vendors` — حساب أب الذمم
+
+لنشر عميل منفصل: [`docs/deploy-new-client.md`](../docs/deploy-new-client.md).
 
 ---
 
@@ -122,5 +124,6 @@ select count(*) as root_accounts from public.accounts where parent_id is null;
 ## 6) مراجع
 
 - `database/README.md` — توثيق المخطط الكامل
+- `docs/deploy-new-client.md` — نشر عميل جديد + نسخ احتياطي + ترقيات
 - `RELEASE_CHECKLIST.md` — قائمة تحقق ما قبل التجربة
 - `CHANGELOG.md` — سجل إصدارات التطبيق

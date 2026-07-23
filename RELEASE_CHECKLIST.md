@@ -37,6 +37,7 @@
 
 - [ ] Email/Password مفعّل في Supabase Auth
 - [ ] تسجيل أول مستخدم → يصبح admin
+- [ ] إكمال معالج `/setup` (أو تشغيل `patch_setup_complete.sql` على قاعدة قديمة فيها مستخدمون مسبقاً)
 - [ ] إنشاء مستخدمي تجربة وصلاحياتهم من `/settings/permissions`
 
 ## 4) اختبار الوظائف (يدوي)

@@ -25,6 +25,7 @@ const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   fiscal_year_start_month: 1,
   base_currency_id: null,
   logo_url: null,
+  is_setup_complete: false,
 };
 
 export const settingsApi = {
