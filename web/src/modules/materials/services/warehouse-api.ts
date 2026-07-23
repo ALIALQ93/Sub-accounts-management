@@ -31,7 +31,7 @@ export const warehouseApi = {
         name_en,
         branch_id,
         is_active,
-        branches ( branch_code, name_ar )
+        branches!branch_id ( branch_code, name_ar )
       `,
       )
       .order("warehouse_code", { ascending: true });

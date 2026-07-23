@@ -45,7 +45,7 @@ export const invoiceInventoryApi = {
         unit_cost,
         total_cost,
         materials ( material_code, name_ar ),
-        warehouses ( warehouse_code, branches ( branch_code ) )
+        warehouses ( warehouse_code, branches!branch_id ( branch_code ) )
       `,
       )
       .eq("source_type", "invoice")
