@@ -17,10 +17,25 @@
 database/setup_all.sql
 ```
 
-ملف واحد يشغّل بالترتيب: **حذف → مخطط → RLS → ترقيعات (#27+) → Storage**.
+ملف واحد يشغّل بالترتيب: **حذف → مخطط → RLS → ترقيعات → Storage**.
 
-> `setup_all.sql` يجمع: `00_reset.sql` + `01_schema.sql` + `02_rls.sql` + **15 ترقيعاً** + `06_storage.sql`.  
+> `setup_all.sql` يجمع: `00_reset.sql` + `01_schema.sql` + `02_rls.sql` + الترقيعات + `06_storage.sql`.  
 > بعد تعديل أي ملف مصدر، أعد التوليد: `powershell -File database/build_setup_all.ps1`
+
+### عرض مطعم جاهز للعملاء
+
+| الملف | الوظيفة |
+|--------|---------|
+| `demo_restaurant.sql` | بيانات عرض لمطعم (بعد `setup_all`) |
+| `setup_demo_restaurant.sql` | **ملف واحد** = `setup_all` + بيانات المطعم (مثل `setup_all` للعرض) |
+
+توليد الملف الموحّد:
+
+```powershell
+powershell -File database/build_setup_demo_restaurant.ps1
+```
+
+ثم في Supabase SQL Editor الصق `setup_demo_restaurant.sql` — أو شغّل `setup_all.sql` ثم `demo_restaurant.sql`.
 
 ## الطريقة المرحلية
 

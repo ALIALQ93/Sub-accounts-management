@@ -187,6 +187,7 @@ create table public.company_settings (
     check (fiscal_year_start_month between 1 and 12),
   base_currency_id uuid null references public.currencies(id) on delete set null,
   logo_url text null,
+  is_setup_complete boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
