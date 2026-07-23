@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "C:\\Users\\asus\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "C:\\Users\\asus\\OneDrive\\Alalbab\\Sub-accounts management\\Sub-accounts-management",
+      "type": "stdio"
+    }
+  }
+}

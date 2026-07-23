@@ -101,6 +101,8 @@ export const PERMISSION_MODULES: PermissionModule[] = [
       { key: "invoices.view", label: "عرض الفواتير" },
       { key: "invoices.create", label: "إنشاء فاتورة" },
       { key: "invoices.edit", label: "تعديل فاتورة (مسودة)" },
+      { key: "invoices.post", label: "ترحيل فاتورة" },
+      { key: "invoices.cancel", label: "إلغاء فاتورة مسودة" },
       {
         key: "invoices.settings",
         label: "إعدادات أنماط الفواتير",
@@ -183,6 +185,8 @@ export const ROLE_PERMISSION_DEFAULTS: Record<AppRole, PermissionKey[]> = {
     "invoices.view",
     "invoices.create",
     "invoices.edit",
+    "invoices.post",
+    "invoices.cancel",
     "materials.view",
     "materials.create",
     "materials.edit",

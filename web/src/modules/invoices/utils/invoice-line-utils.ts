@@ -11,6 +11,14 @@ export function computeLineAmountPreview(quantity: number, unitPrice: number): n
   return Math.round(quantity * unitPrice * 100) / 100;
 }
 
+/**
+ * صافي السطر للمعاينة — يطابق تقريباً
+ * `invoice_material_lines_apply_quantities` في SQL:
+ *   discount = round(gross × pct / 100, 2) إن وُجدت نسبة، وإلا المبلغ
+ *   extra    = round(gross × pct / 100, 2) إن وُجدت نسبة، وإلا المبلغ
+ *   line_amount = round(gross - discount + extra, 2)
+ * المرجع النهائي عند الحفظ هو التريغر SQL.
+ */
 export function computeLineNetAmount(
   quantity: number,
   unitPrice: number,

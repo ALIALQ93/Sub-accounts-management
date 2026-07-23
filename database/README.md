@@ -144,6 +144,7 @@ database/setup_all.sql
 | `patch_create_material_with_base_unit.sql` | إنشاء مادة + وحدة أساس ذرّياً | **#42 — مواد** |
 | `patch_materials_warehouses_audit_fix.sql` | قفل رصيد متزامن + ترتيب تريغر الدفعات + منع تعديل أسطر مرحّلة | **#44 — تدقيق مواد** |
 | `patch_invoice_material_require_base_unit.sql` | رفض سطر فاتورة لمادة بلا وحدة أساس | **#45 — مواد** |
+| `patch_invoices_audit_fix.sql` | حد خصم/مرتجع/صلاحية ترحيل/إلغاء مسودة/RLS فواتير | **#46 — تدقيق فواتير** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

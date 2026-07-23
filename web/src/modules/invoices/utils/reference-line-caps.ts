@@ -32,6 +32,19 @@ export function mergeReferenceLineCaps(
   return merged;
 }
 
+export function subtractReturnedFromCaps(
+  caps: Record<ReferenceLineCapKey, number>,
+  returned: Array<{ material_id: string; material_unit_id: string; quantity: number }>,
+): Record<ReferenceLineCapKey, number> {
+  const next = { ...caps };
+  for (const row of returned) {
+    const key = referenceLineCapKey(row.material_id, row.material_unit_id);
+    if (next[key] == null) continue;
+    next[key] = Math.max(0, next[key] - Number(row.quantity));
+  }
+  return next;
+}
+
 export function validateReferenceQuantities(
   materialLines: DraftMaterialLine[],
   caps: Record<ReferenceLineCapKey, number> | null | undefined,

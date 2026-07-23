@@ -1,5 +1,7 @@
 # تدقيق دقيق — قسم الفواتير (Invoices)
 
+> **حالة المعالجة (مستودع الكود، 2026-07-23):** #1 حد الخصم SQL ✓ · #2 سقف مرتجع تراكمي ✓ · #3 صلاحية داخل post_invoice ✓ · #4 cancel_draft_invoice ✓ · #5 RLS كتابة فواتير/أنماط ✓ · #6 منع تعديل رأس مرحّل ✓ · #8 إخفاء line_amount rounding ✓ · #9 حقل خصم مبلغ ✓ · #10 توثيق صيغة السطر ✓ · #11 حقول نمط ميتة معطّلة بالواجهة ✓ · #7 حجز الرقم / #12–14 معلّقة.
+
 منهجية: قراءة الكود الفعلي (SQL + TypeScript) وتتبّع ترتيب تطبيق الـpatches عبر `database/build_setup_all.ps1`. الملفات ذات الصلة بترتيب التنفيذ: `patch_invoices.sql`(#5) → `patch_invoice_seeds.sql`(#6) → `patch_invoice_reservation_discount.sql`(#7) → `patch_invoice_discount_rounding.sql`(#8) → `patch_settlement_foundation.sql`(#9) → `patch_post_invoice.sql`(#10) → `patch_invoice_multiple_references.sql`(#11) → `patch_invoice_reference_close.sql`(#12) → ... → `patch_invoice_line_adjustments.sql`(#33) → `patch_invoice_pattern_tracking.sql`(#35) → ... → `patch_invoice_pricing_cost.sql`(#39) → ... → `patch_invoice_material_require_base_unit.sql`(#47، الأخير). النسخة الفعّالة من `post_invoice()`, `invoices_before_update_guard()`, `invoice_material_lines_apply_quantities()` هي دائماً آخر ملف يعيد تعريفها — أهمها `patch_invoice_pricing_cost.sql` و`patch_invoice_line_adjustments.sql`.
 
 هذا التقرير مكمّل لتدقيقي `2026-07-22-materials-warehouses-audit.md` و`2026-07-22-accounts-vouchers-audit.md` اللذين غطّيا `post_invoice()` من زاوية المخزون والقيود؛ التركيز هنا على قسم الفواتير كنظام كامل: الأنماط، دورة الحياة، التسعير، المرتجعات، العملاء، الصلاحيات، والواجهة.

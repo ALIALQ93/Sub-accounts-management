@@ -34,6 +34,8 @@ export interface InvoiceValidationContext {
   paymentTermsDays: number | null;
   receiptNo: string;
   invoiceDiscountPercent: number | null;
+  invoiceDiscountAmount?: number | null;
+  materialSubtotal?: number | null;
   materialLines: DraftMaterialLine[];
   accountLines: DraftAccountLine[];
   materials?: MaterialOption[];
@@ -118,6 +120,21 @@ export function validateInvoice(context: InvoiceValidationContext): string | nul
       const pct = context.invoiceDiscountPercent ?? 0;
       if (pct > max) {
         return `خصم الفاتورة (${pct}%) يتجاوز الحد المسموح (${max}%).`;
+      }
+      const amount = context.invoiceDiscountAmount ?? 0;
+      if (amount > 0 && pct <= 0) {
+        const linesGross = lines.reduce(
+          (sum, line) => sum + line.quantity * line.unit_price,
+          0,
+        );
+        // تقريب: نقارن بالمجموع الصافي للأسطر إن وُجد — وإلا الإجمالي
+        const base =
+          context.materialSubtotal != null && context.materialSubtotal > 0
+            ? context.materialSubtotal
+            : linesGross;
+        if (base > 0 && (amount / base) * 100 > max + 0.01) {
+          return `مبلغ خصم الفاتورة يتجاوز الحد المسموح (${max}%).`;
+        }
       }
     }
   }

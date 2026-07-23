@@ -70,6 +70,7 @@ import {
 import {
   buildReferenceLineCaps,
   mergeReferenceLineCaps,
+  subtractReturnedFromCaps,
   validateReferenceQuantities,
 } from "@/modules/invoices/utils/reference-line-caps";
 import { validateReferenceMatch } from "@/modules/invoices/utils/validate-reference-match";
@@ -188,6 +189,10 @@ export function InvoiceForm({
   const { hasPermission } = useAuth();
   const { notifySuccess, notifyError } = useNotifications();
   const canEdit = hasPermission("invoices.edit");
+  const canPost =
+    hasPermission("invoices.post") || hasPermission("invoices.edit");
+  const canCancel =
+    hasPermission("invoices.cancel") || hasPermission("invoices.edit");
 
   const [pattern, setPattern] = useState<InvoicePattern | null>(null);
   const [patternConditions, setPatternConditions] =
@@ -232,6 +237,7 @@ export function InvoiceForm({
   const [invoiceDiscountPercent, setInvoiceDiscountPercent] = useState<number | null>(
     null,
   );
+  const [invoiceDiscountAmount, setInvoiceDiscountAmount] = useState(0);
   const [description, setDescription] = useState("");
   const [creditorAccountId, setCreditorAccountId] = useState("");
   const [debtorAccountId, setDebtorAccountId] = useState("");
@@ -374,11 +380,18 @@ export function InvoiceForm({
 
   const invoiceTotals = useMemo(() => {
     let subtotal = materialSubtotal;
-    if (showInvoiceDiscount && invoiceDiscountPercent && invoiceDiscountPercent > 0) {
-      subtotal = Math.max(
-        0,
-        Math.round(subtotal * (1 - invoiceDiscountPercent / 100) * 100) / 100,
-      );
+    if (showInvoiceDiscount) {
+      if (invoiceDiscountPercent && invoiceDiscountPercent > 0) {
+        subtotal = Math.max(
+          0,
+          Math.round(subtotal * (1 - invoiceDiscountPercent / 100) * 100) / 100,
+        );
+      } else if (invoiceDiscountAmount > 0) {
+        subtotal = Math.max(
+          0,
+          Math.round((subtotal - invoiceDiscountAmount) * 100) / 100,
+        );
+      }
     }
     const rounded = roundingSettings
       ? applyRounding(subtotal, roundingSettings, "invoice")
@@ -393,6 +406,7 @@ export function InvoiceForm({
     materialSubtotal,
     showInvoiceDiscount,
     invoiceDiscountPercent,
+    invoiceDiscountAmount,
     roundingSettings,
   ]);
 
@@ -563,6 +577,7 @@ export function InvoiceForm({
           setExchangeRate(header.exchange_rate);
           setReceiptNo(header.receipt_no ?? "");
           setInvoiceDiscountPercent(header.invoice_discount_percent ?? null);
+          setInvoiceDiscountAmount(Number(header.invoice_discount_amount ?? 0));
           setDescription(header.description ?? "");
           setCreditorAccountId(header.creditor_account_id ?? "");
           setDebtorAccountId(header.debtor_account_id ?? "");
@@ -802,12 +817,21 @@ export function InvoiceForm({
 
     let cancelled = false;
     void Promise.all(refIds.map((id) => invoiceApi.getInvoice(id)))
-      .then((details) => {
+      .then(async (details) => {
         if (cancelled) return;
-        const capGroups = details.map((detail) =>
-          buildReferenceLineCaps(detail.materialLines),
+        let caps = mergeReferenceLineCaps(
+          details.map((detail) => buildReferenceLineCaps(detail.materialLines)),
         );
-        setReferenceLineCaps(mergeReferenceLineCaps(capGroups));
+        const returnedGroups = await Promise.all(
+          refIds.map((id) =>
+            invoiceApi.listReferenceReturnedQuantities(id, savedId || undefined),
+          ),
+        );
+        for (const returned of returnedGroups) {
+          caps = subtractReturnedFromCaps(caps, returned);
+        }
+        if (cancelled) return;
+        setReferenceLineCaps(caps);
         const primaryDetail = referenceInvoiceId
           ? details.find((detail) => detail.header.id === referenceInvoiceId)
           : details[0];
@@ -823,7 +847,7 @@ export function InvoiceForm({
     return () => {
       cancelled = true;
     };
-  }, [showReference, referenceInvoiceId, additionalReferenceIds]);
+  }, [showReference, referenceInvoiceId, additionalReferenceIds, savedId]);
 
   const secondaryReferenceOptions = useMemo(() => {
     const used = new Set([referenceInvoiceId, ...additionalReferenceIds]);
@@ -996,6 +1020,8 @@ export function InvoiceForm({
         paymentTermsDays,
         receiptNo,
         invoiceDiscountPercent,
+        invoiceDiscountAmount,
+        materialSubtotal,
         materialLines,
         accountLines,
         materials,
@@ -1098,6 +1124,8 @@ export function InvoiceForm({
       paymentTermsDays,
       receiptNo,
       invoiceDiscountPercent,
+      invoiceDiscountAmount,
+      materialSubtotal,
       materialLines,
       accountLines,
       materials,
@@ -1159,6 +1187,11 @@ export function InvoiceForm({
         invoice_discount_percent: showInvoiceDiscount
           ? invoiceDiscountPercent
           : null,
+        invoice_discount_amount: showInvoiceDiscount
+          ? invoiceDiscountPercent && invoiceDiscountPercent > 0
+            ? 0
+            : invoiceDiscountAmount
+          : 0,
         description: description || null,
         inventory_transfer_id: inventoryTransferId || null,
         transfer_role: invoiceTransferRole || null,
@@ -1891,17 +1924,39 @@ export function InvoiceForm({
                   disabled={readOnly}
                   className={inputClass}
                   value={invoiceDiscountPercent ?? ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setInvoiceDiscountPercent(
                       e.target.value ? Number(e.target.value) : null,
+                    );
+                    if (e.target.value) setInvoiceDiscountAmount(0);
+                  }}
+                />
+              </label>
+            )}
+            {showInvoiceDiscount && (
+              <label className="flex max-w-xs flex-col gap-1">
+                <span className="font-medium">خصم الفاتورة (مبلغ)</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  disabled={
+                    readOnly ||
+                    (!!invoiceDiscountPercent && invoiceDiscountPercent > 0)
+                  }
+                  className={inputClass}
+                  value={invoiceDiscountAmount || ""}
+                  onChange={(e) =>
+                    setInvoiceDiscountAmount(
+                      e.target.value ? Number(e.target.value) : 0,
                     )
                   }
                 />
               </label>
             )}
             {showInvoiceDiscount &&
-              invoiceDiscountPercent != null &&
-              invoiceDiscountPercent > 0 && (
+              ((invoiceDiscountPercent != null && invoiceDiscountPercent > 0) ||
+                invoiceDiscountAmount > 0) && (
                 <p>
                   بعد خصم الفاتورة:{" "}
                   <span className="font-mono font-semibold">
@@ -1944,7 +1999,7 @@ export function InvoiceForm({
             >
               {isSaving ? "جاري الحفظ..." : "حفظ مسودة"}
             </button>
-            {pattern.generate_journal && (
+            {pattern.generate_journal && canPost && (
               <button
                 type="button"
                 disabled={isSaving}
@@ -1952,6 +2007,41 @@ export function InvoiceForm({
                 className="rounded-md border border-emerald-400 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 disabled:opacity-50"
               >
                 ترحيل
+              </button>
+            )}
+            {canCancel && savedId && (
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "إلغاء هذه المسودة؟ لن يمكن ترحيلها لاحقاً.",
+                    )
+                  ) {
+                    return;
+                  }
+                  void (async () => {
+                    setIsSaving(true);
+                    setError("");
+                    try {
+                      await invoiceApi.cancelDraftInvoice(savedId);
+                      setStatus("cancelled");
+                      notifySuccess("تم إلغاء المسودة.");
+                    } catch (err) {
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "فشل إلغاء الفاتورة.",
+                      );
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  })();
+                }}
+                className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800 disabled:opacity-50"
+              >
+                إلغاء المسودة
               </button>
             )}
           </>

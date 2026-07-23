@@ -360,14 +360,15 @@ export function InvoicePatternForm({
 
       {values.commercial_kind === "transfer_out" && (
         <Section title="ربط المناقلة">
-          <Field label="نمط الإدخال المقترن" className="md:col-span-2">
+          <p className="text-xs text-amber-800 md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+            حقل «نمط الإدخال المقترن» محفوظ في الإعدادات لكن غير مُستهلك حالياً في
+            منطق الشحن/الاستلام — المناقلة تعتمد على فاتورتين منفصلتين.
+          </p>
+          <Field label="نمط الإدخال المقترن (غير مفعّل)" className="md:col-span-2">
             <select
-              disabled={formDisabled}
+              disabled
               className={inputClass}
               value={values.paired_input_pattern_id ?? ""}
-              onChange={(e) =>
-                update({ paired_input_pattern_id: e.target.value || null })
-              }
             >
               <option value="">— بدون —</option>
               {inputPatterns
@@ -917,9 +918,21 @@ export function InvoicePatternForm({
             }
           >
             <option value="invoice_total">إجمالي الفاتورة</option>
-            <option value="line_amount">مبلغ السطر</option>
-            <option value="both">الاثنان معاً</option>
+            {values.rounding_target === "line_amount" && (
+              <option value="line_amount" disabled>
+                مبلغ السطر — غير منفَّذ
+              </option>
+            )}
+            <option value="both">إجمالي الفاتورة (both — الترحيل يطبّق الإجمالي)</option>
           </select>
+          {(values.rounding_target === "line_amount" ||
+            values.rounding_target === "both") && (
+            <p className="mt-1 text-xs text-amber-700">
+              {values.rounding_target === "line_amount"
+                ? "هدف «مبلغ السطر» غير منفَّذ — اختر إجمالي الفاتورة."
+                : "التدوير على الأسطر غير منفَّذ؛ الترحيل يطبّق تدوير الإجمالي فقط."}
+            </p>
+          )}
         </Field>
         <Field label="أسلوب التقريب">
           <select
@@ -1011,14 +1024,14 @@ export function InvoicePatternForm({
           />
         </Field>
         <div className="flex flex-wrap items-center gap-4 md:col-span-2">
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
             <input
               type="checkbox"
-              disabled={formDisabled}
+              disabled
               checked={values.generate_journal}
-              onChange={(e) => update({ generate_journal: e.target.checked })}
+              readOnly
             />
-            توليد قيد يومية
+            توليد قيد يومية (مفعّل دائماً عند الترحيل حالياً)
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -1038,32 +1051,32 @@ export function InvoicePatternForm({
             />
             حركة مخزون
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
             <input
               type="checkbox"
-              disabled={formDisabled}
+              disabled
               checked={values.cc_on_goods}
-              onChange={(e) => update({ cc_on_goods: e.target.checked })}
+              readOnly
             />
-            مركز كلفة على المواد
+            مركز كلفة على المواد (غير مُستهلك)
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
             <input
               type="checkbox"
-              disabled={formDisabled}
+              disabled
               checked={values.load_party_currency}
-              onChange={(e) => update({ load_party_currency: e.target.checked })}
+              readOnly
             />
-            تحميل عملة الطرف تلقائياً
+            تحميل عملة الطرف تلقائياً (غير مُستهلك)
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-500">
             <input
               type="checkbox"
-              disabled={formDisabled}
+              disabled
               checked={values.cc_on_party}
-              onChange={(e) => update({ cc_on_party: e.target.checked })}
+              readOnly
             />
-            مركز كلفة على الطرف
+            مركز كلفة على الطرف (غير مُستهلك)
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input

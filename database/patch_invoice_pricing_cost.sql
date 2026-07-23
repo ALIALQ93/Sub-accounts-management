@@ -376,6 +376,154 @@ create trigger trg_inventory_movements_apply_invoice_line_cost
   execute function public.inventory_movements_apply_invoice_line_cost();
 
 -- ---------------------------------------------------------------------------
+-- فحوص ما قبل الترحيل (صلاحية + خصم + مرتجع) — تُعاد في #46 أيضاً
+-- ---------------------------------------------------------------------------
+
+create or replace function public.assert_invoice_may_post(p_invoice_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inv public.invoices%rowtype;
+  v_pat public.invoice_patterns%rowtype;
+  v_gross numeric(18, 4);
+  v_disc numeric(18, 2);
+  v_max numeric(5, 2);
+  v_applies varchar(10);
+  v_line record;
+  v_ref_qty numeric(18, 6);
+  v_ret_qty numeric(18, 6);
+begin
+  if not (
+    public.has_permission('invoices.post')
+    or public.has_permission('invoices.edit')
+  ) then
+    raise exception 'Permission denied: invoices.post (or invoices.edit) required to post.';
+  end if;
+
+  select * into v_inv from public.invoices where id = p_invoice_id;
+  if not found then
+    raise exception 'Invoice not found.';
+  end if;
+
+  select * into v_pat from public.invoice_patterns where id = v_inv.pattern_id;
+
+  v_max := v_pat.max_discount_percent;
+  v_applies := coalesce(v_pat.discount_applies_to, 'line');
+
+  if v_pat.discount_enabled and v_max is not null then
+    if v_applies <> 'invoice' then
+      for v_line in
+        select *
+        from public.invoice_material_lines
+        where invoice_id = p_invoice_id
+      loop
+        v_gross := v_line.quantity * v_line.unit_price;
+        if coalesce(v_line.discount_percent, 0) > v_max then
+          raise exception
+            'Line % discount percent (%) exceeds pattern max (%).',
+            v_line.line_no, v_line.discount_percent, v_max;
+        end if;
+        v_disc := coalesce(v_line.discount_amount, 0);
+        if v_disc > 0 and v_gross > 0
+           and (v_disc / v_gross * 100) > (v_max + 0.01) then
+          raise exception
+            'Line % discount amount exceeds pattern max percent (%).',
+            v_line.line_no, v_max;
+        end if;
+      end loop;
+    end if;
+
+    if v_applies <> 'line' then
+      if coalesce(v_inv.invoice_discount_percent, 0) > v_max then
+        raise exception
+          'Invoice discount percent (%) exceeds pattern max (%).',
+          v_inv.invoice_discount_percent, v_max;
+      end if;
+      if coalesce(v_inv.invoice_discount_amount, 0) > 0
+         and coalesce(v_inv.invoice_discount_percent, 0) = 0 then
+        select coalesce(sum(iml.line_amount), 0) into v_gross
+        from public.invoice_material_lines iml
+        where iml.invoice_id = p_invoice_id;
+        if v_gross > 0
+           and (v_inv.invoice_discount_amount / v_gross * 100) > (v_max + 0.01) then
+          raise exception
+            'Invoice discount amount exceeds pattern max percent (%).',
+            v_max;
+        end if;
+      end if;
+    end if;
+  end if;
+
+  if v_pat.commercial_kind in ('return_sale', 'return_purchase') then
+    for v_line in
+      select *
+      from public.invoice_material_lines
+      where invoice_id = p_invoice_id
+    loop
+      select coalesce(sum(src.quantity), 0)
+      into v_ref_qty
+      from public.invoice_material_lines src
+      where src.material_id = v_line.material_id
+        and src.material_unit_id = v_line.material_unit_id
+        and src.invoice_id in (
+          select v_inv.reference_invoice_id
+          where v_inv.reference_invoice_id is not null
+          union
+          select irl.reference_invoice_id
+          from public.invoice_reference_links irl
+          where irl.invoice_id = p_invoice_id
+        );
+
+      select coalesce(sum(ret.quantity), 0)
+      into v_ret_qty
+      from public.invoice_material_lines ret
+      inner join public.invoices ri on ri.id = ret.invoice_id
+      inner join public.invoice_patterns rp on rp.id = ri.pattern_id
+      where ri.status = 'posted'
+        and ri.id is distinct from p_invoice_id
+        and rp.commercial_kind = v_pat.commercial_kind
+        and ret.material_id = v_line.material_id
+        and ret.material_unit_id = v_line.material_unit_id
+        and (
+          ri.reference_invoice_id in (
+            select v_inv.reference_invoice_id
+            where v_inv.reference_invoice_id is not null
+            union
+            select irl.reference_invoice_id
+            from public.invoice_reference_links irl
+            where irl.invoice_id = p_invoice_id
+          )
+          or exists (
+            select 1
+            from public.invoice_reference_links link
+            where link.invoice_id = ri.id
+              and link.reference_invoice_id in (
+                select v_inv.reference_invoice_id
+                where v_inv.reference_invoice_id is not null
+                union
+                select irl.reference_invoice_id
+                from public.invoice_reference_links irl
+                where irl.invoice_id = p_invoice_id
+              )
+          )
+        );
+
+      if v_line.quantity > (v_ref_qty - v_ret_qty) + 0.000001 then
+        raise exception
+          'Return qty for line % exceeds remaining reference qty (available %).',
+          v_line.line_no, greatest(v_ref_qty - v_ret_qty, 0);
+      end if;
+    end loop;
+  end if;
+end;
+$$;
+
+grant execute on function public.assert_invoice_may_post(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- post_invoice — قيود التكلفة من إعدادات النمط
 -- ---------------------------------------------------------------------------
 
@@ -434,6 +582,8 @@ begin
   if v_inv.status = 'cancelled' then
     raise exception 'Cannot post cancelled invoice.';
   end if;
+
+  perform public.assert_invoice_may_post(p_invoice_id);
 
   perform public.assert_accounting_period_open(v_inv.invoice_date, v_inv.branch_id);
 

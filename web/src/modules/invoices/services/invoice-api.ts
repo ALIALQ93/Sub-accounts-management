@@ -74,6 +74,7 @@ export interface InvoiceSavePayload {
   sales_rep_id: string | null;
   reference_invoice_id?: string | null;
   invoice_discount_percent?: number | null;
+  invoice_discount_amount?: number | null;
   description: string | null;
   inventory_transfer_id?: string | null;
   transfer_role?: "out" | "in" | null;
@@ -146,6 +147,7 @@ function buildHeaderPayload(payload: InvoiceSavePayload) {
     sales_rep_id: payload.sales_rep_id || null,
     reference_invoice_id: payload.reference_invoice_id || null,
     invoice_discount_percent: payload.invoice_discount_percent ?? null,
+    invoice_discount_amount: payload.invoice_discount_amount ?? 0,
     description: payload.description?.trim() || null,
     inventory_transfer_id: payload.inventory_transfer_id ?? null,
     transfer_role: payload.transfer_role ?? null,
@@ -400,6 +402,41 @@ export const invoiceApi = {
       throwIfSupabaseError(releaseError);
     }
     return journalId;
+  },
+
+  async cancelDraftInvoice(id: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.rpc("cancel_draft_invoice", {
+      p_invoice_id: id,
+    });
+    throwIfSupabaseError(error);
+  },
+
+  async listReferenceReturnedQuantities(
+    referenceInvoiceId: string,
+    excludeInvoiceId?: string,
+  ): Promise<
+    Array<{ material_id: string; material_unit_id: string; quantity: number }>
+  > {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc(
+      "list_reference_returned_quantities",
+      {
+        p_reference_invoice_id: referenceInvoiceId,
+        p_exclude_invoice_id: excludeInvoiceId ?? null,
+      },
+    );
+    if (error?.code === "PGRST202") return [];
+    throwIfSupabaseError(error);
+    return ((data ?? []) as Array<{
+      material_id: string;
+      material_unit_id: string;
+      quantity: number;
+    }>).map((row) => ({
+      material_id: row.material_id,
+      material_unit_id: row.material_unit_id,
+      quantity: Number(row.quantity),
+    }));
   },
 
   async isReceiptNoTaken(
