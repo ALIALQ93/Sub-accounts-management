@@ -32,8 +32,9 @@ const MATERIAL_SELECT_CORE =
   "id, material_code, name_ar, name_en, category_id, sale_price, purchase_price, inventory_account_id, is_active";
 
 const MATERIAL_SELECT_WITH_KIND = `${MATERIAL_SELECT_CORE}, material_kind`;
+const MATERIAL_SELECT_WITH_COMPOSITE = `${MATERIAL_SELECT_WITH_KIND}, composite_mode`;
 
-const MATERIAL_SELECT_WITH_MIN = `${MATERIAL_SELECT_WITH_KIND}, min_stock`;
+const MATERIAL_SELECT_WITH_MIN = `${MATERIAL_SELECT_WITH_COMPOSITE}, min_stock`;
 
 const MATERIAL_SELECT_EXTENDED = `${MATERIAL_SELECT_WITH_MIN}, max_stock, barcode, manufacturer, supplier_name, color, size, weight, notes`;
 
@@ -47,9 +48,16 @@ const UNIT_SELECT_WITH_CONVERSION = `${UNIT_SELECT_CORE}, unit_id, conversion_op
 const UNIT_SELECT_WITH_PRICES = `${UNIT_SELECT_WITH_CONVERSION}, purchase_price, sale_price, semi_wholesale_price, wholesale_price`;
 
 function mapMaterial(row: Material & { min_stock?: number | null }): Material {
+  const mode = row.composite_mode;
   return {
     ...row,
     material_kind: row.material_kind === "composite" ? "composite" : "normal",
+    composite_mode:
+      mode === "finished" || mode === "disassemblable" || mode === "kit"
+        ? mode
+        : row.material_kind === "composite"
+          ? "kit"
+          : null,
     purchase_price: Number(row.purchase_price),
     sale_price: Number(row.sale_price),
     min_stock: Number(row.min_stock ?? 0),
@@ -104,6 +112,10 @@ function buildMaterialInsertPayload(
     name_en: payload.name_en.trim() || null,
     category_id: payload.category_id || null,
     material_kind: payload.material_kind || "normal",
+    composite_mode:
+      payload.material_kind === "composite"
+        ? payload.composite_mode || "kit"
+        : null,
     purchase_price: payload.purchase_price,
     sale_price: payload.sale_price,
     inventory_account_id: payload.inventory_account_id || null,
@@ -146,6 +158,15 @@ function stripMaterialKindField(
 ): Record<string, unknown> {
   const next = { ...payload };
   delete next.material_kind;
+  delete next.composite_mode;
+  return next;
+}
+
+function stripCompositeModeField(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...payload };
+  delete next.composite_mode;
   return next;
 }
 
@@ -184,6 +205,19 @@ function buildMaterialPatch(
   if (payload.name_en != null) patch.name_en = payload.name_en.trim() || null;
   if (payload.category_id != null) patch.category_id = payload.category_id || null;
   if (payload.material_kind != null) patch.material_kind = payload.material_kind;
+  if (payload.composite_mode !== undefined) {
+    patch.composite_mode =
+      payload.material_kind === "normal"
+        ? null
+        : payload.composite_mode ??
+          (payload.material_kind === "composite" ? "kit" : null);
+  }
+  if (payload.material_kind === "normal") {
+    patch.composite_mode = null;
+  }
+  if (payload.material_kind === "composite" && patch.composite_mode == null) {
+    patch.composite_mode = payload.composite_mode || "kit";
+  }
   if (payload.purchase_price != null) patch.purchase_price = payload.purchase_price;
   if (payload.sale_price != null) patch.sale_price = payload.sale_price;
   if (payload.inventory_account_id != null) {
@@ -352,7 +386,9 @@ async function mutateMaterialRow(
     {
       select: MATERIAL_SELECT_WITH_KIND,
       payload: stripMinStockField(
-        stripExtendedMaterialFields(stripTrackingMaterialFields(payload)),
+        stripExtendedMaterialFields(
+          stripTrackingMaterialFields(stripCompositeModeField(payload)),
+        ),
       ),
     },
     {
@@ -390,7 +426,8 @@ async function mutateMaterialRow(
       !isMissingColumn(result.error, "min_stock") &&
       !isMissingColumn(result.error, "max_stock") &&
       !isMissingColumn(result.error, "barcode") &&
-      !isMissingColumn(result.error, "purchase_price")
+      !isMissingColumn(result.error, "purchase_price") &&
+      !isMissingColumn(result.error, "composite_mode")
     ) {
       break;
     }

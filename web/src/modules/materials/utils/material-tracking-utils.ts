@@ -1,4 +1,10 @@
-export function isInboundStockMovement(commercialKind: string): boolean {
+export function isInboundStockMovement(
+  commercialKind: string,
+  manufacturingRole?: string | null,
+): boolean {
+  if (commercialKind === "manufacturing" || commercialKind === "disassembly") {
+    return manufacturingRole === "produce";
+  }
   return (
     commercialKind === "purchase" ||
     commercialKind === "return_sale" ||
@@ -7,7 +13,13 @@ export function isInboundStockMovement(commercialKind: string): boolean {
   );
 }
 
-export function isOutboundStockMovement(commercialKind: string): boolean {
+export function isOutboundStockMovement(
+  commercialKind: string,
+  manufacturingRole?: string | null,
+): boolean {
+  if (commercialKind === "manufacturing" || commercialKind === "disassembly") {
+    return manufacturingRole == null || manufacturingRole === "consume";
+  }
   return (
     commercialKind === "sale" ||
     commercialKind === "return_purchase" ||
@@ -44,11 +56,12 @@ export function showExpiryOnLine(
   material: MaterialTrackingFlags | null | undefined,
   commercialKind: string,
   pattern?: PatternLineTracking | null,
+  manufacturingRole?: string | null,
 ): boolean {
   if (pattern && pattern.track_expiry_on_lines === false) return false;
   if (!flags(material).has_expiry_date) return false;
-  if (isInboundStockMovement(commercialKind)) return true;
-  if (isOutboundStockMovement(commercialKind)) return true;
+  if (isInboundStockMovement(commercialKind, manufacturingRole)) return true;
+  if (isOutboundStockMovement(commercialKind, manufacturingRole)) return true;
   return false;
 }
 
@@ -56,24 +69,26 @@ export function showSerialOnLine(
   material: MaterialTrackingFlags | null | undefined,
   commercialKind: string,
   pattern?: PatternLineTracking | null,
+  manufacturingRole?: string | null,
 ): boolean {
   if (pattern && pattern.track_serial_on_lines === false) return false;
   if (!flags(material).has_serial_number) return false;
-  if (isInboundStockMovement(commercialKind)) return true;
-  if (isOutboundStockMovement(commercialKind)) return true;
+  if (isInboundStockMovement(commercialKind, manufacturingRole)) return true;
+  if (isOutboundStockMovement(commercialKind, manufacturingRole)) return true;
   return false;
 }
 
 export function isExpiryRequiredOnLine(
   material: MaterialTrackingFlags,
   commercialKind: string,
+  manufacturingRole?: string | null,
 ): boolean {
   const f = flags(material);
   if (!f.has_expiry_date) return false;
-  if (isInboundStockMovement(commercialKind)) {
+  if (isInboundStockMovement(commercialKind, manufacturingRole)) {
     return f.require_expiry_on_inbound;
   }
-  if (isOutboundStockMovement(commercialKind)) {
+  if (isOutboundStockMovement(commercialKind, manufacturingRole)) {
     return f.require_expiry_on_outbound;
   }
   return false;
@@ -82,13 +97,14 @@ export function isExpiryRequiredOnLine(
 export function isSerialRequiredOnLine(
   material: MaterialTrackingFlags,
   commercialKind: string,
+  manufacturingRole?: string | null,
 ): boolean {
   const f = flags(material);
   if (!f.has_serial_number) return false;
-  if (isInboundStockMovement(commercialKind)) {
+  if (isInboundStockMovement(commercialKind, manufacturingRole)) {
     return f.require_serial_on_inbound;
   }
-  if (isOutboundStockMovement(commercialKind)) {
+  if (isOutboundStockMovement(commercialKind, manufacturingRole)) {
     return f.require_serial_on_outbound;
   }
   return false;

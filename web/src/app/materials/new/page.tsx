@@ -25,6 +25,7 @@ const EMPTY_VALUES: MaterialFormValues = {
   name_en: "",
   category_id: "",
   material_kind: "normal",
+  composite_mode: null,
   purchase_price: 0,
   sale_price: 0,
   inventory_account_id: "",

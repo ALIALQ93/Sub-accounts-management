@@ -56,6 +56,7 @@ function emptyMaterialForm(
     name_en: "",
     category_id: "",
     material_kind: "normal",
+    composite_mode: null,
     purchase_price: 0,
     sale_price: 0,
     inventory_account_id: "",
@@ -360,6 +361,7 @@ export function MaterialBulkImportModal({
           name_en: row.name_en,
           category_id: categoryId,
           material_kind: row.resolved_kind,
+          composite_mode: row.resolved_kind === "composite" ? "kit" : null,
           purchase_price: Number(row.purchase_price || 0) || 0,
           sale_price: Number(row.sale_price || 0) || 0,
         });

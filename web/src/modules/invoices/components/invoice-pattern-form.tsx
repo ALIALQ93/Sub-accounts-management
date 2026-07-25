@@ -135,7 +135,11 @@ export function InvoicePatternForm({
       is_return: isReturn,
       is_opening_stock: kind === "opening_stock",
       warehouse_movement:
-        kind !== "opening_stock" ? values.warehouse_movement : true,
+        kind === "opening_stock" ||
+        kind === "manufacturing" ||
+        kind === "disassembly"
+          ? true
+          : values.warehouse_movement,
       reference_settings: isReturn
         ? {
             ...values.reference_settings,

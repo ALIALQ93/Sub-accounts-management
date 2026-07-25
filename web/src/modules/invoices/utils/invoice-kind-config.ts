@@ -17,6 +17,8 @@ export const COMMERCIAL_KIND_OPTIONS: Array<{
   { value: "return_sale", label: "مرتجع مبيعات", direction: "input" },
   { value: "return_purchase", label: "مرتجع مشتريات", direction: "output" },
   { value: "opening_stock", label: "بضاعة أول المدة", direction: "input" },
+  { value: "manufacturing", label: "تصنيع", direction: "output" },
+  { value: "disassembly", label: "تفكيك", direction: "output" },
 ];
 
 export function getCommercialKindLabel(kind: string): string {

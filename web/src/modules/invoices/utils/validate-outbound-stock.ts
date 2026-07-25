@@ -108,9 +108,26 @@ export function validateOutboundStockLines(params: {
   for (const line of lines) {
     if (!line.material_id || !line.warehouse_id || line.quantity <= 0) continue;
 
+    if (
+      commercialKind === "manufacturing" ||
+      commercialKind === "disassembly"
+    ) {
+      if (line.manufacturing_role !== "consume") {
+        continue;
+      }
+    }
+
     const material = materialById.get(line.material_id);
-    // المواد التجميعية تُفكّك على الخادم إلى مكوّنات — لا نفحص رصيد الأب
-    if (material?.material_kind === "composite") continue;
+    // الطقم (kit) يُفكّك على الخادم — لا نفحص رصيد الأب
+    // المنتج النهائي / القابل للتفكيك: نفحص رصيد التجميعية نفسها
+    if (
+      material?.material_kind === "composite" &&
+      (material.composite_mode ?? "kit") === "kit" &&
+      commercialKind !== "manufacturing" &&
+      commercialKind !== "disassembly"
+    ) {
+      continue;
+    }
 
     const qtyBase = lineQuantityBase(line, unitsByMaterial);
     const mwKey = stockBalanceKey(line.material_id, line.warehouse_id);

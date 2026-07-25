@@ -27,6 +27,8 @@ import {
   showSerialOnLine,
   isOutboundStockMovement,
 } from "@/modules/materials/utils/material-tracking-utils";
+import { materialBomApi } from "@/modules/materials/services/material-bom-api";
+import type { ManufacturingLineRole } from "@/modules/invoices/types";
 
 export type DraftMaterialLine = InvoiceMaterialLineInput & {
   clientId: string;
@@ -72,6 +74,7 @@ function newLine(
     "branch_id" | "cost_center_id" | "warehouse_id"
   >,
   lineNo: number,
+  manufacturingRole?: ManufacturingLineRole | null,
 ): DraftMaterialLine {
   return {
     clientId: crypto.randomUUID(),
@@ -84,6 +87,7 @@ function newLine(
     quantity: 1,
     unit_price: 0,
     line_description: null,
+    manufacturing_role: manufacturingRole ?? null,
   };
 }
 
@@ -110,10 +114,51 @@ export function InvoiceMaterialLinesTable({
   onChange,
   onMaterialSelected,
 }: InvoiceMaterialLinesTableProps) {
+  const isDualRoleKind =
+    commercialKind === "manufacturing" || commercialKind === "disassembly";
+  const isDisassembly = commercialKind === "disassembly";
+  const isManufacturing = commercialKind === "manufacturing";
+
   const materialOptions = useMemo<SearchSelectOption[]>(
     () =>
       materials
         .filter((m) => m.is_active)
+        .map((m) => ({
+          id: m.id,
+          label: `${m.material_code} — ${m.name_ar}`,
+          searchText: `${m.material_code} ${m.name_ar}`,
+        })),
+    [materials],
+  );
+
+  const produceMaterialOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      materials
+        .filter((m) => {
+          if (!m.is_active || m.material_kind !== "composite") return false;
+          if (isManufacturing) {
+            const mode = m.composite_mode ?? "kit";
+            return mode === "finished" || mode === "disassemblable";
+          }
+          return true;
+        })
+        .map((m) => ({
+          id: m.id,
+          label: `${m.material_code} — ${m.name_ar}`,
+          searchText: `${m.material_code} ${m.name_ar}`,
+        })),
+    [materials, isManufacturing],
+  );
+
+  const disassemblyConsumeOptions = useMemo<SearchSelectOption[]>(
+    () =>
+      materials
+        .filter(
+          (m) =>
+            m.is_active &&
+            m.material_kind === "composite" &&
+            (m.composite_mode ?? "kit") === "disassemblable",
+        )
         .map((m) => ({
           id: m.id,
           label: `${m.material_code} — ${m.name_ar}`,
@@ -156,7 +201,7 @@ export function InvoiceMaterialLinesTable({
     );
   };
 
-  const addLine = () => {
+  const addLine = (role?: ManufacturingLineRole) => {
     onChange([
       ...lines,
       newLine(
@@ -166,8 +211,196 @@ export function InvoiceMaterialLinesTable({
           warehouse_id: defaultWarehouseId,
         },
         lines.length + 1,
+        isDualRoleKind ? (role ?? "consume") : null,
       ),
     ]);
+  };
+
+  const loadBomComponents = async () => {
+    if (isDisassembly) {
+      const consumeLines = lines.filter(
+        (l) =>
+          l.manufacturing_role === "consume" && l.material_id && l.quantity > 0,
+      );
+      if (consumeLines.length === 0) {
+        window.alert(
+          "أضف سطر استهلاك (منتج قابل للتفكيك) أولاً ثم حمّل المكوّنات.",
+        );
+        return;
+      }
+
+      const produceByMaterial = new Map<
+        string,
+        { quantity: number; unitId: string | null }
+      >();
+
+      for (const consume of consumeLines) {
+        const unitsForProduce =
+          unitsByMaterial[consume.material_id] ??
+          (await onMaterialSelected(consume.material_id));
+        const produceUnit = unitsForProduce.find(
+          (u) => u.id === consume.material_unit_id,
+        );
+        const produceFactor = produceUnit?.factor_to_base ?? 1;
+        const produceQtyBase = consume.quantity * produceFactor;
+
+        const components = await materialBomApi.listComponents(
+          consume.material_id,
+        );
+        if (components.length === 0) {
+          const mat = materialById.get(consume.material_id);
+          window.alert(
+            `المادة «${mat?.name_ar ?? consume.material_id}» بلا مكوّنات في بطاقة التجميع.`,
+          );
+          continue;
+        }
+        for (const component of components) {
+          const qty = component.quantity * produceQtyBase;
+          const prev = produceByMaterial.get(component.component_material_id);
+          if (prev) {
+            prev.quantity += qty;
+          } else {
+            produceByMaterial.set(component.component_material_id, {
+              quantity: qty,
+              unitId: component.component_unit_id,
+            });
+          }
+        }
+      }
+
+      if (produceByMaterial.size === 0) return;
+
+      const keepConsume = lines.filter((l) => l.manufacturing_role === "consume");
+      const next: DraftMaterialLine[] = [...keepConsume];
+      let lineNo = next.length + 1;
+
+      for (const [materialId, info] of produceByMaterial) {
+        const units =
+          unitsByMaterial[materialId] ?? (await onMaterialSelected(materialId));
+        const unit =
+          (info.unitId ? units.find((u) => u.id === info.unitId) : undefined) ??
+          units.find((u) => u.is_base_unit) ??
+          units[0];
+        if (!unit) continue;
+        const material = materialById.get(materialId);
+        next.push({
+          ...newLine(
+            {
+              branch_id: defaultBranchId,
+              cost_center_id: defaultCostCenterId || null,
+              warehouse_id: defaultWarehouseId,
+            },
+            lineNo,
+            "produce",
+          ),
+          material_id: materialId,
+          material_unit_id: unit.id,
+          quantity: Math.round(info.quantity * 1_000_000) / 1_000_000,
+          qty_damaged: 0,
+          unit_price: material
+            ? resolveMaterialUnitPrice(
+                pricingMaterialMode,
+                material,
+                unit,
+                commercialKind,
+              )
+            : 0,
+        });
+        lineNo += 1;
+      }
+
+      onChange(next.map((line, index) => ({ ...line, line_no: index + 1 })));
+      return;
+    }
+
+    const produceLines = lines.filter(
+      (l) => l.manufacturing_role === "produce" && l.material_id && l.quantity > 0,
+    );
+    if (produceLines.length === 0) {
+      window.alert("أضف سطر إنتاج (مادة تجميعية) أولاً ثم حمّل المكوّنات.");
+      return;
+    }
+
+    const consumeByMaterial = new Map<
+      string,
+      { quantity: number; unitId: string | null }
+    >();
+
+    for (const produce of produceLines) {
+      const unitsForProduce =
+        unitsByMaterial[produce.material_id] ??
+        (await onMaterialSelected(produce.material_id));
+      const produceUnit = unitsForProduce.find(
+        (u) => u.id === produce.material_unit_id,
+      );
+      const produceFactor = produceUnit?.factor_to_base ?? 1;
+      const produceQtyBase = produce.quantity * produceFactor;
+
+      const components = await materialBomApi.listComponents(produce.material_id);
+      if (components.length === 0) {
+        const mat = materialById.get(produce.material_id);
+        window.alert(
+          `المادة «${mat?.name_ar ?? produce.material_id}» بلا مكوّنات في بطاقة التجميع.`,
+        );
+        continue;
+      }
+      for (const component of components) {
+        const qty = component.quantity * produceQtyBase;
+        const prev = consumeByMaterial.get(component.component_material_id);
+        if (prev) {
+          prev.quantity += qty;
+        } else {
+          consumeByMaterial.set(component.component_material_id, {
+            quantity: qty,
+            unitId: component.component_unit_id,
+          });
+        }
+      }
+    }
+
+    if (consumeByMaterial.size === 0) return;
+
+    const keepProduce = lines.filter((l) => l.manufacturing_role === "produce");
+    const next: DraftMaterialLine[] = [...keepProduce];
+    let lineNo = next.length + 1;
+
+    for (const [materialId, info] of consumeByMaterial) {
+      const units =
+        unitsByMaterial[materialId] ?? (await onMaterialSelected(materialId));
+      const unit =
+        (info.unitId
+          ? units.find((u) => u.id === info.unitId)
+          : undefined) ??
+        units.find((u) => u.is_base_unit) ??
+        units[0];
+      if (!unit) continue;
+      const material = materialById.get(materialId);
+      next.push({
+        ...newLine(
+          {
+            branch_id: defaultBranchId,
+            cost_center_id: defaultCostCenterId || null,
+            warehouse_id: defaultWarehouseId,
+          },
+          lineNo,
+          "consume",
+        ),
+        material_id: materialId,
+        material_unit_id: unit.id,
+        quantity: Math.round(info.quantity * 1_000_000) / 1_000_000,
+        unit_price: material
+          ? resolveMaterialUnitPrice(
+              pricingMaterialMode,
+              material,
+              unit,
+              commercialKind,
+            )
+          : 0,
+      });
+      lineNo += 1;
+    }
+
+    onChange(next.map((line, index) => ({ ...line, line_no: index + 1 })));
   };
 
   const removeLine = (clientId: string) => {
@@ -243,6 +476,8 @@ export function InvoiceMaterialLinesTable({
 
   const extraCols =
     attrCols +
+    (isDualRoleKind ? 1 : 0) +
+    (isDisassembly ? 1 : 0) +
     (showExpiryColumn ? 1 : 0) +
     (showSerialColumn ? 1 : 0) +
     (showLineDiscount ? 2 : 0) +
@@ -289,10 +524,16 @@ export function InvoiceMaterialLinesTable({
           <thead className="bg-slate-50">
             <tr className="text-right text-slate-700">
               <th className="border border-slate-200 p-2">#</th>
+              {isDualRoleKind && (
+                <th className="border border-slate-200 p-2">الدور</th>
+              )}
               <th className="border border-slate-200 p-2">المادة</th>
               <th className="border border-slate-200 p-2">الوحدة</th>
               <th className="border border-slate-200 p-2">المستودع</th>
               <th className="border border-slate-200 p-2">الكمية</th>
+              {isDisassembly && (
+                <th className="border border-slate-200 p-2">تالف</th>
+              )}
               <th className="border border-slate-200 p-2">السعر</th>
               <th className="border border-slate-200 p-2">المبلغ</th>
               {lineAttributes?.showColor && (
@@ -338,10 +579,18 @@ export function InvoiceMaterialLinesTable({
               const material = materialById.get(line.material_id);
               const expiryRequired =
                 material != null &&
-                isExpiryRequiredOnLine(material, commercialKind);
+                isExpiryRequiredOnLine(
+                  material,
+                  commercialKind,
+                  line.manufacturing_role,
+                );
               const serialRequired =
                 material != null &&
-                isSerialRequiredOnLine(material, commercialKind);
+                isSerialRequiredOnLine(
+                  material,
+                  commercialKind,
+                  line.manufacturing_role,
+                );
               const amount = computeLineNetAmount(
                 line.quantity,
                 line.unit_price,
@@ -362,8 +611,12 @@ export function InvoiceMaterialLinesTable({
               const stockInsufficient =
                 showOutboundStock &&
                 availableStock != null &&
-                lineQtyBase > availableStock + 0.000001;
-              const outbound = isOutboundStockMovement(commercialKind);
+                lineQtyBase > availableStock + 0.000001 &&
+                (!isDualRoleKind || line.manufacturing_role === "consume");
+              const outbound = isOutboundStockMovement(
+                commercialKind,
+                line.manufacturing_role,
+              );
               const mwLotKey =
                 line.material_id && line.warehouse_id
                   ? lotBalancesKey(line.material_id, line.warehouse_id)
@@ -387,15 +640,48 @@ export function InvoiceMaterialLinesTable({
                   ? serialOpts.find((o) => o.serial_number === line.serial_number)
                   : null;
 
+              const materialSelectOptions = isDisassembly
+                ? line.manufacturing_role === "consume"
+                  ? disassemblyConsumeOptions
+                  : materialOptions
+                : line.manufacturing_role === "produce"
+                  ? produceMaterialOptions
+                  : materialOptions;
+
               return (
                 <tr key={line.clientId} className="odd:bg-white even:bg-slate-50/60">
                   <td className="border border-slate-100 p-2">{line.line_no}</td>
+                  {isDualRoleKind && (
+                    <td className="border border-slate-100 p-2 min-w-[110px]">
+                      <select
+                        disabled={readOnly}
+                        className={inputClass}
+                        value={line.manufacturing_role ?? "consume"}
+                        onChange={(e) =>
+                          updateLine(line.clientId, {
+                            manufacturing_role: e.target.value as ManufacturingLineRole,
+                            material_id: "",
+                            material_unit_id: "",
+                            unit_price: 0,
+                            qty_damaged: isDisassembly ? 0 : null,
+                          })
+                        }
+                      >
+                        <option value="consume">
+                          {isDisassembly ? "منتج للتفكيك" : "استهلاك"}
+                        </option>
+                        <option value="produce">
+                          {isDisassembly ? "مكوّن مسترد" : "إنتاج"}
+                        </option>
+                      </select>
+                    </td>
+                  )}
                   <td className="border border-slate-100 p-2 min-w-[220px]">
                     <SearchSelectField
                       label="المادة"
                       hideLabel
                       placeholder="اختر مادة..."
-                      options={materialOptions}
+                      options={materialSelectOptions}
                       value={line.material_id}
                       onChange={(id) => void handleMaterialChange(line.clientId, id)}
                       disabled={readOnly}
@@ -469,6 +755,30 @@ export function InvoiceMaterialLinesTable({
                         </p>
                       )}
                   </td>
+                  {isDisassembly && (
+                    <td className="border border-slate-100 p-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        disabled={
+                          readOnly || line.manufacturing_role !== "produce"
+                        }
+                        className={inputClass}
+                        title="كمية تالفة لا تُعاد للمخزون"
+                        value={
+                          line.manufacturing_role === "produce"
+                            ? (line.qty_damaged ?? 0)
+                            : ""
+                        }
+                        onChange={(e) =>
+                          updateLine(line.clientId, {
+                            qty_damaged: Number(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </td>
+                  )}
                   <td className="border border-slate-100 p-2">
                     <input
                       type="number"
@@ -497,7 +807,12 @@ export function InvoiceMaterialLinesTable({
                     renderAttrInput(line, "caliber", "العيار")}
                   {showExpiryColumn && (
                     <td className="border border-slate-100 p-2">
-                      {showExpiryOnLine(material, commercialKind, lineTracking) ? (
+                      {showExpiryOnLine(
+                        material,
+                        commercialKind,
+                        lineTracking,
+                        line.manufacturing_role,
+                      ) ? (
                         outbound && material?.has_expiry_date && expiryOpts.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             <select
@@ -545,7 +860,12 @@ export function InvoiceMaterialLinesTable({
                   )}
                   {showSerialColumn && (
                     <td className="border border-slate-100 p-2">
-                      {showSerialOnLine(material, commercialKind, lineTracking) ? (
+                      {showSerialOnLine(
+                        material,
+                        commercialKind,
+                        lineTracking,
+                        line.manufacturing_role,
+                      ) ? (
                         outbound &&
                         material?.has_serial_number &&
                         serialOpts.length > 0 ? (
@@ -744,13 +1064,41 @@ export function InvoiceMaterialLinesTable({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         {!readOnly && (
-          <button
-            type="button"
-            onClick={addLine}
-            className="rounded-md border border-blue-300 px-3 py-1.5 text-sm font-medium text-blue-800"
-          >
-            + سطر مادة
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {isDualRoleKind ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => addLine("consume")}
+                  className="rounded-md border border-amber-300 px-3 py-1.5 text-sm font-medium text-amber-900"
+                >
+                  {isDisassembly ? "+ منتج للتفكيك" : "+ سطر استهلاك"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addLine("produce")}
+                  className="rounded-md border border-emerald-300 px-3 py-1.5 text-sm font-medium text-emerald-900"
+                >
+                  {isDisassembly ? "+ مكوّن مسترد" : "+ سطر إنتاج"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void loadBomComponents()}
+                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-800"
+                >
+                  تحميل مكوّنات من البطاقة
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => addLine()}
+                className="rounded-md border border-blue-300 px-3 py-1.5 text-sm font-medium text-blue-800"
+              >
+                + سطر مادة
+              </button>
+            )}
+          </div>
         )}
         <p className="text-sm text-slate-700">
           إجمالي المواد:{" "}

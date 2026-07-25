@@ -1,189 +1,433 @@
 -- =============================================================================
--- patch_invoice_pricing_cost.sql (#39)
+-- patch_composite_disassembly.sql (#50)
 -- =============================================================================
--- ربط pricing_cost_mode / pricing_consumed_mode / فصل التكلفة بالصلاحية والتسلسلي
--- بحركات المخزون وقيود الترحيل.
--- يتطلب: patch_inventory_cost_dimensions.sql
+-- أوضاع المادة التجميعية:
+--   kit            — طقم يُفك عند البيع/الإخراج (السلوك السابق)
+--   finished       — منتج نهائي بدون تفكيك (مثل برجر المطعم)
+--   disassemblable — قابل لعملية تفكيك مع تسجيل مواد تالفة
+-- + نمط فاتورة «تفكيك» (عكس التصنيع جزئياً)
+-- يتطلب: patch_invoice_manufacturing.sql
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
--- أنواع الفواتير الإدخالية / الإخراجية
+-- 1) composite_mode على المواد
 -- ---------------------------------------------------------------------------
 
-create or replace function public.invoice_is_inbound_kind(p_kind varchar)
-returns boolean
-language sql
-immutable
-as $$
-  select p_kind in ('purchase', 'opening_stock', 'return_sale', 'transfer_in');
-$$;
+alter table public.materials
+  add column if not exists composite_mode varchar(20) null;
 
-create or replace function public.invoice_is_outbound_kind(p_kind varchar)
-returns boolean
-language sql
-immutable
-as $$
-  select p_kind in ('sale', 'return_purchase', 'transfer_out');
-$$;
+update public.materials
+set composite_mode = 'kit'
+where material_kind = 'composite'
+  and composite_mode is null;
 
-create or replace function public.invoice_kind_affects_material_line_cost(p_kind varchar)
-returns boolean
-language sql
-immutable
-as $$
-  select p_kind in ('purchase', 'opening_stock', 'return_sale', 'transfer_in');
-$$;
-
--- ---------------------------------------------------------------------------
--- تكلفة الإدخال من إعدادات النمط
--- ---------------------------------------------------------------------------
-
-create or replace function public.calc_inbound_inventory_amount(
-  p_pricing_cost_mode varchar,
-  p_adjustments_affect boolean,
-  p_line_amount numeric,
-  p_line_gross numeric,
-  p_line_disc numeric
-)
-returns numeric
-language sql
-immutable
-as $$
-  select case coalesce(nullif(trim(p_pricing_cost_mode), ''), 'line_net')
-    when 'none' then 0::numeric(18, 2)
-    when 'line_gross' then round(coalesce(p_line_gross, 0)::numeric, 2)
-    else round(
-      case
-        when coalesce(p_adjustments_affect, true) then coalesce(p_line_amount, 0)
-        else coalesce(p_line_gross, 0) - coalesce(p_line_disc, 0)
-      end::numeric,
-      2
-    )
-  end;
-$$;
-
-comment on function public.calc_inbound_inventory_amount is
-  'مبلغ تكلفة المخزون للسطر الإدخالي حسب pricing_cost_mode';
-
--- ---------------------------------------------------------------------------
--- متوسط تكلفة الوحدة مع أبعاد الفصل
--- ---------------------------------------------------------------------------
-
-create or replace function public.get_scoped_inventory_unit_cost(
-  p_material_id uuid,
-  p_warehouse_id uuid,
-  p_cost_center_id uuid,
-  p_expiry_date date,
-  p_serial_number text,
-  p_as_of_date date,
-  p_cost_per_cost_center boolean,
-  p_filter_expiry boolean,
-  p_filter_serial boolean,
-  p_fallback_unit_cost numeric
-)
-returns numeric
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce(
-    (
-      select round((
-        sum(im.quantity_base_delta * coalesce(im.unit_cost, 0))
-        / nullif(sum(im.quantity_base_delta), 0)
-      )::numeric, 4)
-      from public.inventory_movements im
-      where im.material_id = p_material_id
-        and im.warehouse_id = p_warehouse_id
-        and im.movement_date <= coalesce(p_as_of_date, current_date)
-        and (
-          not coalesce(p_cost_per_cost_center, false)
-          or im.cost_center_id is not distinct from p_cost_center_id
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'materials_composite_mode_chk'
+  ) then
+    alter table public.materials
+      add constraint materials_composite_mode_chk
+      check (
+        (
+          material_kind = 'normal'
+          and composite_mode is null
         )
-        and (
-          not coalesce(p_filter_expiry, false)
-          or im.expiry_date is not distinct from p_expiry_date
+        or (
+          material_kind = 'composite'
+          and composite_mode in ('kit', 'finished', 'disassemblable')
         )
-        and (
-          not coalesce(p_filter_serial, false)
-          or nullif(trim(coalesce(im.serial_number, '')), '')
-            is not distinct from nullif(trim(coalesce(p_serial_number, '')), '')
-        )
-    ),
-    p_fallback_unit_cost,
-    0
-  );
-$$;
+      );
+  end if;
+end $$;
 
-comment on function public.get_scoped_inventory_unit_cost is
-  'متوسط تكلفة الوحدة مع فلترة CC / صلاحية / تسلسلي';
+comment on column public.materials.composite_mode is
+  'تجميعية فقط: kit=تفكيك عند الإخراج، finished=منتج نهائي، disassemblable=تفكيك مع تالف';
 
-grant execute on function public.get_scoped_inventory_unit_cost(
-  uuid, uuid, uuid, date, text, date, boolean, boolean, boolean, numeric
-) to authenticated;
-
--- ---------------------------------------------------------------------------
--- تكلفة الإخراج per سطر
--- ---------------------------------------------------------------------------
-
-create or replace function public.calc_outbound_unit_cost(
-  p_consumed_mode varchar,
-  p_settings public.company_inventory_settings,
-  p_material_purchase_price numeric,
-  p_line_unit_price numeric,
-  p_factor_to_base numeric,
-  p_material_id uuid,
-  p_warehouse_id uuid,
-  p_cost_center_id uuid,
-  p_expiry_date date,
-  p_serial_number text,
-  p_as_of_date date
-)
-returns numeric
+-- عند التحويل لعادية امسح الوضع؛ عند التحويل لتجميعية بدون وضع → kit
+create or replace function public.materials_composite_mode_sync()
+returns trigger
 language plpgsql
-stable
+as $$
+begin
+  if new.material_kind = 'normal' then
+    new.composite_mode := null;
+  elsif new.material_kind = 'composite' and new.composite_mode is null then
+    new.composite_mode := 'kit';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_materials_composite_mode_sync on public.materials;
+create trigger trg_materials_composite_mode_sync
+  before insert or update of material_kind, composite_mode
+  on public.materials
+  for each row
+  execute function public.materials_composite_mode_sync();
+
+-- ---------------------------------------------------------------------------
+-- 2) كمية تالفة على أسطر الفاتورة (تفكيك)
+-- ---------------------------------------------------------------------------
+
+alter table public.invoice_material_lines
+  add column if not exists qty_damaged numeric(18, 6) null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'invoice_material_lines_qty_damaged_chk'
+  ) then
+    alter table public.invoice_material_lines
+      add constraint invoice_material_lines_qty_damaged_chk
+      check (qty_damaged is null or qty_damaged >= 0);
+  end if;
+end $$;
+
+comment on column public.invoice_material_lines.qty_damaged is
+  'تفكيك: كمية تالفة من المكوّن لا تُعاد للمخزون';
+
+-- ---------------------------------------------------------------------------
+-- 3) حركات تفكيك
+-- ---------------------------------------------------------------------------
+
+alter table public.inventory_movements
+  drop constraint if exists inventory_movements_movement_kind_check;
+
+alter table public.inventory_movements
+  add constraint inventory_movements_movement_kind_check
+  check (movement_kind in (
+    'sale', 'purchase', 'transfer_out', 'transfer_in',
+    'return_sale', 'return_purchase', 'opening_stock', 'adjustment',
+    'manufacture_consume', 'manufacture_produce',
+    'disassemble_consume', 'disassemble_produce'
+  ));
+
+-- ---------------------------------------------------------------------------
+-- 4) تفكيك عند الإخراج فقط لوضع kit
+-- ---------------------------------------------------------------------------
+
+create or replace function public.inventory_movements_explode_composite()
+returns trigger
+language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_mode varchar(30);
-  v_filter_expiry boolean;
-  v_filter_serial boolean;
+  v_kind varchar(20);
+  v_mode varchar(20);
+  v_comp record;
+  v_sign numeric;
+  v_abs_base numeric;
+  v_ratio numeric;
 begin
-  v_mode := coalesce(nullif(trim(p_consumed_mode), ''), 'weighted_avg');
-
-  if v_mode = 'line_price' then
-    if coalesce(p_factor_to_base, 0) > 0 then
-      return round((p_line_unit_price / p_factor_to_base)::numeric, 4);
-    end if;
-    return round(coalesce(p_line_unit_price, 0)::numeric, 4);
+  if new.movement_kind in (
+    'manufacture_consume', 'manufacture_produce',
+    'disassemble_consume', 'disassemble_produce'
+  ) then
+    return new;
   end if;
 
-  if v_mode = 'standard' then
-    return round(coalesce(p_material_purchase_price, 0)::numeric, 4);
+  if current_setting('app.bom_explode_depth', true) = '1' then
+    return new;
   end if;
 
-  v_filter_expiry := v_mode = 'lot_cost'
-    or coalesce(p_settings.cost_per_expiry_date, false);
-  v_filter_serial := v_mode = 'lot_cost'
-    or coalesce(p_settings.cost_per_serial_number, false);
+  select material_kind, composite_mode
+  into v_kind, v_mode
+  from public.materials where id = new.material_id;
 
-  return public.get_scoped_inventory_unit_cost(
-    p_material_id,
-    p_warehouse_id,
-    p_cost_center_id,
-    p_expiry_date,
-    p_serial_number,
-    p_as_of_date,
-    coalesce(p_settings.cost_per_cost_center, false),
-    v_filter_expiry,
-    v_filter_serial,
-    p_material_purchase_price
-  );
+  if v_kind is distinct from 'composite' then
+    return new;
+  end if;
+
+  -- منتج نهائي أو قابل للتفكيك اليدوي: يُحرَّك كوحدة مخزون
+  if coalesce(v_mode, 'kit') is distinct from 'kit' then
+    return new;
+  end if;
+
+  v_abs_base := abs(coalesce(new.quantity_base_delta, 0));
+  if v_abs_base = 0 then
+    return null;
+  end if;
+
+  v_sign := case when new.quantity_base_delta < 0 then -1 else 1 end;
+  v_ratio := case
+    when abs(coalesce(new.quantity_delta, 0)) > 0
+         and abs(coalesce(new.quantity_base_delta, 0)) > 0
+    then abs(new.quantity_delta) / abs(new.quantity_base_delta)
+    else 1
+  end;
+
+  perform set_config('app.bom_explode_depth', '1', true);
+
+  for v_comp in
+    select * from public.explode_material_bom(new.material_id, v_abs_base)
+  loop
+    insert into public.inventory_movements (
+      movement_date,
+      material_id,
+      warehouse_id,
+      branch_id,
+      cost_center_id,
+      quantity_delta,
+      quantity_base_delta,
+      unit_cost,
+      total_cost,
+      movement_kind,
+      source_type,
+      source_id,
+      source_line_id,
+      expiry_date,
+      serial_number
+    )
+    values (
+      new.movement_date,
+      v_comp.component_material_id,
+      new.warehouse_id,
+      new.branch_id,
+      new.cost_center_id,
+      round((v_sign * v_comp.quantity_base * v_ratio)::numeric, 6),
+      round((v_sign * v_comp.quantity_base)::numeric, 6),
+      new.unit_cost,
+      round((abs(v_comp.quantity_base) * coalesce(new.unit_cost, 0))::numeric, 2)
+        * case when v_sign < 0 then -1 else 1 end,
+      new.movement_kind,
+      new.source_type,
+      new.source_id,
+      new.source_line_id,
+      -- لا ننسخ صلاحية/تسلسل الأب إلى المكوّنات
+      null,
+      null
+    );
+  end loop;
+
+  perform set_config('app.bom_explode_depth', '', true);
+  return null;
 end;
 $$;
 
+-- فحص الرصيد يشمل تفكيك
+create or replace function public.inventory_movements_enforce_stock()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_balance numeric(18, 6);
+  v_enforce boolean := true;
+  v_material_code varchar;
+  v_warehouse_code varchar;
+begin
+  if new.quantity_base_delta >= 0 then
+    return new;
+  end if;
+
+  if new.movement_kind not in (
+    'sale', 'transfer_out', 'return_purchase',
+    'manufacture_consume', 'disassemble_consume'
+  ) then
+    return new;
+  end if;
+
+  if new.source_type = 'invoice' and new.source_id is not null then
+    select coalesce(ip.enforce_stock_availability, true)
+    into v_enforce
+    from public.invoices i
+    inner join public.invoice_patterns ip on ip.id = i.pattern_id
+    where i.id = new.source_id;
+
+    if not coalesce(v_enforce, true) then
+      return new;
+    end if;
+  end if;
+
+  perform pg_advisory_xact_lock(
+    hashtextextended(new.material_id::text || '|' || new.warehouse_id::text, 42)
+  );
+
+  v_balance := public.get_material_warehouse_qty_balance(
+    new.material_id,
+    new.warehouse_id,
+    new.movement_date
+  );
+
+  if v_balance + new.quantity_base_delta < -0.000001 then
+    select m.material_code into v_material_code
+    from public.materials m where m.id = new.material_id;
+
+    select w.warehouse_code into v_warehouse_code
+    from public.warehouses w where w.id = new.warehouse_id;
+
+    raise exception
+      'Insufficient stock for material % in warehouse %. Available: %, requested: %.',
+      coalesce(v_material_code, new.material_id::text),
+      coalesce(v_warehouse_code, new.warehouse_id::text),
+      v_balance,
+      abs(new.quantity_base_delta);
+  end if;
+
+  return new;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 5) إنشاء مادة يشمل composite_mode
+-- ---------------------------------------------------------------------------
+
+create or replace function public.create_material_with_base_unit(
+  p_material jsonb,
+  p_base_unit jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_material_id uuid;
+  v_unit_code text;
+  v_unit_name text;
+  v_unit_id uuid;
+  v_kind text;
+  v_mode text;
+begin
+  if coalesce(nullif(trim(p_material->>'material_code'), ''), '') = '' then
+    raise exception 'material_code is required.';
+  end if;
+  if coalesce(nullif(trim(p_material->>'name_ar'), ''), '') = '' then
+    raise exception 'name_ar is required.';
+  end if;
+
+  v_kind := coalesce(nullif(trim(p_material->>'material_kind'), ''), 'normal');
+  if v_kind not in ('normal', 'composite') then
+    raise exception 'material_kind must be normal or composite.';
+  end if;
+
+  v_mode := nullif(trim(coalesce(p_material->>'composite_mode', '')), '');
+  if v_kind = 'composite' then
+    v_mode := coalesce(v_mode, 'kit');
+    if v_mode not in ('kit', 'finished', 'disassemblable') then
+      raise exception 'composite_mode must be kit, finished, or disassemblable.';
+    end if;
+  else
+    v_mode := null;
+  end if;
+
+  v_unit_id := nullif(p_base_unit->>'unit_id', '')::uuid;
+  v_unit_code := upper(trim(coalesce(p_base_unit->>'unit_code', '')));
+  v_unit_name := trim(coalesce(p_base_unit->>'name_ar', ''));
+
+  if v_unit_id is not null then
+    select unit_code, name_ar
+    into v_unit_code, v_unit_name
+    from public.units where id = v_unit_id;
+  end if;
+
+  if v_unit_code = '' or v_unit_name = '' then
+    raise exception 'Base unit code and name_ar are required.';
+  end if;
+
+  insert into public.materials (
+    material_code,
+    name_ar,
+    name_en,
+    category_id,
+    purchase_price,
+    sale_price,
+    inventory_account_id,
+    is_active,
+    min_stock,
+    max_stock,
+    barcode,
+    manufacturer,
+    supplier_name,
+    color,
+    size,
+    weight,
+    notes,
+    has_expiry_date,
+    require_expiry_on_inbound,
+    require_expiry_on_outbound,
+    expiry_days,
+    has_serial_number,
+    require_serial_on_inbound,
+    require_serial_on_outbound,
+    material_kind,
+    composite_mode
+  )
+  values (
+    upper(trim(p_material->>'material_code')),
+    trim(p_material->>'name_ar'),
+    nullif(trim(coalesce(p_material->>'name_en', '')), ''),
+    nullif(p_material->>'category_id', '')::uuid,
+    coalesce((p_material->>'purchase_price')::numeric, 0),
+    coalesce((p_material->>'sale_price')::numeric, 0),
+    nullif(p_material->>'inventory_account_id', '')::uuid,
+    coalesce((p_material->>'is_active')::boolean, true),
+    coalesce((p_material->>'min_stock')::numeric, 0),
+    coalesce((p_material->>'max_stock')::numeric, 0),
+    nullif(trim(coalesce(p_material->>'barcode', '')), ''),
+    nullif(trim(coalesce(p_material->>'manufacturer', '')), ''),
+    nullif(trim(coalesce(p_material->>'supplier_name', '')), ''),
+    nullif(trim(coalesce(p_material->>'color', '')), ''),
+    nullif(trim(coalesce(p_material->>'size', '')), ''),
+    nullif(p_material->>'weight', '')::numeric,
+    nullif(trim(coalesce(p_material->>'notes', '')), ''),
+    coalesce((p_material->>'has_expiry_date')::boolean, false),
+    coalesce((p_material->>'require_expiry_on_inbound')::boolean, false),
+    coalesce((p_material->>'require_expiry_on_outbound')::boolean, false),
+    null,
+    coalesce((p_material->>'has_serial_number')::boolean, false),
+    coalesce((p_material->>'require_serial_on_inbound')::boolean, false),
+    coalesce((p_material->>'require_serial_on_outbound')::boolean, false),
+    v_kind,
+    v_mode
+  )
+  returning id into v_material_id;
+
+  insert into public.material_units (
+    material_id,
+    unit_id,
+    unit_code,
+    name_ar,
+    name_en,
+    is_base_unit,
+    conversion_op,
+    conversion_factor,
+    factor_to_base,
+    purchase_price,
+    sale_price,
+    semi_wholesale_price,
+    wholesale_price,
+    is_active,
+    sort_order
+  )
+  values (
+    v_material_id,
+    v_unit_id,
+    v_unit_code,
+    v_unit_name,
+    nullif(trim(coalesce(p_base_unit->>'name_en', '')), ''),
+    true,
+    'multiply',
+    1,
+    1,
+    nullif(p_base_unit->>'purchase_price', '')::numeric,
+    nullif(p_base_unit->>'sale_price', '')::numeric,
+    nullif(p_base_unit->>'semi_wholesale_price', '')::numeric,
+    nullif(p_base_unit->>'wholesale_price', '')::numeric,
+    coalesce((p_base_unit->>'is_active')::boolean, true),
+    0
+  );
+
+  return v_material_id;
+end;
+$$;
+
+grant execute on function public.create_material_with_base_unit(jsonb, jsonb)
+  to authenticated;
+
+-- تكلفة الإخراج: تفكيك التكلفة فقط للطقم (kit)
 create or replace function public.calc_outbound_line_total_cost(
   p_consumed_mode varchar,
   p_settings public.company_inventory_settings,
@@ -199,42 +443,63 @@ create or replace function public.calc_outbound_line_total_cost(
   p_as_of_date date
 )
 returns numeric
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select round((
-    abs(coalesce(p_quantity_base, 0))
-    * public.calc_outbound_unit_cost(
-      p_consumed_mode,
-      p_settings,
-      p_material_purchase_price,
-      p_line_unit_price,
-      p_factor_to_base,
-      p_material_id,
-      p_warehouse_id,
-      p_cost_center_id,
-      p_expiry_date,
-      p_serial_number,
-      p_as_of_date
-    )
-  )::numeric, 2);
-$$;
+declare
+  v_kind varchar(20);
+  v_mode varchar(20);
+  v_total numeric(18, 2) := 0;
+  v_comp record;
+  v_comp_price numeric;
+begin
+  select material_kind, composite_mode
+  into v_kind, v_mode
+  from public.materials where id = p_material_id;
 
-grant execute on function public.calc_outbound_unit_cost(
-  varchar,
-  public.company_inventory_settings,
-  numeric,
-  numeric,
-  numeric,
-  uuid,
-  uuid,
-  uuid,
-  date,
-  text,
-  date
-) to authenticated;
+  if v_kind = 'composite' and coalesce(v_mode, 'kit') = 'kit' then
+    for v_comp in
+      select * from public.explode_material_bom(p_material_id, abs(coalesce(p_quantity_base, 0)))
+    loop
+      select purchase_price into v_comp_price
+      from public.materials where id = v_comp.component_material_id;
+
+      v_total := v_total + public.calc_outbound_line_total_cost_normal(
+        p_consumed_mode,
+        p_settings,
+        coalesce(v_comp_price, 0),
+        p_line_unit_price,
+        1,
+        v_comp.quantity_base,
+        v_comp.component_material_id,
+        p_warehouse_id,
+        p_cost_center_id,
+        null,
+        null,
+        p_as_of_date
+      );
+    end loop;
+    return round(v_total::numeric, 2);
+  end if;
+
+  return public.calc_outbound_line_total_cost_normal(
+    p_consumed_mode,
+    p_settings,
+    p_material_purchase_price,
+    p_line_unit_price,
+    p_factor_to_base,
+    p_quantity_base,
+    p_material_id,
+    p_warehouse_id,
+    p_cost_center_id,
+    p_expiry_date,
+    p_serial_number,
+    p_as_of_date
+  );
+end;
+$$;
 
 grant execute on function public.calc_outbound_line_total_cost(
   varchar,
@@ -251,280 +516,547 @@ grant execute on function public.calc_outbound_line_total_cost(
   date
 ) to authenticated;
 
--- ---------------------------------------------------------------------------
--- محفز حركة المخزون — تطبيق تكلفة السطر من إعدادات النمط
--- ---------------------------------------------------------------------------
-
-create or replace function public.inventory_movements_apply_invoice_line_cost()
-returns trigger
-language plpgsql
-as $$
-declare
-  v_kind varchar(30);
-  v_cost_mode varchar(30);
-  v_consumed_mode varchar(30);
-  v_affect boolean;
-  v_settings public.company_inventory_settings%rowtype;
-  v_line_amount numeric(18, 2);
-  v_line_gross numeric(18, 2);
-  v_line_disc numeric(18, 2);
-  v_qty_base numeric(18, 6);
-  v_inbound_amount numeric(18, 2);
-  v_unit_cost numeric(18, 4);
-  v_expiry date;
-  v_serial text;
-  v_purchase_price numeric(18, 4);
-  v_unit_price numeric(18, 4);
-  v_factor numeric(18, 6);
-  v_movement_date date;
-begin
-  if new.source_type <> 'invoice' or new.source_line_id is null then
-    return new;
-  end if;
-
-  select
-    ip.commercial_kind,
-    ip.pricing_cost_mode,
-    ip.pricing_consumed_mode,
-    coalesce(ip.line_adjustments_affect_material_cost, true),
-    iml.line_amount,
-    round((iml.quantity * iml.unit_price)::numeric, 2),
-    coalesce(iml.discount_amount, 0),
-    iml.quantity_base,
-    iml.expiry_date,
-    iml.serial_number,
-    m.purchase_price,
-    iml.unit_price,
-    mu.factor_to_base,
-    i.invoice_date
-  into
-    v_kind,
-    v_cost_mode,
-    v_consumed_mode,
-    v_affect,
-    v_line_amount,
-    v_line_gross,
-    v_line_disc,
-    v_qty_base,
-    v_expiry,
-    v_serial,
-    v_purchase_price,
-    v_unit_price,
-    v_factor,
-    v_movement_date
-  from public.invoice_material_lines iml
-  inner join public.invoices i on i.id = iml.invoice_id
-  inner join public.invoice_patterns ip on ip.id = i.pattern_id
-  inner join public.materials m on m.id = iml.material_id
-  inner join public.material_units mu on mu.id = iml.material_unit_id
-  where iml.id = new.source_line_id;
-
-  if not found then
-    return new;
-  end if;
-
-  select * into v_settings from public.company_inventory_settings where id = 1;
-
-  if new.quantity_base_delta > 0
-     and public.invoice_is_inbound_kind(v_kind) then
-    v_inbound_amount := public.calc_inbound_inventory_amount(
-      v_cost_mode,
-      v_affect,
-      v_line_amount,
-      v_line_gross,
-      v_line_disc
-    );
-    new.total_cost := v_inbound_amount;
-    if v_qty_base > 0 then
-      new.unit_cost := round((v_inbound_amount / v_qty_base)::numeric, 4);
-    else
-      new.unit_cost := 0;
-    end if;
-    return new;
-  end if;
-
-  if new.quantity_base_delta < 0
-     and public.invoice_is_outbound_kind(v_kind) then
-    v_unit_cost := public.calc_outbound_unit_cost(
-      v_consumed_mode,
-      v_settings,
-      v_purchase_price,
-      v_unit_price,
-      v_factor,
-      new.material_id,
-      new.warehouse_id,
-      new.cost_center_id,
-      v_expiry,
-      v_serial,
-      coalesce(new.movement_date, v_movement_date)
-    );
-    new.unit_cost := v_unit_cost;
-    new.total_cost := round((abs(new.quantity_base_delta) * v_unit_cost)::numeric, 2);
-    return new;
-  end if;
-
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_inventory_movements_apply_invoice_line_cost
-  on public.inventory_movements;
-
-create trigger trg_inventory_movements_apply_invoice_line_cost
-  before insert on public.inventory_movements
-  for each row
-  execute function public.inventory_movements_apply_invoice_line_cost();
-
--- ---------------------------------------------------------------------------
--- فحوص ما قبل الترحيل (صلاحية + خصم + مرتجع) — تُعاد في #46 أيضاً
--- ---------------------------------------------------------------------------
-
-create or replace function public.assert_invoice_may_post(p_invoice_id uuid)
+-- تصنيع: المنتج يجب ألا يكون طقماً يُفك عند البيع
+create or replace function public.post_invoice_apply_manufacturing(
+  p_invoice_id uuid,
+  p_je_id uuid,
+  p_inv public.invoices,
+  p_pat public.invoice_patterns,
+  p_inv_settings public.company_inventory_settings,
+  p_inventory_account_id uuid,
+  p_rate numeric
+)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_inv public.invoices%rowtype;
-  v_pat public.invoice_patterns%rowtype;
-  v_gross numeric(18, 4);
-  v_disc numeric(18, 2);
-  v_max numeric(5, 2);
-  v_applies varchar(10);
-  v_line record;
-  v_ref_qty numeric(18, 6);
-  v_ret_qty numeric(18, 6);
+  v_row record;
+  v_consume_cost numeric(18, 2);
+  v_total_consume numeric(18, 2) := 0;
+  v_weight_sum numeric(18, 6) := 0;
+  v_line_weight numeric(18, 6);
+  v_line_alloc numeric(18, 2);
+  v_remaining numeric(18, 2);
+  v_unit_cost numeric(18, 4);
+  v_consume_count int := 0;
+  v_produce_count int := 0;
+  v_use_equal_weights boolean := false;
 begin
-  if not (
-    public.has_permission('invoices.post')
-    or public.has_permission('invoices.edit')
+  if exists (
+    select 1
+    from public.invoice_material_lines iml
+    where iml.invoice_id = p_invoice_id
+      and (
+        iml.manufacturing_role is null
+        or iml.manufacturing_role not in ('consume', 'produce')
+      )
   ) then
-    raise exception 'Permission denied: invoices.post (or invoices.edit) required to post.';
+    raise exception 'Manufacturing lines require manufacturing_role consume or produce.';
   end if;
 
-  select * into v_inv from public.invoices where id = p_invoice_id;
-  if not found then
-    raise exception 'Invoice not found.';
+  select
+    count(*) filter (where manufacturing_role = 'consume'),
+    count(*) filter (where manufacturing_role = 'produce')
+  into v_consume_count, v_produce_count
+  from public.invoice_material_lines
+  where invoice_id = p_invoice_id;
+
+  if v_consume_count < 1 or v_produce_count < 1 then
+    raise exception
+      'Manufacturing requires at least one consume line and one produce line.';
   end if;
 
-  select * into v_pat from public.invoice_patterns where id = v_inv.pattern_id;
+  for v_row in
+    select iml.line_no, m.material_kind, m.material_code, m.composite_mode
+    from public.invoice_material_lines iml
+    inner join public.materials m on m.id = iml.material_id
+    where iml.invoice_id = p_invoice_id
+      and iml.manufacturing_role = 'produce'
+  loop
+    if v_row.material_kind is distinct from 'composite' then
+      raise exception
+        'Manufacturing produce line % must be a composite material (%).',
+        v_row.line_no, v_row.material_code;
+    end if;
+    if coalesce(v_row.composite_mode, 'kit') = 'kit' then
+      raise exception
+        'Manufacturing produce line % (%) is a kit that explodes on outbound. Set composite_mode to finished or disassemblable.',
+        v_row.line_no, v_row.material_code;
+    end if;
+  end loop;
 
-  v_max := v_pat.max_discount_percent;
-  v_applies := coalesce(v_pat.discount_applies_to, 'line');
+  for v_row in
+    select iml.*, m.purchase_price, mu.factor_to_base
+    from public.invoice_material_lines iml
+    inner join public.materials m on m.id = iml.material_id
+    inner join public.material_units mu on mu.id = iml.material_unit_id
+    where iml.invoice_id = p_invoice_id
+      and iml.manufacturing_role = 'consume'
+    order by iml.line_no
+  loop
+    v_consume_cost := public.calc_outbound_line_total_cost(
+      p_pat.pricing_consumed_mode,
+      p_inv_settings,
+      v_row.purchase_price,
+      v_row.unit_price,
+      v_row.factor_to_base,
+      v_row.quantity_base,
+      v_row.material_id,
+      v_row.warehouse_id,
+      v_row.cost_center_id,
+      v_row.expiry_date,
+      v_row.serial_number,
+      p_inv.invoice_date
+    );
+    v_total_consume := v_total_consume + coalesce(v_consume_cost, 0);
 
-  if v_pat.discount_enabled and v_max is not null then
-    if v_applies <> 'invoice' then
-      for v_line in
-        select *
-        from public.invoice_material_lines
-        where invoice_id = p_invoice_id
-      loop
-        v_gross := v_line.quantity * v_line.unit_price;
-        if coalesce(v_line.discount_percent, 0) > v_max then
-          raise exception
-            'Line % discount percent (%) exceeds pattern max (%).',
-            v_line.line_no, v_line.discount_percent, v_max;
-        end if;
-        v_disc := coalesce(v_line.discount_amount, 0);
-        if v_disc > 0 and v_gross > 0
-           and (v_disc / v_gross * 100) > (v_max + 0.01) then
-          raise exception
-            'Line % discount amount exceeds pattern max percent (%).',
-            v_line.line_no, v_max;
-        end if;
-      end loop;
+    if p_inv_settings.inventory_method = 'perpetual'
+       and coalesce(v_consume_cost, 0) > 0 then
+      if p_inventory_account_id is null then
+        raise exception 'Manufacturing (perpetual) requires inventory account.';
+      end if;
+      perform public._invoice_add_journal_line(
+        p_je_id, p_inventory_account_id, 0, v_consume_cost,
+        'تصنيع — إخراج مواد', v_row.cost_center_id, v_row.branch_id,
+        p_inv.currency_id, p_rate,
+        null, null, null, null, p_invoice_id, v_row.id
+      );
     end if;
 
-    if v_applies <> 'line' then
-      if coalesce(v_inv.invoice_discount_percent, 0) > v_max then
-        raise exception
-          'Invoice discount percent (%) exceeds pattern max (%).',
-          v_inv.invoice_discount_percent, v_max;
+    insert into public.inventory_movements (
+      movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+      quantity_delta, quantity_base_delta, unit_cost, total_cost,
+      movement_kind, source_type, source_id, source_line_id,
+      expiry_date, serial_number
+    )
+    values (
+      p_inv.invoice_date, v_row.material_id, v_row.warehouse_id,
+      v_row.branch_id, v_row.cost_center_id,
+      -v_row.quantity, -v_row.quantity_base,
+      case
+        when v_row.quantity_base > 0
+          then round((coalesce(v_consume_cost, 0) / v_row.quantity_base)::numeric, 4)
+        else 0
+      end,
+      coalesce(v_consume_cost, 0),
+      'manufacture_consume', 'invoice', p_invoice_id, v_row.id,
+      v_row.expiry_date, v_row.serial_number
+    );
+  end loop;
+
+  select coalesce(sum(
+    case
+      when coalesce(iml.line_amount, 0) > 0 then iml.line_amount
+      else iml.quantity_base
+    end
+  ), 0)
+  into v_weight_sum
+  from public.invoice_material_lines iml
+  where iml.invoice_id = p_invoice_id
+    and iml.manufacturing_role = 'produce';
+
+  if v_weight_sum <= 0 then
+    v_use_equal_weights := true;
+    v_weight_sum := v_produce_count;
+  end if;
+
+  v_remaining := v_total_consume;
+
+  for v_row in
+    select
+      iml.*,
+      row_number() over (order by iml.line_no) as rn,
+      count(*) over () as cnt
+    from public.invoice_material_lines iml
+    where iml.invoice_id = p_invoice_id
+      and iml.manufacturing_role = 'produce'
+    order by iml.line_no
+  loop
+    if v_row.rn = v_row.cnt then
+      v_line_alloc := v_remaining;
+    else
+      if v_use_equal_weights then
+        v_line_weight := 1;
+      else
+        v_line_weight := case
+          when coalesce(v_row.line_amount, 0) > 0 then v_row.line_amount
+          else v_row.quantity_base
+        end;
       end if;
-      if coalesce(v_inv.invoice_discount_amount, 0) > 0
-         and coalesce(v_inv.invoice_discount_percent, 0) = 0 then
-        select coalesce(sum(iml.line_amount), 0) into v_gross
-        from public.invoice_material_lines iml
-        where iml.invoice_id = p_invoice_id;
-        if v_gross > 0
-           and (v_inv.invoice_discount_amount / v_gross * 100) > (v_max + 0.01) then
-          raise exception
-            'Invoice discount amount exceeds pattern max percent (%).',
-            v_max;
-        end if;
-      end if;
+      v_line_alloc := round((v_total_consume * v_line_weight / v_weight_sum)::numeric, 2);
+      v_remaining := v_remaining - v_line_alloc;
     end if;
-  end if;
 
-  if v_pat.commercial_kind in ('return_sale', 'return_purchase') then
-    for v_line in
-      select *
-      from public.invoice_material_lines
-      where invoice_id = p_invoice_id
-    loop
-      select coalesce(sum(src.quantity), 0)
-      into v_ref_qty
-      from public.invoice_material_lines src
-      where src.material_id = v_line.material_id
-        and src.material_unit_id = v_line.material_unit_id
-        and src.invoice_id in (
-          select v_inv.reference_invoice_id
-          where v_inv.reference_invoice_id is not null
-          union
-          select irl.reference_invoice_id
-          from public.invoice_reference_links irl
-          where irl.invoice_id = p_invoice_id
-        );
+    v_unit_cost := case
+      when v_row.quantity_base > 0
+        then round((v_line_alloc / v_row.quantity_base)::numeric, 4)
+      else 0
+    end;
 
-      select coalesce(sum(ret.quantity), 0)
-      into v_ret_qty
-      from public.invoice_material_lines ret
-      inner join public.invoices ri on ri.id = ret.invoice_id
-      inner join public.invoice_patterns rp on rp.id = ri.pattern_id
-      where ri.status = 'posted'
-        and ri.id is distinct from p_invoice_id
-        and rp.commercial_kind = v_pat.commercial_kind
-        and ret.material_id = v_line.material_id
-        and ret.material_unit_id = v_line.material_unit_id
-        and (
-          ri.reference_invoice_id in (
-            select v_inv.reference_invoice_id
-            where v_inv.reference_invoice_id is not null
-            union
-            select irl.reference_invoice_id
-            from public.invoice_reference_links irl
-            where irl.invoice_id = p_invoice_id
-          )
-          or exists (
-            select 1
-            from public.invoice_reference_links link
-            where link.invoice_id = ri.id
-              and link.reference_invoice_id in (
-                select v_inv.reference_invoice_id
-                where v_inv.reference_invoice_id is not null
-                union
-                select irl.reference_invoice_id
-                from public.invoice_reference_links irl
-                where irl.invoice_id = p_invoice_id
-              )
-          )
-        );
-
-      if v_line.quantity > (v_ref_qty - v_ret_qty) + 0.000001 then
-        raise exception
-          'Return qty for line % exceeds remaining reference qty (available %).',
-          v_line.line_no, greatest(v_ref_qty - v_ret_qty, 0);
+    if p_inv_settings.inventory_method = 'perpetual' and v_line_alloc > 0 then
+      if p_inventory_account_id is null then
+        raise exception 'Manufacturing (perpetual) requires inventory account.';
       end if;
-    end loop;
-  end if;
+      perform public._invoice_add_journal_line(
+        p_je_id, p_inventory_account_id, v_line_alloc, 0,
+        'تصنيع — إدخال منتج', v_row.cost_center_id, v_row.branch_id,
+        p_inv.currency_id, p_rate,
+        null, null, null, null, p_invoice_id, v_row.id
+      );
+    end if;
+
+    insert into public.inventory_movements (
+      movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+      quantity_delta, quantity_base_delta, unit_cost, total_cost,
+      movement_kind, source_type, source_id, source_line_id,
+      expiry_date, serial_number
+    )
+    values (
+      p_inv.invoice_date, v_row.material_id, v_row.warehouse_id,
+      v_row.branch_id, v_row.cost_center_id,
+      v_row.quantity, v_row.quantity_base,
+      v_unit_cost, v_line_alloc,
+      'manufacture_produce', 'invoice', p_invoice_id, v_row.id,
+      v_row.expiry_date, v_row.serial_number
+    );
+  end loop;
 end;
 $$;
 
-grant execute on function public.assert_invoice_may_post(uuid) to authenticated;
-
 -- ---------------------------------------------------------------------------
--- post_invoice — قيود التكلفة من إعدادات النمط
+-- 6) ترحيل تفكيك (+ تالف)
+-- ---------------------------------------------------------------------------
+
+create or replace function public.post_invoice_apply_disassembly(
+  p_invoice_id uuid,
+  p_je_id uuid,
+  p_inv public.invoices,
+  p_pat public.invoice_patterns,
+  p_inv_settings public.company_inventory_settings,
+  p_inventory_account_id uuid,
+  p_cost_account_id uuid,
+  p_rate numeric
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row record;
+  v_consume_cost numeric(18, 2);
+  v_total_consume numeric(18, 2) := 0;
+  v_weight_sum numeric(18, 6) := 0;
+  v_line_weight numeric(18, 6);
+  v_line_alloc numeric(18, 2);
+  v_remaining numeric(18, 2);
+  v_good_qty numeric(18, 6);
+  v_dmg_qty numeric(18, 6);
+  v_total_line_qty numeric(18, 6);
+  v_good_cost numeric(18, 2);
+  v_dmg_cost numeric(18, 2);
+  v_unit_cost numeric(18, 4);
+  v_consume_count int := 0;
+  v_produce_count int := 0;
+  v_use_equal_weights boolean := false;
+  v_qty_base_good numeric(18, 6);
+begin
+  if exists (
+    select 1
+    from public.invoice_material_lines iml
+    where iml.invoice_id = p_invoice_id
+      and (
+        iml.manufacturing_role is null
+        or iml.manufacturing_role not in ('consume', 'produce')
+      )
+  ) then
+    raise exception 'Disassembly lines require manufacturing_role consume or produce.';
+  end if;
+
+  select
+    count(*) filter (where manufacturing_role = 'consume'),
+    count(*) filter (where manufacturing_role = 'produce')
+  into v_consume_count, v_produce_count
+  from public.invoice_material_lines
+  where invoice_id = p_invoice_id;
+
+  if v_consume_count < 1 or v_produce_count < 1 then
+    raise exception
+      'Disassembly requires at least one consume (assembled) line and one produce (component) line.';
+  end if;
+
+  for v_row in
+    select iml.line_no, m.material_kind, m.material_code, m.composite_mode
+    from public.invoice_material_lines iml
+    inner join public.materials m on m.id = iml.material_id
+    where iml.invoice_id = p_invoice_id
+      and iml.manufacturing_role = 'consume'
+  loop
+    if v_row.material_kind is distinct from 'composite'
+       or coalesce(v_row.composite_mode, 'kit') is distinct from 'disassemblable' then
+      raise exception
+        'Disassembly consume line % (%) must be a disassemblable composite material.',
+        v_row.line_no, v_row.material_code;
+    end if;
+  end loop;
+
+  for v_row in
+    select iml.*, m.purchase_price, mu.factor_to_base
+    from public.invoice_material_lines iml
+    inner join public.materials m on m.id = iml.material_id
+    inner join public.material_units mu on mu.id = iml.material_unit_id
+    where iml.invoice_id = p_invoice_id
+      and iml.manufacturing_role = 'consume'
+    order by iml.line_no
+  loop
+    v_consume_cost := public.calc_outbound_line_total_cost(
+      p_pat.pricing_consumed_mode,
+      p_inv_settings,
+      v_row.purchase_price,
+      v_row.unit_price,
+      v_row.factor_to_base,
+      v_row.quantity_base,
+      v_row.material_id,
+      v_row.warehouse_id,
+      v_row.cost_center_id,
+      v_row.expiry_date,
+      v_row.serial_number,
+      p_inv.invoice_date
+    );
+    v_total_consume := v_total_consume + coalesce(v_consume_cost, 0);
+
+    if p_inv_settings.inventory_method = 'perpetual'
+       and coalesce(v_consume_cost, 0) > 0 then
+      if p_inventory_account_id is null then
+        raise exception 'Disassembly (perpetual) requires inventory account.';
+      end if;
+      perform public._invoice_add_journal_line(
+        p_je_id, p_inventory_account_id, 0, v_consume_cost,
+        'تفكيك — إخراج منتج مجمّع', v_row.cost_center_id, v_row.branch_id,
+        p_inv.currency_id, p_rate,
+        null, null, null, null, p_invoice_id, v_row.id
+      );
+    end if;
+
+    insert into public.inventory_movements (
+      movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+      quantity_delta, quantity_base_delta, unit_cost, total_cost,
+      movement_kind, source_type, source_id, source_line_id,
+      expiry_date, serial_number
+    )
+    values (
+      p_inv.invoice_date, v_row.material_id, v_row.warehouse_id,
+      v_row.branch_id, v_row.cost_center_id,
+      -v_row.quantity, -v_row.quantity_base,
+      case
+        when v_row.quantity_base > 0
+          then round((coalesce(v_consume_cost, 0) / v_row.quantity_base)::numeric, 4)
+        else 0
+      end,
+      coalesce(v_consume_cost, 0),
+      'disassemble_consume', 'invoice', p_invoice_id, v_row.id,
+      v_row.expiry_date, v_row.serial_number
+    );
+  end loop;
+
+  select coalesce(sum(
+    greatest(
+      iml.quantity + coalesce(iml.qty_damaged, 0),
+      0.000001
+    )
+  ), 0)
+  into v_weight_sum
+  from public.invoice_material_lines iml
+  where iml.invoice_id = p_invoice_id
+    and iml.manufacturing_role = 'produce';
+
+  if v_weight_sum <= 0 then
+    v_use_equal_weights := true;
+    v_weight_sum := v_produce_count;
+  end if;
+
+  v_remaining := v_total_consume;
+
+  for v_row in
+    select
+      iml.*,
+      mu.factor_to_base,
+      row_number() over (order by iml.line_no) as rn,
+      count(*) over () as cnt
+    from public.invoice_material_lines iml
+    inner join public.material_units mu on mu.id = iml.material_unit_id
+    where iml.invoice_id = p_invoice_id
+      and iml.manufacturing_role = 'produce'
+    order by iml.line_no
+  loop
+    v_good_qty := v_row.quantity;
+    v_dmg_qty := coalesce(v_row.qty_damaged, 0);
+    if v_dmg_qty < 0 then
+      raise exception 'qty_damaged cannot be negative on line %.', v_row.line_no;
+    end if;
+    v_total_line_qty := v_good_qty + v_dmg_qty;
+
+    if v_row.rn = v_row.cnt then
+      v_line_alloc := v_remaining;
+    else
+      if v_use_equal_weights then
+        v_line_weight := 1;
+      else
+        v_line_weight := greatest(v_total_line_qty, 0.000001);
+      end if;
+      v_line_alloc := round((v_total_consume * v_line_weight / v_weight_sum)::numeric, 2);
+      v_remaining := v_remaining - v_line_alloc;
+    end if;
+
+    if v_total_line_qty > 0 then
+      v_good_cost := round((v_line_alloc * v_good_qty / v_total_line_qty)::numeric, 2);
+    else
+      v_good_cost := 0;
+    end if;
+    v_dmg_cost := v_line_alloc - v_good_cost;
+
+    v_qty_base_good := public.material_quantity_to_base(
+      v_row.material_unit_id,
+      v_good_qty
+    );
+    v_unit_cost := case
+      when v_qty_base_good > 0
+        then round((v_good_cost / v_qty_base_good)::numeric, 4)
+      else 0
+    end;
+
+    if p_inv_settings.inventory_method = 'perpetual' then
+      if v_good_cost > 0 then
+        if p_inventory_account_id is null then
+          raise exception 'Disassembly (perpetual) requires inventory account.';
+        end if;
+        perform public._invoice_add_journal_line(
+          p_je_id, p_inventory_account_id, v_good_cost, 0,
+          'تفكيك — إدخال مكوّن صالح', v_row.cost_center_id, v_row.branch_id,
+          p_inv.currency_id, p_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+      if v_dmg_cost > 0 then
+        if p_cost_account_id is null then
+          raise exception
+            'Disassembly with damaged qty requires cost/scrap account (default_cost_account_id).';
+        end if;
+        perform public._invoice_add_journal_line(
+          p_je_id, p_cost_account_id, v_dmg_cost, 0,
+          'تفكيك — مواد تالفة', v_row.cost_center_id, v_row.branch_id,
+          p_inv.currency_id, p_rate,
+          null, null, null, null, p_invoice_id, v_row.id
+        );
+      end if;
+    end if;
+
+    if v_good_qty > 0 then
+      insert into public.inventory_movements (
+        movement_date, material_id, warehouse_id, branch_id, cost_center_id,
+        quantity_delta, quantity_base_delta, unit_cost, total_cost,
+        movement_kind, source_type, source_id, source_line_id,
+        expiry_date, serial_number
+      )
+      values (
+        p_inv.invoice_date, v_row.material_id, v_row.warehouse_id,
+        v_row.branch_id, v_row.cost_center_id,
+        v_good_qty, v_qty_base_good,
+        v_unit_cost, v_good_cost,
+        'disassemble_produce', 'invoice', p_invoice_id, v_row.id,
+        v_row.expiry_date, v_row.serial_number
+      );
+    end if;
+  end loop;
+end;
+$$;
+
+comment on function public.post_invoice_apply_disassembly(
+  uuid, uuid, public.invoices, public.invoice_patterns,
+  public.company_inventory_settings, uuid, uuid, numeric
+) is
+  'تفكيك منتج مجمّع: إخراج المنتج + إدخال مكوّنات صالحة + مصروف تالف.';
+
+grant execute on function public.post_invoice_apply_disassembly(
+  uuid, uuid, public.invoices, public.invoice_patterns,
+  public.company_inventory_settings, uuid, uuid, numeric
+) to authenticated;
+
+-- بذرة نمط تفكيك
+insert into public.invoice_patterns (
+  name_ar, name_en, direction, commercial_kind,
+  numbering_prefix, warehouse_movement, generate_journal,
+  pricing_consumed_mode, pricing_cost_mode, pricing_material_mode,
+  enforce_stock_availability, sort_order
+)
+select
+  'تفكيك', 'Disassembly', 'output', 'disassembly',
+  'DSA', true, true,
+  'weighted_avg', 'line_net', 'none',
+  true, 96
+where not exists (
+  select 1 from public.invoice_patterns
+  where commercial_kind = 'disassembly' and name_ar = 'تفكيك'
+);
+
+insert into public.invoice_pattern_conditions (pattern_id, require_warehouse)
+select p.id, true
+from public.invoice_patterns p
+where p.commercial_kind = 'disassembly'
+  and not exists (
+    select 1 from public.invoice_pattern_conditions c where c.pattern_id = p.id
+  );
+
+-- تتبع أدوار التفكيك مثل التصنيع
+create or replace function public.invoice_material_lines_validate_tracking()
+returns trigger
+language plpgsql
+as $$
+declare
+  v_kind varchar(30);
+  v_status varchar(20);
+  v_tracking_kind varchar(30);
+begin
+  select ip.commercial_kind, i.status
+  into v_kind, v_status
+  from public.invoices i
+  inner join public.invoice_patterns ip on ip.id = i.pattern_id
+  where i.id = new.invoice_id;
+
+  if v_status = 'posted' then
+    raise exception 'Cannot modify material lines on a posted invoice.';
+  end if;
+
+  if v_kind in ('manufacturing', 'disassembly') then
+    if new.manufacturing_role is null
+       or new.manufacturing_role not in ('consume', 'produce') then
+      raise exception 'Manufacturing/disassembly line requires role consume or produce.';
+    end if;
+    v_tracking_kind := case new.manufacturing_role
+      when 'consume' then 'sale'
+      when 'produce' then 'purchase'
+    end;
+  else
+    if new.manufacturing_role is not null then
+      raise exception 'manufacturing_role is only allowed on manufacturing/disassembly invoices.';
+    end if;
+    v_tracking_kind := v_kind;
+  end if;
+
+  perform public.assert_material_line_tracking(
+    new.material_id,
+    v_tracking_kind,
+    new.expiry_date,
+    new.serial_number
+  );
+
+  return new;
+end;
+$$;
+-- ---------------------------------------------------------------------------
+-- 7) post_invoice مع فرع التفكيك
 -- ---------------------------------------------------------------------------
 
 create or replace function public.post_invoice(p_invoice_id uuid)
@@ -1488,6 +2020,5 @@ exception
     raise;
 end;
 $$;
-
 
 grant execute on function public.post_invoice(uuid) to authenticated;

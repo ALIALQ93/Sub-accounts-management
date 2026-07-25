@@ -172,18 +172,75 @@ export function validateInvoice(context: InvoiceValidationContext): string | nul
       const material = context.materials?.find((row) => row.id === line.material_id);
       if (material) {
         if (
-          isExpiryRequiredOnLine(material, context.commercialKind) &&
+          isExpiryRequiredOnLine(
+            material,
+            context.commercialKind,
+            line.manufacturing_role,
+          ) &&
           !line.expiry_date
         ) {
           return `${label}: تاريخ انتهاء الصلاحية مطلوب — أدخله في سطر الفاتورة حسب إعداد بطاقة المادة.`;
         }
         if (
-          isSerialRequiredOnLine(material, context.commercialKind) &&
+          isSerialRequiredOnLine(
+            material,
+            context.commercialKind,
+            line.manufacturing_role,
+          ) &&
           !line.serial_number?.trim()
         ) {
           return `${label}: الرقم التسلسلي مطلوب لهذه المادة عند ${
-            isInboundStockMovement(context.commercialKind) ? "الإدخال" : "الإخراج"
+            isInboundStockMovement(
+              context.commercialKind,
+              line.manufacturing_role,
+            )
+              ? "الإدخال"
+              : "الإخراج"
           }.`;
+        }
+      }
+
+      if (context.commercialKind === "manufacturing") {
+        if (
+          line.manufacturing_role !== "consume" &&
+          line.manufacturing_role !== "produce"
+        ) {
+          return `${label}: حدّد دور السطر (استهلاك أو إنتاج).`;
+        }
+        if (
+          line.manufacturing_role === "produce" &&
+          material?.material_kind &&
+          material.material_kind !== "composite"
+        ) {
+          return `${label}: سطر الإنتاج يجب أن يكون مادة تجميعية.`;
+        }
+        if (
+          line.manufacturing_role === "produce" &&
+          (material?.composite_mode ?? "kit") === "kit"
+        ) {
+          return `${label}: منتج التصنيع يجب أن يكون «منتج نهائي» أو «قابل للتفكيك» وليس طقماً.`;
+        }
+      }
+
+      if (context.commercialKind === "disassembly") {
+        if (
+          line.manufacturing_role !== "consume" &&
+          line.manufacturing_role !== "produce"
+        ) {
+          return `${label}: حدّد دور السطر (منتج للتفكيك أو مكوّن مسترد).`;
+        }
+        if (
+          line.manufacturing_role === "consume" &&
+          (material?.material_kind !== "composite" ||
+            (material.composite_mode ?? "kit") !== "disassemblable")
+        ) {
+          return `${label}: سطر التفكيك يجب أن يكون مادة تجميعية قابلة للتفكيك.`;
+        }
+        if (
+          line.manufacturing_role === "produce" &&
+          (line.qty_damaged ?? 0) < 0
+        ) {
+          return `${label}: كمية التالف لا يمكن أن تكون سالبة.`;
         }
       }
     }
@@ -201,6 +258,19 @@ export function validateInvoice(context: InvoiceValidationContext): string | nul
 
     if (!hasMaterials && !hasAccounts) {
       return "لا يمكن ترحيل فاتورة فارغة.";
+    }
+
+    if (
+      context.commercialKind === "manufacturing" ||
+      context.commercialKind === "disassembly"
+    ) {
+      const hasConsume = lines.some((l) => l.manufacturing_role === "consume");
+      const hasProduce = lines.some((l) => l.manufacturing_role === "produce");
+      if (!hasConsume || !hasProduce) {
+        return context.commercialKind === "disassembly"
+          ? "فاتورة التفكيك تتطلب منتجاً للتفكيك ومكوّناً مسترداً واحداً على الأقل."
+          : "فاتورة التصنيع تتطلب سطر استهلاك واحداً على الأقل وسطر إنتاج واحداً على الأقل.";
+      }
     }
 
     for (const line of lines) {

@@ -125,6 +125,8 @@ function toDraftMaterialLines(
     discount_amount?: number | null;
     extra_percent?: number | null;
     extra_amount?: number | null;
+    manufacturing_role?: "consume" | "produce" | null;
+    qty_damaged?: number | null;
   }>,
 ): DraftMaterialLine[] {
   return lines.map((line) => ({
@@ -150,6 +152,8 @@ function toDraftMaterialLines(
     discount_amount: line.discount_amount ?? null,
     extra_percent: line.extra_percent ?? null,
     extra_amount: line.extra_amount ?? null,
+    manufacturing_role: line.manufacturing_role ?? null,
+    qty_damaged: line.qty_damaged ?? null,
   }));
 }
 
@@ -1817,6 +1821,20 @@ export function InvoiceForm({
       {pattern.warehouse_movement && (
         <section className="rounded-xl border border-slate-200 p-4">
           <h2 className="mb-1 text-sm font-bold text-slate-800">أسطر المواد</h2>
+          {pattern.commercial_kind === "manufacturing" && (
+            <p className="mb-3 text-xs text-slate-500">
+              التصنيع: أسطر استهلاك (إخراج) وأسطر إنتاج (إدخال مادة تجميعية
+              نهائية أو قابلة للتفكيك). تكلفة المنتج = مجموع تكلفة المواد
+              المستهلكة.
+            </p>
+          )}
+          {pattern.commercial_kind === "disassembly" && (
+            <p className="mb-3 text-xs text-slate-500">
+              التفكيك: إخراج منتج مجمّع قابل للتفكيك، وإدخال المكوّنات الصالحة.
+              عمود «تالف» يخصم من المخزون ويُحمَّل على حساب التكلفة/الهالك في
+              النمط.
+            </p>
+          )}
           {(pattern.track_expiry_on_lines || pattern.track_serial_on_lines) && (
             <p className="mb-3 text-xs text-slate-500">
               {pattern.track_expiry_on_lines &&

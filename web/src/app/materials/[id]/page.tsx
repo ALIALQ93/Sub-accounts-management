@@ -28,6 +28,10 @@ function toFormValues(material: Material): MaterialFormValues {
     name_en: material.name_en ?? "",
     category_id: material.category_id ?? "",
     material_kind: material.material_kind ?? "normal",
+    composite_mode:
+      material.material_kind === "composite"
+        ? material.composite_mode ?? "kit"
+        : null,
     purchase_price: material.purchase_price,
     sale_price: material.sale_price,
     inventory_account_id: material.inventory_account_id ?? "",

@@ -39,6 +39,8 @@ export interface InvoiceMaterialLineInput {
   size?: string | null;
   source?: string | null;
   caliber?: string | null;
+  manufacturing_role?: "consume" | "produce" | null;
+  qty_damaged?: number | null;
 }
 
 export interface InvoiceAccountLineInput {
@@ -365,6 +367,8 @@ export const invoiceApi = {
           discount_amount: line.discount_amount ?? 0,
           extra_percent: line.extra_percent ?? null,
           extra_amount: line.extra_amount ?? 0,
+          manufacturing_role: line.manufacturing_role ?? null,
+          qty_damaged: line.qty_damaged ?? null,
         })),
       );
       throwIfSupabaseError(error);

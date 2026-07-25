@@ -1,4 +1,5 @@
 export type MaterialKind = "normal" | "composite";
+export type CompositeMode = "kit" | "finished" | "disassemblable";
 export type UnitConversionOp = "multiply" | "divide";
 
 export interface UnitCatalogItem {
@@ -23,6 +24,7 @@ export interface Material {
   name_en: string | null;
   category_id: string | null;
   material_kind: MaterialKind;
+  composite_mode: CompositeMode | null;
   purchase_price: number;
   sale_price: number;
   inventory_account_id: string | null;
@@ -56,6 +58,7 @@ export interface MaterialFormValues {
   name_en: string;
   category_id: string;
   material_kind: MaterialKind;
+  composite_mode: CompositeMode | null;
   purchase_price: number;
   sale_price: number;
   inventory_account_id: string;

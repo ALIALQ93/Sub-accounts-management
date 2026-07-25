@@ -620,7 +620,14 @@ export function MaterialForm({
               value={values.material_kind}
               onChange={(event) => {
                 const kind = event.target.value as "normal" | "composite";
-                setValues((current) => ({ ...current, material_kind: kind }));
+                setValues((current) => ({
+                  ...current,
+                  material_kind: kind,
+                  composite_mode:
+                    kind === "composite"
+                      ? current.composite_mode ?? "kit"
+                      : null,
+                }));
                 if (kind === "normal") setBomRows([]);
                 if (kind === "composite" && activeTab === "bom") {
                   /* keep */
@@ -635,6 +642,35 @@ export function MaterialForm({
               <option value="composite">تجميعية</option>
             </select>
           </label>
+          {values.material_kind === "composite" && (
+            <label className="grid gap-1 text-sm md:col-span-2">
+              <span className="font-medium">سلوك التجميع / التفكيك</span>
+              <select
+                value={values.composite_mode ?? "kit"}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    composite_mode: event.target.value as
+                      | "kit"
+                      | "finished"
+                      | "disassemblable",
+                  }))
+                }
+                disabled={!canEdit || isSaving}
+                className="rounded-md border border-slate-300 px-3 py-2"
+              >
+                <option value="kit">
+                  طقم — يُفك عند البيع/الإخراج (استهلاك المكوّنات)
+                </option>
+                <option value="finished">
+                  منتج نهائي — بدون تفكيك (مثل برجر المطعم)
+                </option>
+                <option value="disassemblable">
+                  قابل للتفكيك — فصل المكوّنات مع تسجيل التالف
+                </option>
+              </select>
+            </label>
+          )}
         </div>
       </section>
 
@@ -775,9 +811,11 @@ export function MaterialForm({
               </label>
               {values.material_kind === "composite" && (
                 <p className="md:col-span-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  عند استخدام المادة التجميعية في الفواتير يُستهلك مخزون المواد
-                  العادية وفق كميات المكوّنات — لا يُخزَّن رصيد للمادة التجميعية
-                  نفسها.
+                  {values.composite_mode === "finished"
+                    ? "منتج نهائي: يُخزَّن رصيد للمادة التجميعية نفسها ولا تُفك عند البيع. مناسب للتصنيع (مطاعم)."
+                    : values.composite_mode === "disassemblable"
+                      ? "قابل للتفكيك: يُخزَّن كمنتج مجمّع، ويمكن تفكيكه لاحقاً عبر فاتورة «تفكيك» مع تحديد الكميات التالفة."
+                      : "طقم: عند البيع/الإخراج يُستهلك مخزون المكوّنات وفق بطاقة التجميع — لا يُخزَّن رصيد للأب."}
                 </p>
               )}
             </div>

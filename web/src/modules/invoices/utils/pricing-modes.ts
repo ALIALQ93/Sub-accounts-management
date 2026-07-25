@@ -38,6 +38,12 @@ export function defaultPricingMaterialMode(
   commercialKind: string,
 ): PricingMaterialMode {
   if (
+    commercialKind === "manufacturing" ||
+    commercialKind === "disassembly"
+  ) {
+    return "none";
+  }
+  if (
     commercialKind === "purchase" ||
     commercialKind === "return_sale" ||
     commercialKind === "opening_stock" ||

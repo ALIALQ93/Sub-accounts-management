@@ -7,7 +7,11 @@ export type InvoiceCommercialKind =
   | "transfer_in"
   | "return_sale"
   | "return_purchase"
-  | "opening_stock";
+  | "opening_stock"
+  | "manufacturing"
+  | "disassembly";
+
+export type ManufacturingLineRole = "consume" | "produce";
 
 export type InvoiceSettlementMode = "credit" | "cash";
 
@@ -189,6 +193,8 @@ export interface InvoiceMaterialLine {
   size?: string | null;
   source?: string | null;
   caliber?: string | null;
+  manufacturing_role?: ManufacturingLineRole | null;
+  qty_damaged?: number | null;
   material_code?: string;
   material_name_ar?: string;
   unit_name_ar?: string;
@@ -223,6 +229,7 @@ export interface MaterialOption {
   name_en: string | null;
   category_id: string | null;
   material_kind?: "normal" | "composite";
+  composite_mode?: "kit" | "finished" | "disassemblable" | null;
   sale_price: number;
   purchase_price: number;
   is_active: boolean;
