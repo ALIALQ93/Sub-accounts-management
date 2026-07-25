@@ -29,7 +29,10 @@ export function MaterialSearchField({
     () =>
       materials.map((material) => ({
         id: material.id,
-        label: `${material.material_code} — ${material.name_ar}`,
+        label:
+          material.material_kind === "composite"
+            ? `${material.material_code} — ${material.name_ar} (تجميعية)`
+            : `${material.material_code} — ${material.name_ar}`,
         sublabel: material.category_name_ar ?? undefined,
         searchText: `${material.material_code} ${material.name_ar} ${material.name_en ?? ""} ${material.category_code ?? ""} ${material.category_name_ar ?? ""}`,
       })),

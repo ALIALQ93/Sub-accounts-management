@@ -175,10 +175,7 @@ export function MaterialForm({
   const bomCandidates = useMemo(
     () =>
       normalMaterials.filter(
-        (material) =>
-          material.is_active &&
-          material.material_kind !== "composite" &&
-          material.id !== materialId,
+        (material) => material.is_active && material.id !== materialId,
       ),
     [normalMaterials, materialId],
   );
@@ -999,7 +996,7 @@ export function MaterialForm({
                 <table className="w-full min-w-[900px] border-collapse text-sm">
                   <thead className="bg-slate-50">
                     <tr className="text-right text-slate-700">
-                      <th className="border-b border-slate-200 p-2">المادة العادية</th>
+                      <th className="border-b border-slate-200 p-2">المادة</th>
                       <th className="border-b border-slate-200 p-2">الكمية</th>
                       <th className="border-b border-slate-200 p-2">وحدة الاستهلاك</th>
                       <th className="border-b border-slate-200 p-2">ملاحظات</th>

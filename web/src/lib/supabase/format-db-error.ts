@@ -70,6 +70,14 @@ export function formatDbError(message: string | null | undefined): string {
     return "لا يمكن أن يكون التصنيف أباً لنفسه.";
   }
 
+  if (/This component would create a circular BOM reference/i.test(raw)) {
+    return "لا يمكن إضافة هذا المكوّن — سيُنشئ دورة حلقية (المادة تدخل ضمن مكوّناتها بشكل غير مباشر).";
+  }
+
+  if (/Composite material has no BOM components/i.test(raw)) {
+    return "هذه المادة التجميعية بلا مكوّنات — أضف مكوّناً واحداً على الأقل قبل استخدامها في حركة مخزون.";
+  }
+
   if (/requires expiry date on inbound/i.test(raw)) {
     return "تاريخ انتهاء الصلاحية مطلوب عند الإدخال — أدخله في سطر الفاتورة حسب إعداد بطاقة المادة.";
   }

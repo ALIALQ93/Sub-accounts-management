@@ -161,6 +161,7 @@ powershell -File database/build_setup_demo_restaurant.ps1
 | `patch_invoice_material_require_base_unit.sql` | رفض سطر فاتورة لمادة بلا وحدة أساس | **#45 — مواد** |
 | `patch_invoices_audit_fix.sql` | حد خصم/مرتجع/صلاحية ترحيل/إلغاء مسودة/RLS فواتير | **#46 — تدقيق فواتير** |
 | `patch_setup_complete.sql` | `company_settings.is_setup_complete` لويزارد `/setup` | **#47 — إعداد أولي** |
+| `patch_materials_bom_nested.sql` | BOM متعدد المستويات — مكوّن تجميعي داخل تجميعية + منع الدورات الحلقية | **#48 — مواد** |
 | `06_storage.sql` | Storage buckets | مدمج في `setup_all` |
 
 ## إعادة توليد setup_all.sql

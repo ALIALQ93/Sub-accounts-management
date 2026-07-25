@@ -143,7 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <p className="hidden text-[10px] text-slate-400 md:block">
-          القوائم تُفتح في تبويب متصفح منفصل
+          القوائم تُفتح في تبويب منفصل — وإن كان القسم مفتوحاً يُعاد إليه
         </p>
       </div>
 

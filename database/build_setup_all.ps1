@@ -52,7 +52,8 @@ $patchFiles = @(
     'patch_invoices_audit_fix.sql',
     'hotfix_pos_invoice_patterns_rls.sql',
     'patch_pos_audit_fixes.sql',
-    'patch_setup_complete.sql'
+    'patch_setup_complete.sql',
+    'patch_materials_bom_nested.sql'
 )
 
 $out = Join-Path $here 'setup_all.sql'
