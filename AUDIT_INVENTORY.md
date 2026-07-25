@@ -1,5 +1,7 @@
 # تدقيق عميق — مراحل الجرد (فحص الرصيد المتاح)
 
+> **حالة المعالجة (مستودع الكود، 2026-07-25):** **لا يزال غير مُصلَح.** أعيد تأكيده مستقلاً بتاريخ 2026-07-23 عبر `audit-reports/2026-07-22-materials-warehouses-audit.md §3` — النسخة الفعّالة الحالية من `inventory_movements_enforce_stock()` (`database/patch_outbound_lot_stock.sql:84-168`) ما زالت بلا `SELECT ... FOR UPDATE` أو `pg_advisory_xact_lock` أو أي قفل صف. نفس الثغرة مذكورة أيضاً كبند #4 (منخفض/يتضخم بالسياق) في `AUDIT_POS.md`. التوصية بذاك التقرير الأحدث: قفل استشاري `pg_advisory_xact_lock(hashtext(material_id::text || warehouse_id::text))` داخل الدالة، أو الحل المعماري الأشمل: عمود رصيد مُخزَّن (materialized) لكل (مادة، مستودع) يُحدَّث بتريغر ويوفّر نقطة طبيعية لـ`FOR UPDATE`.
+
 جزء من التدقيق الشامل. تركيز هذا الملف: `patch_outbound_stock_check.sql` و`patch_outbound_lot_stock.sql` (منع البيع/الإخراج بدون رصيد كافٍ) — أهم آلية حماية بمراحل الجرد. باقي ملفات phase2-7 (تكلفة، تقارير) تحتاج جولة منفصلة لاحقاً لو رغبت.
 
 ---
