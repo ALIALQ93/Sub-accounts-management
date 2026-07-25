@@ -24,8 +24,48 @@ function isMissingTable(error: PostgrestError | null): boolean {
   );
 }
 
-function isMissingColumn(error: PostgrestError | null, column: string): boolean {
-  return error?.code === "42703" && (error.message ?? "").includes(column);
+function isMissingColumn(error: PostgrestError | null, column?: string): boolean {
+  if (!error) return false;
+  // 42703 = undefined_column, PGRST204 = column missing from PostgREST schema cache
+  const isSchemaMiss =
+    error.code === "42703" ||
+    error.code === "PGRST204" ||
+    /column .* does not exist/i.test(error.message ?? "") ||
+    /Could not find the .+ column/i.test(error.message ?? "");
+  if (!isSchemaMiss) return false;
+  if (!column) return true;
+  return (error.message ?? "").includes(column);
+}
+
+/** أعمدة اختيارية قد تكون غير مطبّقة بعد على قاعدة الإنتاج */
+const OPTIONAL_MATERIAL_COLUMNS = [
+  "composite_mode",
+  "material_kind",
+  "min_stock",
+  "max_stock",
+  "barcode",
+  "manufacturer",
+  "supplier_name",
+  "color",
+  "size",
+  "weight",
+  "notes",
+  "has_expiry_date",
+  "expiry_days",
+  "require_expiry_on_inbound",
+  "require_expiry_on_outbound",
+  "has_serial_number",
+  "require_serial_on_inbound",
+  "require_serial_on_outbound",
+  "purchase_price",
+] as const;
+
+function shouldRetryMaterialSelect(error: PostgrestError | null): boolean {
+  if (!error) return false;
+  if (isMissingColumn(error)) return true;
+  return OPTIONAL_MATERIAL_COLUMNS.some((column) =>
+    isMissingColumn(error, column),
+  );
 }
 
 const MATERIAL_SELECT_CORE =
@@ -422,13 +462,7 @@ async function mutateMaterialRow(
     }
 
     lastError = result.error;
-    if (
-      !isMissingColumn(result.error, "min_stock") &&
-      !isMissingColumn(result.error, "max_stock") &&
-      !isMissingColumn(result.error, "barcode") &&
-      !isMissingColumn(result.error, "purchase_price") &&
-      !isMissingColumn(result.error, "composite_mode")
-    ) {
+    if (!shouldRetryMaterialSelect(result.error)) {
       break;
     }
   }
@@ -486,11 +520,15 @@ async function mutateUnitRow(
 export const materialApi = {
   async listMaterials(): Promise<MaterialListItem[]> {
     const supabase = getSupabaseClient();
+    const withRels = (select: string) =>
+      `${select}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`;
     const attempts = [
-      `${MATERIAL_SELECT_TRACKING}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
-      `${MATERIAL_SELECT_EXTENDED}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
-      `${MATERIAL_SELECT_WITH_MIN}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
-      `${MATERIAL_SELECT_CORE}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`,
+      withRels(MATERIAL_SELECT_TRACKING),
+      withRels(MATERIAL_SELECT_EXTENDED),
+      withRels(MATERIAL_SELECT_WITH_MIN),
+      withRels(MATERIAL_SELECT_WITH_COMPOSITE),
+      withRels(MATERIAL_SELECT_WITH_KIND),
+      withRels(MATERIAL_SELECT_CORE),
       `${MATERIAL_SELECT_CORE}, material_categories ( category_code, name_ar )`,
     ];
 
@@ -508,12 +546,7 @@ export const materialApi = {
         break;
       }
       error = result.error;
-      if (
-        !isMissingColumn(result.error, "min_stock") &&
-        !isMissingColumn(result.error, "max_stock") &&
-        !isMissingColumn(result.error, "barcode") &&
-        !isMissingColumn(result.error, "has_expiry_date")
-      ) {
+      if (!shouldRetryMaterialSelect(result.error)) {
         break;
       }
     }
@@ -562,6 +595,8 @@ export const materialApi = {
       MATERIAL_SELECT_TRACKING,
       MATERIAL_SELECT_EXTENDED,
       MATERIAL_SELECT_WITH_MIN,
+      MATERIAL_SELECT_WITH_COMPOSITE,
+      MATERIAL_SELECT_WITH_KIND,
       MATERIAL_SELECT_CORE,
     ];
 
@@ -576,12 +611,7 @@ export const materialApi = {
         break;
       }
       error = result.error;
-      if (
-        !isMissingColumn(result.error, "min_stock") &&
-        !isMissingColumn(result.error, "max_stock") &&
-      !isMissingColumn(result.error, "barcode") &&
-      !isMissingColumn(result.error, "has_expiry_date")
-    ) {
+      if (!shouldRetryMaterialSelect(result.error)) {
         break;
       }
     }
