@@ -60,8 +60,27 @@ const OPTIONAL_MATERIAL_COLUMNS = [
   "purchase_price",
 ] as const;
 
+/** أعمدة مؤكَّد غيابها في هذه الجلسة — لتجنب إعادة طلبات 400 */
+const missingMaterialColumns = new Set<string>();
+
+function rememberMissingMaterialColumns(error: PostgrestError | null): void {
+  if (!error) return;
+  const fromMessage = error.message?.match(
+    /column materials\.(\w+) does not exist/i,
+  );
+  if (fromMessage?.[1]) {
+    missingMaterialColumns.add(fromMessage[1]);
+  }
+  for (const column of OPTIONAL_MATERIAL_COLUMNS) {
+    if (isMissingColumn(error, column)) {
+      missingMaterialColumns.add(column);
+    }
+  }
+}
+
 function shouldRetryMaterialSelect(error: PostgrestError | null): boolean {
   if (!error) return false;
+  rememberMissingMaterialColumns(error);
   if (isMissingColumn(error)) return true;
   return OPTIONAL_MATERIAL_COLUMNS.some((column) =>
     isMissingColumn(error, column),
@@ -71,14 +90,44 @@ function shouldRetryMaterialSelect(error: PostgrestError | null): boolean {
 const MATERIAL_SELECT_CORE =
   "id, material_code, name_ar, name_en, category_id, sale_price, purchase_price, inventory_account_id, is_active";
 
+/** أجزاء اختيارية مستقلة — حتى لا يمنع غياب composite_mode بقية الحقول */
+const MATERIAL_OPTIONAL_SELECT_PARTS: { column: string; fragment: string }[] = [
+  { column: "material_kind", fragment: "material_kind" },
+  { column: "composite_mode", fragment: "composite_mode" },
+  { column: "min_stock", fragment: "min_stock" },
+  { column: "max_stock", fragment: "max_stock" },
+  { column: "barcode", fragment: "barcode" },
+  { column: "manufacturer", fragment: "manufacturer" },
+  { column: "supplier_name", fragment: "supplier_name" },
+  { column: "color", fragment: "color" },
+  { column: "size", fragment: "size" },
+  { column: "weight", fragment: "weight" },
+  { column: "notes", fragment: "notes" },
+  { column: "has_expiry_date", fragment: "has_expiry_date" },
+  { column: "expiry_days", fragment: "expiry_days" },
+  { column: "require_expiry_on_inbound", fragment: "require_expiry_on_inbound" },
+  { column: "require_expiry_on_outbound", fragment: "require_expiry_on_outbound" },
+  { column: "has_serial_number", fragment: "has_serial_number" },
+  { column: "require_serial_on_inbound", fragment: "require_serial_on_inbound" },
+  { column: "require_serial_on_outbound", fragment: "require_serial_on_outbound" },
+];
+
+function buildMaterialSelect(options?: {
+  includeKnownMissing?: boolean;
+}): string {
+  const includeKnownMissing = options?.includeKnownMissing ?? false;
+  const parts = [MATERIAL_SELECT_CORE];
+  for (const part of MATERIAL_OPTIONAL_SELECT_PARTS) {
+    if (!includeKnownMissing && missingMaterialColumns.has(part.column)) {
+      continue;
+    }
+    parts.push(part.fragment);
+  }
+  return parts.join(", ");
+}
+
+// توافق مع مسارات الحفظ الاحتياطية
 const MATERIAL_SELECT_WITH_KIND = `${MATERIAL_SELECT_CORE}, material_kind`;
-const MATERIAL_SELECT_WITH_COMPOSITE = `${MATERIAL_SELECT_WITH_KIND}, composite_mode`;
-
-const MATERIAL_SELECT_WITH_MIN = `${MATERIAL_SELECT_WITH_COMPOSITE}, min_stock`;
-
-const MATERIAL_SELECT_EXTENDED = `${MATERIAL_SELECT_WITH_MIN}, max_stock, barcode, manufacturer, supplier_name, color, size, weight, notes`;
-
-const MATERIAL_SELECT_TRACKING = `${MATERIAL_SELECT_EXTENDED}, has_expiry_date, expiry_days, require_expiry_on_inbound, require_expiry_on_outbound, has_serial_number, require_serial_on_inbound, require_serial_on_outbound`;
 
 const UNIT_SELECT_CORE =
   "id, material_id, unit_code, name_ar, name_en, is_base_unit, factor_to_base, is_active, sort_order";
@@ -414,14 +463,12 @@ async function mutateMaterialRow(
 ): Promise<Material> {
   const supabase = getSupabaseClient();
   const attempts: { select: string; payload: Record<string, unknown> }[] = [
-    { select: MATERIAL_SELECT_TRACKING, payload },
+    { select: buildMaterialSelect({ includeKnownMissing: true }), payload },
     {
-      select: MATERIAL_SELECT_EXTENDED,
-      payload: stripTrackingMaterialFields(payload),
-    },
-    {
-      select: MATERIAL_SELECT_WITH_MIN,
-      payload: stripExtendedMaterialFields(stripTrackingMaterialFields(payload)),
+      select: buildMaterialSelect(),
+      payload: missingMaterialColumns.has("composite_mode")
+        ? stripCompositeModeField(payload)
+        : payload,
     },
     {
       select: MATERIAL_SELECT_WITH_KIND,
@@ -435,7 +482,9 @@ async function mutateMaterialRow(
       select: MATERIAL_SELECT_CORE,
       payload: stripMaterialKindField(
         stripMinStockField(
-          stripExtendedMaterialFields(stripTrackingMaterialFields(payload)),
+          stripExtendedMaterialFields(
+            stripTrackingMaterialFields(stripCompositeModeField(payload)),
+          ),
         ),
       ),
     },
@@ -522,20 +571,20 @@ export const materialApi = {
     const supabase = getSupabaseClient();
     const withRels = (select: string) =>
       `${select}, material_categories ( category_code, name_ar ), material_units ( id, is_base_unit )`;
-    const attempts = [
-      withRels(MATERIAL_SELECT_TRACKING),
-      withRels(MATERIAL_SELECT_EXTENDED),
-      withRels(MATERIAL_SELECT_WITH_MIN),
-      withRels(MATERIAL_SELECT_WITH_COMPOSITE),
-      withRels(MATERIAL_SELECT_WITH_KIND),
-      withRels(MATERIAL_SELECT_CORE),
-      `${MATERIAL_SELECT_CORE}, material_categories ( category_code, name_ar )`,
-    ];
 
     let rows: Record<string, unknown>[] | null = null;
     let error: PostgrestError | null = null;
+    let previousSelect: string | null = null;
 
-    for (const select of attempts) {
+    for (let i = 0; i < 6; i++) {
+      const base =
+        i === 0
+          ? buildMaterialSelect({ includeKnownMissing: true })
+          : buildMaterialSelect();
+      const select = withRels(base);
+      if (select === previousSelect) break;
+      previousSelect = select;
+
       const result = await supabase
         .from("materials")
         .select(select)
@@ -548,6 +597,25 @@ export const materialApi = {
       error = result.error;
       if (!shouldRetryMaterialSelect(result.error)) {
         break;
+      }
+    }
+
+    if (error && shouldRetryMaterialSelect(error)) {
+      for (const select of [
+        withRels(MATERIAL_SELECT_CORE),
+        `${MATERIAL_SELECT_CORE}, material_categories ( category_code, name_ar )`,
+      ]) {
+        const result = await supabase
+          .from("materials")
+          .select(select)
+          .order("material_code", { ascending: true });
+        if (!result.error) {
+          rows = result.data as unknown as Record<string, unknown>[];
+          error = null;
+          break;
+        }
+        error = result.error;
+        if (!shouldRetryMaterialSelect(result.error)) break;
       }
     }
 
@@ -591,19 +659,18 @@ export const materialApi = {
   },
 
   async getMaterialById(id: string): Promise<Material | null> {
-    const attempts = [
-      MATERIAL_SELECT_TRACKING,
-      MATERIAL_SELECT_EXTENDED,
-      MATERIAL_SELECT_WITH_MIN,
-      MATERIAL_SELECT_WITH_COMPOSITE,
-      MATERIAL_SELECT_WITH_KIND,
-      MATERIAL_SELECT_CORE,
-    ];
-
     let row: Record<string, unknown> | null = null;
     let error: PostgrestError | null = null;
+    let previousSelect: string | null = null;
 
-    for (const select of attempts) {
+    for (let i = 0; i < 6; i++) {
+      const select =
+        i === 0
+          ? buildMaterialSelect({ includeKnownMissing: true })
+          : buildMaterialSelect();
+      if (select === previousSelect) break;
+      previousSelect = select;
+
       const result = await selectMaterialById(id, select);
       if (!result.error) {
         row = result.row;
@@ -613,6 +680,16 @@ export const materialApi = {
       error = result.error;
       if (!shouldRetryMaterialSelect(result.error)) {
         break;
+      }
+    }
+
+    if (error && shouldRetryMaterialSelect(error)) {
+      const result = await selectMaterialById(id, MATERIAL_SELECT_CORE);
+      if (!result.error) {
+        row = result.row;
+        error = null;
+      } else {
+        error = result.error;
       }
     }
 
