@@ -20360,40 +20360,99 @@ create policy "voucher_attachments_delete" on storage.objects
 -- =============================================================================
 -- demo_restaurant.sql — بذور عرض لمطعم (بعد setup_all أو ضمن الملف الموحّد)
 -- =============================================================================
--- الاستخدام:
---   • منفرداً: بعد تشغيل setup_all.sql
---   • أو ضمن: setup_demo_restaurant.sql (موصى به للعرض)
+-- الاستخدام الموصى به (حذف كامل + إعادة بناء + بذور):
+--     شغّل database/setup_demo_restaurant.sql كاملاً في SQL Editor
+--
+-- هذا الملف وحده: يعيد زرع/تحديث بيانات العرض على مخطط موجود.
+-- إن وُجدت بذور سابقة يمسج بيانات العرض DEMO-* ثم يعيد الزرع.
 --
 -- إعادة توليد الملف الموحّد:
 --     powershell -File database/build_setup_demo_restaurant.ps1
---
--- ماذا يزرع (مطعم الباب الذهبي):
---   1–4) شركة · حسابات · فروع/مستودعات · مخزون/فترة
---   5) مواد نيّة + تتبّع + معدات
---   5ب) سلسلة متعددة المراحل: R-PATTY / R-LAMB-SEAS / R-CHICK-MAR → P-*
---       + K-COMBO + D-CHICK-WHOLE + BOM
---   6–8) عملاء/موردون · أنماط (شامل تصنيع/تفكيك) · POS
---   9) أرصدة افتتاحية مخزون (مواد نيّة) + دفعات صلاحية/تسلسلي
---  10) قيد افتتاحي OPEN-* · مشتريات · مناقلة · تصنيع مرحلتين · بيع
---  11) قيد إيجار
---
--- ملاحظة: ترحيل الفواتير من البذور يعمل من SQL Editor (postgres).
--- إن كانت البذور مطبّقة مسبقاً يرفض التشغيل حتى إعادة setup.
 -- =============================================================================
 
 do $$
 begin
-  if exists (
+  if not exists (select 1 from public.accounts where code = '1') then
+    raise exception
+      'demo_restaurant: المخطط غير جاهز. شغّل setup_all.sql أو setup_demo_restaurant.sql أولاً.';
+  end if;
+end $$;
+
+-- إن كانت بذور العرض موجودة: امسح مستندات/حركات العرض فقط ثم تابع الزرع
+do $$
+begin
+  if not exists (
     select 1 from public.company_settings
     where id = 1 and legal_name_ar = 'مطعم الباب الذهبي'
+  ) and not exists (
+    select 1 from public.invoices where invoice_no like 'DEMO-%'
   ) then
-    raise exception
-      'demo_restaurant: already applied. Re-run setup_all.sql (or setup_demo_restaurant.sql) to reset first.';
+    return;
   end if;
 
-  if not exists (select 1 from public.accounts where code = '1') then
-    raise exception 'demo_restaurant: run setup_all.sql first (root accounts missing).';
-  end if;
+  raise notice 'demo_restaurant: جاري مسح بيانات العرض السابقة قبل إعادة الزرع…';
+
+  -- تعطيل المحفزات مؤقتاً (postgres) لمسح فواتير مرحّلة
+  perform set_config('session_replication_role', 'replica', true);
+
+  update public.invoices i
+  set journal_entry_id = null,
+      status = 'draft',
+      updated_at = now()
+  where i.invoice_no like 'DEMO-%';
+
+  delete from public.inventory_movements im
+  where im.source_type = 'invoice'
+    and im.source_id in (select id from public.invoices where invoice_no like 'DEMO-%');
+
+  delete from public.inventory_movements
+  where source_type = 'demo'
+     or source_id in (
+       'a0111111-1111-4111-8111-111111111111'::uuid,
+       'a0222222-2222-4222-8222-222222222222'::uuid,
+       'a0333333-3333-4333-8333-333333333333'::uuid
+     );
+
+  delete from public.journal_entry_lines jel
+  where jel.journal_entry_id in (
+    select je.id from public.journal_entries je
+    where je.source_type = 'invoice'
+      and je.source_id in (select id from public.invoices where invoice_no like 'DEMO-%')
+  );
+
+  delete from public.journal_entries
+  where source_type = 'invoice'
+    and source_id in (select id from public.invoices where invoice_no like 'DEMO-%');
+
+  delete from public.journal_entry_lines jel
+  where jel.journal_entry_id in (
+    select je.id from public.journal_entries je
+    where je.entry_no like 'OPEN-%-MAIN'
+       or je.entry_no like 'DEMO-%'
+       or je.source_type in ('demo', 'demo_opening')
+  );
+
+  delete from public.journal_entries
+  where entry_no like 'OPEN-%-MAIN'
+     or entry_no like 'DEMO-%'
+     or source_type in ('demo', 'demo_opening');
+
+  delete from public.inventory_transfer_lines
+  where transfer_id in (
+    select id from public.inventory_transfers where transfer_no like 'DEMO-%'
+  );
+  update public.inventory_transfers
+  set out_invoice_id = null, in_invoice_id = null
+  where transfer_no like 'DEMO-%';
+  delete from public.inventory_transfers where transfer_no like 'DEMO-%';
+
+  delete from public.invoice_material_lines
+  where invoice_id in (select id from public.invoices where invoice_no like 'DEMO-%');
+  delete from public.invoice_account_lines
+  where invoice_id in (select id from public.invoices where invoice_no like 'DEMO-%');
+  delete from public.invoices where invoice_no like 'DEMO-%';
+
+  perform set_config('session_replication_role', 'origin', true);
 end $$;
 
 -- ---------------------------------------------------------------------------
