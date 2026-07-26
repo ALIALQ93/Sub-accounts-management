@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialForm } from "@/modules/materials/components/material-form";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { materialBomApi } from "@/modules/materials/services/material-bom-api";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { unitApi } from "@/modules/materials/services/unit-api";
@@ -121,7 +120,6 @@ export default function NewMaterialPage() {
   return (
     <main className="mx-auto w-full max-w-6xl">
       <h1 className="mb-4 text-2xl font-bold text-slate-900">مادة جديدة</h1>
-      <MaterialsNav />
 
       {isLoading && (
         <p className="mt-4 text-sm text-slate-600">جاري التحميل...</p>

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { branchApi } from "@/modules/branches/services/branch-api";
 import type { BranchOption } from "@/modules/branches/services/branch-api";
 import { useAuth } from "@/modules/auth/auth-context";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { WarehouseFormModal } from "@/modules/materials/components/warehouse-form-modal";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
 import type { Warehouse, WarehouseFormValues } from "@/modules/materials/types";
@@ -88,6 +87,25 @@ export default function WarehousesPage() {
 
   const toggleActive = async (warehouse: Warehouse) => {
     if (!canEdit) return;
+
+    if (warehouse.is_active) {
+      try {
+        const hasStock = await warehouseApi.hasPositiveStock(warehouse.id);
+        if (hasStock) {
+          const confirmed = window.confirm(
+            `المستودع «${warehouse.name_ar}» يحتوي على أرصدة مخزون قائمة.\nتعطيله سيُخفيه من قوائم الاختيار مع بقاء الرصيد دفترياً.\nهل تريد المتابعة؟`,
+          );
+          if (!confirmed) return;
+        }
+      } catch {
+        // لا نمنع التعطيل إن فشل فحص الرصيد — نتابع بعد تحذير عام
+        const confirmed = window.confirm(
+          `تعذّر التحقق من أرصدة المستودع «${warehouse.name_ar}».\nهل تريد تعطيله رغم ذلك؟`,
+        );
+        if (!confirmed) return;
+      }
+    }
+
     setIsSaving(true);
     try {
       await warehouseApi.updateWarehouse(warehouse.id, {
@@ -104,7 +122,6 @@ export default function WarehousesPage() {
   return (
     <main className="mx-auto w-full max-w-5xl">
       <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">المستودعات</h1>
-      <MaterialsNav />
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

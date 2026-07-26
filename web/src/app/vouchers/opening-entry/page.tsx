@@ -42,7 +42,7 @@ export default function OpeningEntryListPage() {
           <div>
             <h1 className="text-xl font-bold text-indigo-950">قيود افتتاحية</h1>
             <p className="mt-1 text-sm text-indigo-900/80">
-              ميزانية افتتاحية per فرع — يتطلب{" "}
+              ميزانية افتتاحية لكل فرع — يتطلب{" "}
               <code className="text-xs">patch_opening_entry.sql</code>.
             </p>
           </div>

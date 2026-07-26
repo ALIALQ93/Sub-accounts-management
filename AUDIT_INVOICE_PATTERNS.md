@@ -1,5 +1,7 @@
 # تدقيق عميق — أنماط الفواتير (حجز، تخفيض، إغلاق مرجع)
 
+> **حالة المعالجة (مستودع الكود، 2026-07-25):** أ) `max_discount_percent` ✓ مُنفَّذ الآن بالكامل داخل `assert_invoice_may_post()` (`database/setup_all.sql:15889-15933`) · ب) `release_on_cancel` ✓ مربوط الآن فعلياً بـ`cancel_draft_invoice()` (`database/setup_all.sql:15600`) · ج) `costing_method='fifo'` راجع حالته بـ`AUDIT_INVOICES_JOURNAL.md`. تدقيق تكميلي جديد يغطي حقولاً أخرى لم تُفحص هنا: `audit-reports/2026-07-25-invoice-patterns-audit.md`.
+
 جزء من التدقيق الشامل. أهم اكتشاف هنا يكمّل نمطاً وجدته أصلاً بـ`AUDIT_INVOICES_JOURNAL.md` (خيار FIFO الوهمي) — إعدادات تُعرض للمستخدم كخيارات حقيقية بدون أي تنفيذ فعلي خلفها.
 
 ---

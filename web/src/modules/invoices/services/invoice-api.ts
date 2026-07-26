@@ -392,6 +392,11 @@ export const invoiceApi = {
   },
 
   async postInvoice(id: string): Promise<string> {
+    const { assertInventoryFoundationLockConfirmed } = await import(
+      "@/modules/materials/utils/confirm-foundation-lock"
+    );
+    await assertInventoryFoundationLockConfirmed();
+
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc("post_invoice", {
       p_invoice_id: id,

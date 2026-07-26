@@ -10,6 +10,7 @@ import type {
   MaterialUnit,
   MaterialUnitFormValues,
 } from "@/modules/materials/types";
+import { computeFactorToBase } from "@/modules/materials/utils/unit-conversion";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 function throwIfSupabaseError(error: PostgrestError | null): void {
@@ -372,11 +373,12 @@ function buildUnitInsertPayload(
     is_base_unit: payload.is_base_unit,
     conversion_op: conversionOp,
     conversion_factor: conversionFactor,
-    factor_to_base: payload.is_base_unit
-      ? 1
-      : conversionOp === "divide"
-        ? 1 / conversionFactor
-        : conversionFactor,
+    // معاينة فقط — التريغر SQL يعيد الحساب بنفس الصيغة (computeFactorToBase)
+    factor_to_base: computeFactorToBase(
+      payload.is_base_unit,
+      conversionOp,
+      conversionFactor,
+    ),
     is_active: payload.is_active,
     purchase_price: payload.purchase_price,
     sale_price: payload.sale_price,
@@ -426,8 +428,22 @@ function buildUnitPatch(
   if (payload.conversion_factor != null && !payload.is_base_unit) {
     patch.conversion_factor = payload.conversion_factor;
   }
-  if (payload.factor_to_base != null && !payload.is_base_unit) {
+  if (
+    !payload.is_base_unit &&
+    (payload.conversion_op != null || payload.conversion_factor != null)
+  ) {
+    const op =
+      payload.conversion_op === "divide" ? "divide" : "multiply";
+    const factor =
+      payload.conversion_factor ?? payload.factor_to_base ?? 1;
+    patch.factor_to_base = computeFactorToBase(false, op, factor);
+  } else if (payload.factor_to_base != null && !payload.is_base_unit) {
     patch.factor_to_base = payload.factor_to_base;
+  }
+  if (payload.is_base_unit) {
+    patch.conversion_op = "multiply";
+    patch.conversion_factor = 1;
+    patch.factor_to_base = 1;
   }
   if (payload.purchase_price !== undefined) {
     patch.purchase_price = payload.purchase_price;

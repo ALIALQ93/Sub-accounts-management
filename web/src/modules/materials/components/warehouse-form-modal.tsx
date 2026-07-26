@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/modal";
 import type { BranchOption } from "@/modules/branches/services/branch-api";
 import type { Warehouse, WarehouseFormValues } from "@/modules/materials/types";
 
@@ -32,8 +33,6 @@ export function WarehouseFormModal({
   onClose,
   onSubmit,
 }: WarehouseFormModalProps) {
-  if (!open) return null;
-
   const defaults: WarehouseFormValues = initialValues
     ? {
         warehouse_code: initialValues.warehouse_code,
@@ -48,9 +47,17 @@ export function WarehouseFormModal({
       };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <Modal
+      open={open}
+      title={mode === "create" ? "مستودع جديد" : "تعديل مستودع"}
+      onClose={() => {
+        if (isSaving) return;
+        onClose();
+      }}
+    >
       <form
-        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        key={initialValues?.id ?? "new"}
+        className="grid gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           const formData = new FormData(event.currentTarget);
@@ -63,90 +70,88 @@ export function WarehouseFormModal({
           });
         }}
       >
-        <h2 className="text-lg font-bold text-slate-900">
-          {mode === "create" ? "مستودع جديد" : "تعديل مستودع"}
-        </h2>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">رمز المستودع *</span>
+          <input
+            name="warehouse_code"
+            defaultValue={defaults.warehouse_code}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2 font-mono uppercase"
+            required
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">الاسم العربي *</span>
+          <input
+            name="name_ar"
+            defaultValue={defaults.name_ar}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2"
+            required
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">الاسم الإنجليزي</span>
+          <input
+            name="name_en"
+            defaultValue={defaults.name_en}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2"
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">الفرع *</span>
+          <select
+            name="branch_id"
+            defaultValue={defaults.branch_id}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2"
+            required
+          >
+            <option value="">— اختر فرعاً —</option>
+            {branches
+              .filter((branch) => branch.is_active)
+              .map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.branch_code} — {branch.name_ar}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="is_active"
+            defaultChecked={defaults.is_active}
+            disabled={isSaving}
+          />
+          <span>نشط</span>
+        </label>
 
-        <div className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">رمز المستودع *</span>
-            <input
-              name="warehouse_code"
-              defaultValue={defaults.warehouse_code}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2 font-mono uppercase"
-              required
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">الاسم العربي *</span>
-            <input
-              name="name_ar"
-              defaultValue={defaults.name_ar}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2"
-              required
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">الاسم الإنجليزي</span>
-            <input
-              name="name_en"
-              defaultValue={defaults.name_en}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">الفرع *</span>
-            <select
-              name="branch_id"
-              defaultValue={defaults.branch_id}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2"
-              required
-            >
-              <option value="">— اختر فرعاً —</option>
-              {branches
-                .filter((branch) => branch.is_active)
-                .map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.branch_code} — {branch.name_ar}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="is_active"
-              defaultChecked={defaults.is_active}
-              disabled={isSaving}
-            />
-            <span>نشط</span>
-          </label>
-        </div>
+        {error && (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-[var(--danger)]">
+            {error}
+          </p>
+        )}
 
-        {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
-
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-2 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="btn btn-outline"
           >
             إلغاء
           </button>
           <button
             type="submit"
             disabled={isSaving}
-            className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="btn btn-primary"
           >
             {isSaving ? "جاري الحفظ..." : "حفظ"}
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }

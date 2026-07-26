@@ -56,7 +56,7 @@ export function MaterialOverviewPanel({
   }
 
   if (error) {
-    return <p className="text-sm text-rose-700">{error}</p>;
+    return <p className="text-sm text-[var(--danger)]">{error}</p>;
   }
 
   return (

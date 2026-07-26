@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { useAuth } from "@/modules/auth/auth-context";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { stockAdjustmentApi } from "@/modules/materials/services/stock-adjustment-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
@@ -189,13 +188,12 @@ export default function BatchStockAdjustmentPage() {
       <p className="mb-4 text-sm text-slate-600">
         عدة مواد في{" "}
         <strong>قيد واحد</strong> — يدعم مستودعات من فروع مختلفة (سطور القيد
-        per فرع). أو{" "}
+        لكل فرع). أو{" "}
         <Link href="/materials/stock-adjustment/new" className="text-blue-800 underline">
           تسوية سطر واحد
         </Link>
         .
       </p>
-      <MaterialsNav />
 
       {isLoading && (
         <p className="mt-4 text-sm text-slate-600">جاري التحميل...</p>
@@ -240,8 +238,20 @@ export default function BatchStockAdjustmentPage() {
                       ? counted - line.systemQty
                       : null;
                   const warehouse = warehouseById.get(line.warehouseId);
+                  const isFilledZeroDelta =
+                    Boolean(line.materialId) &&
+                    Boolean(line.warehouseId) &&
+                    line.countedQty.trim() !== "" &&
+                    line.systemQty != null &&
+                    Number.isFinite(counted) &&
+                    Math.abs(counted - line.systemQty) < 0.000001;
                   return (
-                    <tr key={line.key}>
+                    <tr
+                      key={line.key}
+                      className={
+                        isFilledZeroDelta ? "bg-amber-50/80" : undefined
+                      }
+                    >
                       <td>
                         <select
                           value={line.materialId}
@@ -305,6 +315,11 @@ export default function BatchStockAdjustmentPage() {
                       </td>
                       <td className="font-mono text-xs tabular-nums">
                         {delta == null ? "—" : delta.toFixed(4)}
+                        {isFilledZeroDelta && (
+                          <span className="mt-0.5 block text-[11px] font-sans text-amber-800">
+                            لن يُرحَّل (فرق صفري)
+                          </span>
+                        )}
                       </td>
                       <td>
                         <button

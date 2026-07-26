@@ -374,7 +374,7 @@ export function OpeningEntryVoucherForm({
       <div className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-3 text-sm text-indigo-950">
         <p className="font-semibold">قيد افتتاحي</p>
         <p className="mt-0.5 opacity-90">
-          ميزانية افتتاحية — أسطر مدين/دائن متوازنة per فرع. لا تخصيصات إغلاق
+          ميزانية افتتاحية — أسطر مدين/دائن متوازنة لكل فرع. لا تخصيصات إغلاق
           حركات.
         </p>
       </div>

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { UnitFormModal } from "@/modules/materials/components/unit-form-modal";
 import { unitApi } from "@/modules/materials/services/unit-api";
 import type {
@@ -84,6 +83,24 @@ export default function UnitsPage() {
 
   const toggleActive = async (unit: UnitCatalogItem) => {
     if (!canEdit) return;
+
+    if (unit.is_active) {
+      try {
+        const usageCount = await unitApi.countBaseUnitUsages(unit.id);
+        if (usageCount > 0) {
+          const confirmed = window.confirm(
+            `الوحدة «${unit.name_ar}» مستخدمة كوحدة أساس لـ ${usageCount} مادة.\nتعطيلها سيُخفيها من قوائم الاختيار المستقبلية دون تغيير المواد الحالية.\nهل تريد المتابعة؟`,
+          );
+          if (!confirmed) return;
+        }
+      } catch {
+        const confirmed = window.confirm(
+          `تعذّر التحقق من استخدام الوحدة «${unit.name_ar}».\nهل تريد تعطيلها رغم ذلك؟`,
+        );
+        if (!confirmed) return;
+      }
+    }
+
     setIsSaving(true);
     try {
       await unitApi.updateUnit(unit.id, {
@@ -102,7 +119,6 @@ export default function UnitsPage() {
       <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
         الوحدات
       </h1>
-      <MaterialsNav />
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

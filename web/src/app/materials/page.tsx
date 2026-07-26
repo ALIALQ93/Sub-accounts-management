@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
 import { MaterialBulkImportModal } from "@/modules/materials/components/material-bulk-import-modal";
 import { materialApi } from "@/modules/materials/services/material-api";
@@ -73,7 +72,6 @@ export default function MaterialsPage() {
       <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
         المواد والمستودعات
       </h1>
-      <MaterialsNav />
 
       <InventoryShortageAlert />
 
@@ -149,6 +147,7 @@ export default function MaterialsPage() {
                   <tr>
                     <th>الرمز</th>
                     <th>الاسم</th>
+                    <th>النوع</th>
                     <th>الصنف</th>
                     <th>باركود</th>
                     <th>شراء</th>
@@ -176,6 +175,11 @@ export default function MaterialsPage() {
                             بدون وحدة أساس
                           </span>
                         )}
+                      </td>
+                      <td className="text-xs text-slate-600">
+                        {material.material_kind === "composite"
+                          ? "تجميعية"
+                          : "عادية"}
                       </td>
                       <td className="text-xs text-slate-600">
                         {material.category_name_ar ?? "—"}

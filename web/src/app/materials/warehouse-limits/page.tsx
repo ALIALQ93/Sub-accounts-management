@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
 import { warehouseMaterialLimitsApi } from "@/modules/materials/services/warehouse-material-limits-api";
@@ -13,7 +12,11 @@ interface LimitDraft {
   materialCode: string;
   materialName: string;
   limitId: string | null;
+  /** قيمة حد بطاقة المادة (للتمييز البصري عند الوراثة) */
+  materialMinStock: number;
   minStock: string;
+  /** هل القيمة المعروضة من حد المستودع أم موروثة من البطاقة */
+  source: "warehouse" | "material" | "none";
 }
 
 export default function WarehouseLimitsPage() {
@@ -46,17 +49,23 @@ export default function WarehouseLimitsPage() {
       .filter((material) => material.is_active)
       .map((material) => {
         const limit = limitByMaterial.get(material.id);
+        const hasWarehouseLimit = Boolean(limit && limit.min_stock > 0);
         return {
           materialId: material.id,
           materialCode: material.material_code,
           materialName: material.name_ar,
           limitId: limit?.id ?? null,
-          minStock:
-            limit && limit.min_stock > 0
-              ? String(limit.min_stock)
-              : material.min_stock > 0
-                ? String(material.min_stock)
-                : "",
+          materialMinStock: material.min_stock,
+          minStock: hasWarehouseLimit
+            ? String(limit!.min_stock)
+            : material.min_stock > 0
+              ? String(material.min_stock)
+              : "",
+          source: hasWarehouseLimit
+            ? "warehouse"
+            : material.min_stock > 0
+              ? "material"
+              : "none",
         };
       });
   }, []);
@@ -111,9 +120,23 @@ export default function WarehouseLimitsPage() {
 
   const updateDraft = (materialId: string, minStock: string) => {
     setDrafts((current) =>
-      current.map((row) =>
-        row.materialId === materialId ? { ...row, minStock } : row,
-      ),
+      current.map((row) => {
+        if (row.materialId !== materialId) return row;
+        const value = Number(minStock);
+        const hasCustom =
+          minStock.trim() !== "" &&
+          Number.isFinite(value) &&
+          value > 0;
+        return {
+          ...row,
+          minStock,
+          source: hasCustom
+            ? "warehouse"
+            : row.materialMinStock > 0
+              ? "material"
+              : "none",
+        };
+      }),
     );
   };
 
@@ -124,26 +147,42 @@ export default function WarehouseLimitsPage() {
     setSuccess("");
 
     try {
-      let saved = 0;
-      for (const row of drafts) {
+      const tasks = drafts.map(async (row) => {
         const value = Number(row.minStock);
-        if (!Number.isFinite(value) || value < 0) continue;
+        if (!Number.isFinite(value) || value < 0) {
+          return { kind: "skip" as const };
+        }
         if (value === 0) {
           if (row.limitId) {
             await warehouseMaterialLimitsApi.deleteLimit(row.limitId);
+            return { kind: "deleted" as const };
           }
-          continue;
+          return { kind: "skip" as const };
         }
         await warehouseMaterialLimitsApi.upsertLimit(
           warehouseId,
           row.materialId,
           value,
         );
-        saved += 1;
-      }
+        return { kind: "saved" as const };
+      });
+
+      const results = await Promise.allSettled(tasks);
+      const saved = results.filter(
+        (r) => r.status === "fulfilled" && r.value.kind === "saved",
+      ).length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+
       const refreshed = await loadWarehouseLimits(warehouseId);
       setDrafts(refreshed);
-      setSuccess(`تم حفظ ${saved} حد/حدود للمستودع.`);
+
+      if (failed > 0) {
+        setError(
+          `فشل حفظ ${failed} حد/حدود. نجح ${saved} — أعد المحاولة للبقية.`,
+        );
+      } else {
+        setSuccess(`تم حفظ ${saved} حد/حدود للمستودع.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل حفظ الحدود.");
     } finally {
@@ -155,12 +194,11 @@ export default function WarehouseLimitsPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl">
-      <h1 className="mb-1 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">حدود المخزون per مستودع</h1>
+      <h1 className="mb-1 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">حدود المخزون لكل مستودع</h1>
       <p className="mb-4 text-sm text-slate-600">
         يتفوّق على حدّ بطاقة المادة في تقرير النواقص — اترك الحقل فارغاً أو صفراً
         للاعتماد على بطاقة المادة فقط.
       </p>
-      <MaterialsNav />
 
       {isLoading && (
         <p className="mt-4 text-sm text-slate-600">جاري التحميل...</p>
@@ -203,10 +241,27 @@ export default function WarehouseLimitsPage() {
                 </thead>
                 <tbody>
                   {drafts.map((row) => (
-                    <tr key={row.materialId}>
+                    <tr
+                      key={row.materialId}
+                      className={
+                        row.source === "material"
+                          ? "bg-slate-50/80"
+                          : undefined
+                      }
+                    >
                       <td>
                         <span className="font-mono text-xs">{row.materialCode}</span>
                         <span className="block text-xs">{row.materialName}</span>
+                        {row.source === "material" && (
+                          <span className="mt-0.5 inline-block text-[11px] text-slate-500">
+                            موروث من بطاقة المادة
+                          </span>
+                        )}
+                        {row.source === "warehouse" && row.limitId && (
+                          <span className="mt-0.5 inline-block text-[11px] text-[var(--brand-navy)]">
+                            حد خاص بهذا المستودع
+                          </span>
+                        )}
                       </td>
                       <td>
                         <input
@@ -218,7 +273,11 @@ export default function WarehouseLimitsPage() {
                             updateDraft(row.materialId, e.target.value)
                           }
                           disabled={!canEdit || isSaving || tableMissing}
-                          className="w-full max-w-[160px] rounded border border-slate-300 px-2 py-1 font-mono tabular-nums"
+                          className={`w-full max-w-[160px] rounded border px-2 py-1 font-mono tabular-nums ${
+                            row.source === "material"
+                              ? "border-slate-200 bg-slate-50 text-slate-600"
+                              : "border-slate-300"
+                          }`}
                           placeholder="بطاقة المادة"
                         />
                       </td>

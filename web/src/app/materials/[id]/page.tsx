@@ -4,7 +4,6 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialForm } from "@/modules/materials/components/material-form";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { materialBomApi } from "@/modules/materials/services/material-bom-api";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { unitApi } from "@/modules/materials/services/unit-api";
@@ -180,14 +179,15 @@ export default function EditMaterialPage() {
 
   return (
     <main className="mx-auto w-full max-w-6xl">
-      <h1 className="mb-1 text-2xl font-bold text-slate-900">بطاقة مادة</h1>
-      {material && (
-        <p className="mb-4 font-mono text-sm text-slate-500">
-          {material.material_code} — {material.name_ar}
-          {material.material_kind === "composite" ? " (تجميعية)" : ""}
-        </p>
-      )}
-      <MaterialsNav />
+      <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
+        بطاقة مادة
+        {material && (
+          <span className="ms-2 text-base font-normal text-slate-500">
+            {material.material_code} — {material.name_ar}
+            {material.material_kind === "composite" ? " (تجميعية)" : ""}
+          </span>
+        )}
+      </h1>
 
       {isLoading && (
         <p className="mt-4 text-sm text-slate-600">جاري التحميل...</p>

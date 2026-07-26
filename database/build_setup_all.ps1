@@ -55,7 +55,8 @@ $patchFiles = @(
     'patch_setup_complete.sql',
     'patch_materials_bom_nested.sql',
     'patch_invoice_manufacturing.sql',
-    'patch_composite_disassembly.sql'
+    'patch_composite_disassembly.sql',
+    'patch_material_category_cascade_deactivate.sql'
 )
 
 $out = Join-Path $here 'setup_all.sql'

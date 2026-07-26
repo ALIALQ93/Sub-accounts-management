@@ -38,6 +38,8 @@ begin
   if not (
     public.has_permission('invoices.post')
     or public.has_permission('invoices.edit')
+    -- بذور SQL Editor (postgres) بدون جلسة مستخدم
+    or (auth.uid() is null and current_user in ('postgres', 'supabase_admin'))
   ) then
     raise exception 'Permission denied: invoices.post (or invoices.edit) required to post.';
   end if;

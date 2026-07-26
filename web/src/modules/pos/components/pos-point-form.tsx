@@ -111,6 +111,7 @@ export function PosPointForm({
   onCancel,
 }: PosPointFormProps) {
   const [values, setValues] = useState<PosPointFormValues>(initialValues);
+  const [localError, setLocalError] = useState("");
   const formDisabled = !canEdit || isSaving;
 
   useEffect(() => {
@@ -184,6 +185,16 @@ export function PosPointForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (!canEdit) return;
+        const activePayments = values.payment_methods.filter(
+          (row) => row.is_active && row.account_id.trim() && row.label_ar.trim(),
+        );
+        if (activePayments.length === 0) {
+          setLocalError(
+            "يجب تعريف طريقة دفع نشطة واحدة على الأقل (تسمية + حساب) قبل الحفظ.",
+          );
+          return;
+        }
+        setLocalError("");
         onSubmit(values);
       }}
     >
@@ -464,7 +475,7 @@ export function PosPointForm({
                       type="button"
                       disabled={formDisabled}
                       onClick={() => removePaymentRow(index)}
-                      className="text-xs text-rose-700 hover:underline disabled:opacity-50"
+                      className="text-xs text-[var(--danger)] hover:underline disabled:opacity-50"
                     >
                       حذف
                     </button>
@@ -485,7 +496,9 @@ export function PosPointForm({
         onChange={(patch) => update(patch)}
       />
 
-      {error && <p className="text-sm text-rose-700">{error}</p>}
+      {(error || localError) && (
+        <p className="text-sm text-[var(--danger)]">{error || localError}</p>
+      )}
 
       <div className="flex flex-wrap justify-end gap-2">
         {onCancel && (

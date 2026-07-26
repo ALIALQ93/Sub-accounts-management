@@ -200,8 +200,8 @@ export function CloseMovementSections({
       )}
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <OpenDimensionSummaries title="صافٍ per مركز كلف" rows={ccSummaries} />
-        <OpenDimensionSummaries title="صافٍ per فرع" rows={branchSummaries} />
+        <OpenDimensionSummaries title="صافٍ لكل مركز كلفة" rows={ccSummaries} />
+        <OpenDimensionSummaries title="صافٍ لكل فرع" rows={branchSummaries} />
       </div>
 
       <VoucherAllocations

@@ -54,6 +54,11 @@ export const stockAdjustmentApi = {
   async postAdjustment(
     payload: PostStockAdjustmentPayload,
   ): Promise<StockAdjustmentResult> {
+    const { assertInventoryFoundationLockConfirmed } = await import(
+      "@/modules/materials/utils/confirm-foundation-lock"
+    );
+    await assertInventoryFoundationLockConfirmed();
+
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc("post_stock_adjustment", {
       p_material_id: payload.materialId,
@@ -116,6 +121,11 @@ export const stockAdjustmentApi = {
       adjustment_amount: number;
     }>;
   }> {
+    const { assertInventoryFoundationLockConfirmed } = await import(
+      "@/modules/materials/utils/confirm-foundation-lock"
+    );
+    await assertInventoryFoundationLockConfirmed();
+
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.rpc("post_stock_adjustment_batch", {
       p_lines: payload.lines.map((line) => ({

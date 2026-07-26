@@ -2,6 +2,7 @@
 
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Warehouse, WarehouseFormValues } from "@/modules/materials/types";
+import { inventoryReportApi } from "@/modules/reports/services/inventory-report-api";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 function throwIfSupabaseError(error: PostgrestError | null): void {
@@ -123,5 +124,13 @@ export const warehouseApi = {
       .single();
     throwIfSupabaseError(error);
     return data as Warehouse;
+  },
+
+  async hasPositiveStock(warehouseId: string): Promise<boolean> {
+    const rows = await inventoryReportApi.listBalanceRows({
+      warehouseId,
+      hideZero: true,
+    });
+    return rows.some((row) => Math.abs(row.quantity_base) > 0.000001);
   },
 };

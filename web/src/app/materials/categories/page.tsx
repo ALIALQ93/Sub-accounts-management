@@ -10,7 +10,6 @@ import {
 } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
 import { MaterialCategoryFormModal } from "@/modules/materials/components/material-category-form-modal";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { materialCategoryApi } from "@/modules/materials/services/material-category-api";
 import type {
@@ -25,6 +24,36 @@ import {
   toggleExpandedId,
   type CategoryMaterialTreeNode,
 } from "@/modules/materials/utils/category-material-tree";
+
+function countCascadeDeactivateImpact(
+  categoryId: string,
+  categories: MaterialCategory[],
+  materials: MaterialListItem[],
+): { childCategories: number; materials: number } {
+  const descendantIds = new Set<string>();
+  const queue = [categoryId];
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    for (const category of categories) {
+      if (category.parent_id === currentId && !descendantIds.has(category.id)) {
+        descendantIds.add(category.id);
+        queue.push(category.id);
+      }
+    }
+  }
+  const allIds = new Set([categoryId, ...descendantIds]);
+  return {
+    childCategories: [...descendantIds].filter(
+      (id) => categories.find((c) => c.id === id)?.is_active,
+    ).length,
+    materials: materials.filter(
+      (material) =>
+        material.category_id != null &&
+        allIds.has(material.category_id) &&
+        material.is_active,
+    ).length,
+  };
+}
 
 export default function MaterialCategoriesPage() {
   const { hasPermission } = useAuth();
@@ -119,6 +148,28 @@ export default function MaterialCategoriesPage() {
 
   const toggleActive = async (category: MaterialCategory) => {
     if (!canEdit) return;
+
+    if (category.is_active) {
+      const impact = countCascadeDeactivateImpact(
+        category.id,
+        categories,
+        materials,
+      );
+      if (impact.childCategories > 0 || impact.materials > 0) {
+        const parts: string[] = [];
+        if (impact.childCategories > 0) {
+          parts.push(`${impact.childCategories} صنفاً فرعياً`);
+        }
+        if (impact.materials > 0) {
+          parts.push(`${impact.materials} مادة`);
+        }
+        const confirmed = window.confirm(
+          `تعطيل «${category.name_ar}» سيعطّل أيضاً: ${parts.join(" و ")}.\nهل تريد المتابعة؟`,
+        );
+        if (!confirmed) return;
+      }
+    }
+
     setIsSaving(true);
     try {
       await materialCategoryApi.updateCategory(category.id, {
@@ -147,7 +198,6 @@ export default function MaterialCategoriesPage() {
       <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
         أصناف المواد
       </h1>
-      <MaterialsNav />
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

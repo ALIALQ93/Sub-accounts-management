@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/auth-context";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { inventorySettingsApi } from "@/modules/materials/services/inventory-settings-api";
 import type {
   CompanyInventorySettings,
@@ -16,7 +15,8 @@ const INVENTORY_METHOD_LABELS = {
 
 const COSTING_METHOD_LABELS = {
   weighted_avg: "متوسط مرجح",
-  // fifo / last_purchase: غير منفَّذين في محرك الترحيل — لا يُعرضان حتى يُنفَّذا
+  // fifo: غير منفَّذ بمحرك الترحيل — لا يُعرض حتى يُنفَّذ
+  // last_purchase: إعداد الشركة غير مقروء؛ لا تخلطه مع pricing_consumed_mode=standard على نمط الفاتورة
   standard: "تكلفة معيارية",
 } as const;
 
@@ -100,11 +100,11 @@ export default function InventorySettingsPage() {
   return (
     <main className="mx-auto w-full max-w-3xl">
       <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">إعدادات الجرد والتكلفة</h1>
-      <MaterialsNav />
 
       <section className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="text-sm text-slate-600">
-          تُختار قبل أول عملية مخزنية مرحّلة — تُقفَل تلقائياً بعد الترحيل الأول.
+          تُختار قبل أول عملية مخزنية مرحّلة — عند أول ترحيل (فاتورة أو تسوية)
+          سيظهر تنبيه تأكيد ثم تُقفَل الإعدادات تلقائياً.
         </p>
 
         {locked && settings && (
@@ -188,7 +188,9 @@ export default function InventorySettingsPage() {
                 </span>
               )}
               <span className="text-xs text-slate-500">
-                يُقفَل بعد أول عملية مخزنية مرحّلة.
+                المحرك الفعلي يعتمد المتوسط المرجّح (أو سعر الشراء المعياري عبر
+                إعداد «تسعير المستهلك» على نمط الفاتورة) — إعداد الشركة أعلاه
+                يُقفَل بعد أول ترحيل مخزني ولا يختار مسار FIFO/آخر شراء حالياً.
               </span>
             </label>
 

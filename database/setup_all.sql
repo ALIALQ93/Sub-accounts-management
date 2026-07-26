@@ -1,19 +1,123 @@
 ﻿-- =============================================================================
--- setup_all.sql — إعداد كامل للتشغيل (ملف واحد)
+-- setup_all.sql — إعداد كامل للنظام (ملف واحد)
 -- =============================================================================
--- شغّل هذا الملف مرة واحدة في Supabase → SQL Editor.
+-- شغّل هذا الملف مرة واحدة في Supabase → SQL Editor لإعادة بناء القاعدة من الصفر.
 --
--- يدمج بالترتيب:
---   00_reset + 01_schema + 02_rls
---   + ترقيعات الفواتير/الفروع/المواد/الافتتاحي/الفترات (#27 وما بعدها)
---   + 06_storage
+-- ⚠️ تحذير: يحذف جميع البيانات والجداول والدوال ويعيد البناء.
+--     للتطوير / بيئة اختبار فقط — ليس على إنتاج فيه بيانات حقيقية.
 --
--- يشمل: المحاسبة، العملات، السندات، الفواتير، الفروع، المواد،
---       open_items_view، قيد افتتاحي، فترات محاسبية، المصادقة، الصلاحيات، Storage.
+-- إعادة التوليد بعد تعديل أي مصدر:
+--     powershell -File database/build_setup_all.ps1
 --
--- ⚠️ تحذير: يحذف جميع البيانات السابقة ويعيد بناء المخطط من الصفر.
+-- للعرض التجريبي (مطعم): setup_demo_restaurant.sql
+--     = هذا الملف + demo_restaurant.sql
+-- =============================================================================
 --
--- إعادة التوليد:  powershell -File database/build_setup_all.ps1
+-- تكوين الملف (بالترتيب)
+-- -----------------------------------------------------------------------------
+--   1) 00_reset.sql          حذف المخطط السابق
+--   2) 01_schema.sql         المخطط الأساسي + بذور العملات/الحسابات/الترقيم
+--   3) 02_rls.sql            Row Level Security + مزامنة Auth
+--   4) ترقيعات وظيفية (#27→#50) حسب build_setup_all.ps1
+--   5) 06_storage.sql        Buckets: شعار الشركة + مرفقات السندات
+--
+-- ملاحظة: 04_auth / 05_permissions وترقيعات قديمة (sub_code، logo، journal
+-- currency، …) مدمجة داخل 01_schema / 02_rls — لا تُعاد كملفات منفصلة هنا.
+-- =============================================================================
+--
+-- صورة النظام — الوحدات والميزات المغطّاة
+-- =============================================================================
+--
+-- 1) التأسيس والمحاسبة العامة
+--    • عملات متعددة (IQD أساسية + USD/EUR/SYP/AED) + سجل أسعار تاريخي
+--    • دليل حسابات هرمي (جذور 1–7، sub_code، قواعد postable/غير postable)
+--    • مراكز كلفة (اختيارية على القيود/السندات)
+--    • قيود يومية بعملة وسعر صرف و debit_base / credit_base
+--    • ميزان مراجعة get_trial_balance (مع رصيد افتتاحي)
+--    • كشف حساب / أعمار ذمم (واجهات تقارير تعتمد على القيود والمفتوح)
+--
+-- 2) السندات والحركة المالية
+--    • أنواع: قبض (RCP) / صرف (PAY) / تصفية (SET) + ترقيم سنوي
+--    • أسطر متعددة العملات، تصنيفات أسطر، مرفقات Storage
+--    • تخصيصات voucher_allocations مع حد سعة على مستوى DB
+--    • مقاصة voucher_netting_lines + حسابات تسوية للشركة
+--    • ترحيل تلقائي اختياري للقيد، عكس ذرّي reverse_posted_voucher
+--    • عمليات ذرّية: استبدال أسطر/تخصيصات، استيراد حسابات جماعي
+--    • علم cc_optional لأسطر لا تتطلب مركز كلفة
+--
+-- 3) العملاء والموردين والأطراف
+--    • customers / vendors مرتبطان بحسابات ذمم
+--    • party_settings (حساب أب افتراضي)
+--    • open_items_view + get_open_items — حركات مفتوحة وإغلاقها
+--
+-- 4) الفروع والفترات والقيد الافتتاحي
+--    • فروع branches + ربط مراكز الكلفة والمستودعات
+--    • فترات محاسبية accounting_periods + assert_accounting_period_open
+--    • قيد افتتاحي per فرع/سنة + مزامنة علم الافتتاحي على السند/القيد
+--
+-- 5) المواد والمخازن والمخزون
+--    • تصنيفات مواد هرمية، مستودعات، حدود مادة/مستودع
+--    • بطاقة مادة غنية: أسعار، باركود، مواصفات، min/max
+--    • وحدات متعددة material_units + تحويل (ضرب/قسمة) + أسعار per وحدة
+--    • إنشاء مادة + وحدة أساس ذرّياً (create_material_with_base_unit)
+--    • إعدادات مخزون الشركة: طريقة جرد، costing_method
+--      (weighted_avg | fifo | standard | last_purchase) + قفل الأساس
+--    • حركات inventory_movements، مناقلة بين مستودعات
+--    • حجوزات inventory_reservations، تسوية فردية/مجمّعة
+--    • منع إخراج يتجاوز الرصيد (+ دفعات صلاحية/تسلسلي)
+--    • فصل تكلفة بالصلاحية/التسلسلي عند تفعيل الإعدادات
+--
+-- 6) تتبّع المواد (صلاحية / تسلسلي)
+--    • has_expiry_date / has_serial_number + إجبار إدخال/إخراج
+--    • تاريخ انتهاء ورقم تسلسلي على أسطر الفاتورة
+--    • إظهار التتبّع حسب نمط الفاتورة + قوائم اختيار الرصيد بالدفعة
+--
+-- 7) المواد التجميعية (BOM) والتصنيع والتفكيك
+--    • material_kind: normal | composite
+--    • composite_mode: kit | finished | disassemblable
+--    • BOM متعدد المستويات material_bom_components + منع الدورات
+--    • أنماط فاتورة manufacturing / disassembly
+--    • أسطر consume/produce + qty_damaged عند التفكيك
+--
+-- 8) الفواتير وأنماط المستندات
+--    • أنماط invoice_patterns (مبيعات، مشتريات، مرتجعات، استلام، …)
+--      + تصنيع وتفكيك + شروط ومواد/تصنيفات مسموحة + تسلسل ترقيم
+--    • تسعير: pricing_material_mode / pricing_cost_mode / pricing_consumed_mode
+--    • خصم/إضافي على مستوى الفاتورة والسطر + تدوير
+--    • مراجع متعددة + إغلاق مرجع + مرتجعات بكميات مرتجعة
+--    • post_invoice / cancel_draft_invoice + حماية مرحّل ومسودة
+--    • مندوبي مبيعات sales_reps، أبعاد فرع/مستودع/CC على الأسطر
+--
+-- 9) نقاط البيع (POS)
+--    • pos_points + طرق دفع + مواد/تصنيفات مسموحة
+--    • سياسات RLS لأنماط فواتير نقاط البيع
+--
+-- 10) التقارير المخزنية والتجارية (دوال SQL)
+--    • get_inventory_balance / get_inventory_movement_ledger
+--    • get_inventory_analysis (نواقص/راكد)
+--    • get_cogs_report / get_inventory_movements_summary
+--    • get_purchase_lines_report / get_sales_lines_report
+--
+-- 11) المصادقة والحوكمة والأمان
+--    • profiles + أدوار؛ أول مستخدم = admin
+--    • user_permissions + has_permission() / is_admin()
+--    • RLS على الجداول للمصادَق عليهم؛ تقييد anon
+--    • company_settings (شعار، is_setup_complete لويزارد /setup)
+--    • عروض security_invoker حيث ينطبق
+--
+-- 12) التخزين (Storage)
+--    • شعار الشركة، مرفقات السندات — سياسات عبر 06_storage.sql
+--
+-- =============================================================================
+-- بعد التثبيت
+-- -----------------------------------------------------------------------------
+--   1. Authentication → فعّل Email/Password
+--   2. متغيرات البيئة: NEXT_PUBLIC_SUPABASE_URL + PUBLISHABLE_KEY
+--      (اختياري) SUPABASE_SERVICE_ROLE_KEY لإدارة المستخدمين من الواجهة
+--   3. /login → أول مستخدم يصبح admin
+--   4. /setup أو /settings/company ثم الفروع والفترات والصلاحيات
+--   5. إعدادات السندات والمواد وأنماط الفواتير / نقاط البيع
+--   6. (اختياري) 03_test_cases.sql للتحقق من سيناريوهات السندات
 -- =============================================================================
 -- =============================================================================
 -- 00_reset.sql — إعادة ضبط كاملة للمخطط المحاسبي
@@ -43,11 +147,18 @@ drop table if exists public.invoice_pattern_conditions cascade;
 drop table if exists public.invoice_pattern_sequences cascade;
 drop table if exists public.invoice_patterns cascade;
 drop table if exists public.warehouse_material_limits cascade;
+drop table if exists public.material_bom_components cascade;
 drop table if exists public.material_units cascade;
 drop table if exists public.materials cascade;
 drop function if exists public.material_categories_apply_hierarchy_rules() cascade;
+drop function if exists public.material_categories_cascade_deactivate() cascade;
 drop function if exists public.warehouses_prevent_branch_change_with_movements() cascade;
 drop table if exists public.material_categories cascade;
+drop table if exists public.units cascade;
+drop table if exists public.pos_point_payment_methods cascade;
+drop table if exists public.pos_point_allowed_materials cascade;
+drop table if exists public.pos_point_allowed_categories cascade;
+drop table if exists public.pos_points cascade;
 drop table if exists public.warehouses cascade;
 drop table if exists public.company_inventory_settings cascade;
 drop table if exists public.company_settlement_accounts cascade;
@@ -15195,6 +15306,8 @@ begin
   if not (
     public.has_permission('invoices.post')
     or public.has_permission('invoices.edit')
+    -- بذور SQL Editor (postgres) بدون جلسة مستخدم
+    or (auth.uid() is null and current_user in ('postgres', 'supabase_admin'))
   ) then
     raise exception 'Permission denied: invoices.post (or invoices.edit) required to post.';
   end if;
@@ -15774,6 +15887,8 @@ begin
     public.has_permission('invoices.post')
     or public.has_permission('invoices.edit')
     or (public.has_permission('pos.sell') and v_inv.pos_point_id is not null)
+    -- بذور/صيانة من SQL Editor بدون JWT
+    or (auth.uid() is null and current_user in ('postgres', 'supabase_admin'))
   ) then
     raise exception
       'Permission denied: invoices.post (or invoices.edit, or pos.sell for a POS invoice) required to post.';
@@ -17952,6 +18067,11 @@ grant execute on function public.post_invoice(uuid) to authenticated;
 alter table public.materials
   add column if not exists composite_mode varchar(20) null;
 
+update public.materials
+set composite_mode = 'kit'
+where material_kind = 'composite'
+  and composite_mode is null;
+
 do $$
 begin
   if not exists (
@@ -17971,11 +18091,6 @@ begin
       );
   end if;
 end $$;
-
-update public.materials
-set composite_mode = 'kit'
-where material_kind = 'composite'
-  and composite_mode is null;
 
 comment on column public.materials.composite_mode is
   'تجميعية فقط: kit=تفكيك عند الإخراج، finished=منتج نهائي، disassemblable=تفكيك مع تالف';
@@ -19960,6 +20075,72 @@ $$;
 grant execute on function public.post_invoice(uuid) to authenticated;
 
 -- =============================================================================
+-- BEGIN patch_material_category_cascade_deactivate.sql
+-- =============================================================================
+-- =============================================================================
+-- patch_material_category_cascade_deactivate.sql
+-- =============================================================================
+-- عند تعطيل صنف أب: تعطيل كل الأصناف الفرعية والمواد التابعة لها تلقائياً.
+-- التفعيل لا يُعاد متسلسلاً (قد يكون الفرع عُطِّل يدوياً عن قصد).
+-- =============================================================================
+
+create or replace function public.material_categories_cascade_deactivate()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  -- تجاهل التحديثات المتداخلة الناتجة عن نفس التريغر
+  if pg_trigger_depth() > 1 then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE'
+     and old.is_active is true
+     and new.is_active is false then
+    -- أصناف فرعية (كل المستويات)
+    with recursive descendants as (
+      select c.id
+      from public.material_categories c
+      where c.parent_id = new.id
+      union all
+      select c.id
+      from public.material_categories c
+      inner join descendants d on c.parent_id = d.id
+    )
+    update public.material_categories mc
+    set is_active = false
+    where mc.id in (select id from descendants)
+      and mc.is_active is true;
+
+    -- مواد هذا الصنف + فروعه
+    with recursive tree as (
+      select new.id as id
+      union all
+      select c.id
+      from public.material_categories c
+      inner join tree t on c.parent_id = t.id
+    )
+    update public.materials m
+    set is_active = false
+    where m.category_id in (select id from tree)
+      and m.is_active is true;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_material_categories_cascade_deactivate
+  on public.material_categories;
+create trigger trg_material_categories_cascade_deactivate
+after update of is_active on public.material_categories
+for each row execute function public.material_categories_cascade_deactivate();
+
+comment on function public.material_categories_cascade_deactivate() is
+  'يعطّل الأصناف الفرعية والمواد التابعة عند تعطيل صنف أب';
+
+-- =============================================================================
 -- 06_storage.sql — Supabase Storage (شعار الشركة + مرفقات السندات مستقبلاً)
 -- =============================================================================
 -- شغّل بعد 05_permissions.sql (أو بعد setup_all.sql) على قاعدة موجودة.
@@ -20098,7 +20279,7 @@ create policy "voucher_attachments_delete" on storage.objects
   );
 
 -- =============================================================================
--- اكتمل التثبيت
+-- اكتمل التثبيت — الخطوات التالية
 -- =============================================================================
 -- 1. Supabase → Authentication → Providers → فعّل Email/Password
 -- 2. متغيرات البيئة للتطبيق:
@@ -20106,7 +20287,11 @@ create policy "voucher_attachments_delete" on storage.objects
 --      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 --    (اختياري للإنشاء من الواجهة) SUPABASE_SERVICE_ROLE_KEY
 -- 3. افتح التطبيق → /login → سجّل أول مستخدم (يصبح admin تلقائياً)
--- 4. من /settings/users أدر المستخدمين، ومن /settings/permissions الصلاحيات
--- 5. من /settings/branches و /settings/accounting-periods الإعدادات الجديدة
--- 6. (اختياري) شغّل 03_test_cases.sql للتحقق من سيناريوهات القبض والصرف
+-- 4. أكمل /setup أو من الإعدادات:
+--      الشركة، الفروع، الفترات المحاسبية، المستخدمون والصلاحيات
+-- 5. السندات: /vouchers/settings — حسابات افتراضية وترقيم
+-- 6. المواد: تصنيفات، مستودعات، إعدادات المخزون، بطاقات المواد/BOM
+-- 7. الفواتير: أنماط المستندات (بيع/شراء/تصنيع/تفكيك…) ونقاط البيع إن لزم
+-- 8. (اختياري) 03_test_cases.sql — سيناريوهات قبض/صرف
+-- 9. (اختياري عرض) demo_restaurant.sql أو الملف الموحّد setup_demo_restaurant.sql
 -- =============================================================================

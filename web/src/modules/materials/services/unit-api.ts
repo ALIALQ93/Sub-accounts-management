@@ -73,4 +73,15 @@ export const unitApi = {
     throwIfSupabaseError(error);
     return mapUnit(data as UnitCatalogItem);
   },
+
+  async countBaseUnitUsages(unitId: string): Promise<number> {
+    const supabase = getSupabaseClient();
+    const { count, error } = await supabase
+      .from("material_units")
+      .select("id", { count: "exact", head: true })
+      .eq("unit_id", unitId)
+      .eq("is_base_unit", true);
+    throwIfSupabaseError(error);
+    return count ?? 0;
+  },
 };

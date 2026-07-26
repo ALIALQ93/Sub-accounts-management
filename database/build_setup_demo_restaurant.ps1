@@ -1,18 +1,21 @@
-# Builds setup_demo_restaurant.sql = full setup_all + restaurant demo seed.
+# Builds setup_demo_restaurant.sql = demo header + full setup_all + restaurant seed.
 # Usage: powershell -File database/build_setup_demo_restaurant.ps1
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$utf8Bom = New-Object System.Text.UTF8Encoding $true
 
 & (Join-Path $here 'build_setup_all.ps1')
 
+$demoHeaderPath = Join-Path $here 'setup_demo_restaurant_header.sql'
 $setupAll = Join-Path $here 'setup_all.sql'
 $demo = Join-Path $here 'demo_restaurant.sql'
 $out = Join-Path $here 'setup_demo_restaurant.sql'
 
-if (-not (Test-Path $setupAll)) { throw "Missing $setupAll" }
-if (-not (Test-Path $demo)) { throw "Missing $demo" }
+foreach ($path in @($demoHeaderPath, $setupAll, $demo)) {
+    if (-not (Test-Path $path)) { throw "Missing $path" }
+}
 
-$header = @"
+$separator = @"
 
 -- =============================================================================
 -- BEGIN demo_restaurant.sql (restaurant demo seed for client demos)
@@ -20,7 +23,14 @@ $header = @"
 
 "@
 
-$content = (Get-Content -LiteralPath $setupAll -Raw -Encoding UTF8) + $header + (Get-Content -LiteralPath $demo -Raw -Encoding UTF8) + "`n"
-[System.IO.File]::WriteAllText($out, $content, (New-Object System.Text.UTF8Encoding $true))
+$content =
+    [System.IO.File]::ReadAllText($demoHeaderPath, $utf8Bom) +
+    "`n" +
+    [System.IO.File]::ReadAllText($setupAll, $utf8Bom) +
+    $separator +
+    [System.IO.File]::ReadAllText($demo, $utf8Bom) +
+    "`n"
+
+[System.IO.File]::WriteAllText($out, $content, $utf8Bom)
 $len = (Get-Item $out).Length
 Write-Host "Wrote $out ($len bytes)"

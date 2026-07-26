@@ -46,6 +46,8 @@ begin
     public.has_permission('invoices.post')
     or public.has_permission('invoices.edit')
     or (public.has_permission('pos.sell') and v_inv.pos_point_id is not null)
+    -- بذور/صيانة من SQL Editor بدون JWT
+    or (auth.uid() is null and current_user in ('postgres', 'supabase_admin'))
   ) then
     raise exception
       'Permission denied: invoices.post (or invoices.edit, or pos.sell for a POS invoice) required to post.';

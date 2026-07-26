@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DocumentActionLinks } from "@/components/open-in-new-tab-link";
 import { useAuth } from "@/modules/auth/auth-context";
-import { MaterialsNav } from "@/modules/materials/components/materials-nav";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { stockAdjustmentApi } from "@/modules/materials/services/stock-adjustment-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
@@ -183,7 +182,6 @@ export default function StockAdjustmentPage() {
   return (
     <main className="mx-auto w-full max-w-3xl">
       <h1 className="mb-4 text-2xl font-bold tracking-tight text-[var(--brand-navy)]">تسوية جردية</h1>
-      <MaterialsNav />
 
       <p className="mt-4 text-sm text-slate-600">
         أدخل الكمية الفعلية بعد العدّ — يُرحَّل قيد فروقات + حركة{" "}
@@ -314,6 +312,14 @@ export default function StockAdjustmentPage() {
                 disabled={!canPost || isSaving}
                 placeholder="حساب مخزون"
               />
+              {selectedMaterial?.inventory_account_id &&
+                inventoryAccountId &&
+                inventoryAccountId !== selectedMaterial.inventory_account_id && (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                    الحساب المختار يختلف عن حساب المخزون المسجّل ببطاقة المادة —
+                    سيُرحَّل فرق الجرد لهذا الحساب بدل حساب البطاقة.
+                  </p>
+                )}
             </div>
             <div className="grid gap-1 text-sm">
               <span className="font-medium">حساب فروقات الجرد *</span>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@/components/modal";
 import type {
   MaterialCategory,
   MaterialCategoryFormValues,
@@ -34,8 +35,6 @@ export function MaterialCategoryFormModal({
   onClose,
   onSubmit,
 }: MaterialCategoryFormModalProps) {
-  if (!open) return null;
-
   const defaults: MaterialCategoryFormValues = initialValues
     ? {
         category_code: initialValues.category_code,
@@ -51,9 +50,17 @@ export function MaterialCategoryFormModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <Modal
+      open={open}
+      title={mode === "create" ? "صنف جديد" : "تعديل صنف"}
+      onClose={() => {
+        if (isSaving) return;
+        onClose();
+      }}
+    >
       <form
-        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        key={initialValues?.id ?? "new"}
+        className="grid gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           const formData = new FormData(event.currentTarget);
@@ -66,87 +73,85 @@ export function MaterialCategoryFormModal({
           });
         }}
       >
-        <h2 className="text-lg font-bold text-slate-900">
-          {mode === "create" ? "صنف جديد" : "تعديل صنف"}
-        </h2>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">رمز الصنف *</span>
+          <input
+            name="category_code"
+            defaultValue={defaults.category_code}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2 font-mono uppercase"
+            required
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">الاسم العربي *</span>
+          <input
+            name="name_ar"
+            defaultValue={defaults.name_ar}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2"
+            required
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">الاسم الإنجليزي</span>
+          <input
+            name="name_en"
+            defaultValue={defaults.name_en}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2"
+          />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span className="font-medium">صنف أب (اختياري)</span>
+          <select
+            name="parent_id"
+            defaultValue={defaults.parent_id}
+            disabled={isSaving}
+            className="rounded-md border border-slate-300 px-3 py-2"
+          >
+            <option value="">— بدون —</option>
+            {parentOptions.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.category_code} — {category.name_ar}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="is_active"
+            defaultChecked={defaults.is_active}
+            disabled={isSaving}
+          />
+          <span>نشط</span>
+        </label>
 
-        <div className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">رمز الصنف *</span>
-            <input
-              name="category_code"
-              defaultValue={defaults.category_code}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2 font-mono uppercase"
-              required
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">الاسم العربي *</span>
-            <input
-              name="name_ar"
-              defaultValue={defaults.name_ar}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2"
-              required
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">الاسم الإنجليزي</span>
-            <input
-              name="name_en"
-              defaultValue={defaults.name_en}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2"
-            />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">صنف أب (اختياري)</span>
-            <select
-              name="parent_id"
-              defaultValue={defaults.parent_id}
-              disabled={isSaving}
-              className="rounded-md border border-slate-300 px-3 py-2"
-            >
-              <option value="">— بدون —</option>
-              {parentOptions.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.category_code} — {category.name_ar}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="is_active"
-              defaultChecked={defaults.is_active}
-              disabled={isSaving}
-            />
-            <span>نشط</span>
-          </label>
-        </div>
+        {error && (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-[var(--danger)]">
+            {error}
+          </p>
+        )}
 
-        {error && <p className="mt-3 text-sm text-rose-700">{error}</p>}
-
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-2 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={isSaving}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="btn btn-outline"
           >
             إلغاء
           </button>
           <button
             type="submit"
             disabled={isSaving}
-            className="rounded-md bg-blue-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="btn btn-primary"
           >
             {isSaving ? "جاري الحفظ..." : "حفظ"}
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
