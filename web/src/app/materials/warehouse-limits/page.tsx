@@ -47,7 +47,7 @@ export default function WarehouseLimitsPage() {
 
     return materials
       .filter((material) => material.is_active)
-      .map((material) => {
+      .map((material): LimitDraft => {
         const limit = limitByMaterial.get(material.id);
         const hasWarehouseLimit = Boolean(limit && limit.min_stock > 0);
         return {
