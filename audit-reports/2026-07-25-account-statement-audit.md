@@ -1,5 +1,7 @@
 # تدقيق دقيق — كشف الحساب (Account Statement)
 
+> **حالة المعالجة (2026-07-26):** #1 `.limit(5000)` بلا ترتيب ✓ — ترتيب زمني قبل الحد + تنبيه `truncated` بالواجهة؛ روابط مصدر الفواتير ✓. فلترة الفرع وصلاحية الصفحة (عبر `ReportsAccessGate`) عولجت جزئياً؛ السعر الحي لعملة ثالثة لا يزال مفتوحاً.
+
 منهجية: قراءة الكود الفعلي (TypeScript) — الشاشة `web/src/app/reports/account-statement/page.tsx`، مكوّن العرض `web/src/modules/accounts/components/account-statement-section.tsx`، طبقة الحساب `web/src/modules/reports/utils/account-statement-utils.ts`، والدالة الفعلية التي تجلب وتحسب البيانات: `voucherApi.listAccountStatement()` بـ`web/src/modules/vouchers/services/voucher-api.ts:397-784`. **لا توجد دالة SQL/RPC لكشف الحساب إطلاقاً** (تم التحقق بالبحث عن `account_statement`/`get_account_statement` بكامل `database/setup_all.sql` — لا نتيجة) — كل الجلب والحساب (رصيد افتتاحي، رصيد جارٍ، إجماليات) يتم على طبقة الواجهة مباشرة عبر استعلامات Supabase الخام على `journal_entry_lines`/`journal_entries`/`vouchers`. الاعتماد على `database/setup_all.sql` كناتج البناء الفعلي حسب `database/build_setup_all.ps1` بخصوص جداول/RLS/فهارس `journal_entries`/`journal_entry_lines` المُستهلَكة هنا. لا يُعاد اشتقاق مشكلة السعر الحيّ العامة الموثّقة بـ`audit-reports/2026-07-25-currencies-audit.md §4` (بطاقة الحساب، ميزان المراجعة) — لكن **يُثبَت هنا وجود نفس النمط بملف لم يُغطَّ هناك** (`account-statement-utils.ts`)، بصفته سؤالاً صريحاً بنطاق هذا التدقيق.
 
 ---

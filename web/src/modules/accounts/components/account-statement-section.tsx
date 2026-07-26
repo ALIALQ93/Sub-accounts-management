@@ -250,6 +250,14 @@ export function AccountStatementSection({
             )}
           </p>
 
+          {statement.truncated && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              تم عرض أول {statement.line_limit ?? 5000} حركة فقط مرتّبة حسب
+              التاريخ. الإجماليات والرصيد الجاري قد تكون ناقصة — ضيّق الفترة أو
+              فلتر الحساب.
+            </p>
+          )}
+
           {showAccountColumn && statement.account_summaries.length > 0 && (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {statement.account_summaries.map((summary) => (
@@ -388,6 +396,22 @@ export function AccountStatementSection({
                               href={`/vouchers/${line.source_id}`}
                               className="text-xs text-slate-500 hover:text-blue-900"
                               title="فتح السند في تبويب جديد"
+                            >
+                              ↗
+                            </OpenInNewTabLink>
+                          </span>
+                        ) : line.source_type === "invoice" && line.source_id ? (
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            <Link
+                              href={`/invoices/${line.source_id}`}
+                              className="font-mono text-xs font-medium text-blue-900 hover:underline"
+                            >
+                              {line.voucher_no ?? "فاتورة"}
+                            </Link>
+                            <OpenInNewTabLink
+                              href={`/invoices/${line.source_id}`}
+                              className="text-xs text-slate-500 hover:text-blue-900"
+                              title="فتح الفاتورة في تبويب جديد"
                             >
                               ↗
                             </OpenInNewTabLink>

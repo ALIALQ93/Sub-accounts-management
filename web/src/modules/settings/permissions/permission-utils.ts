@@ -44,6 +44,8 @@ const ROUTE_PERMISSIONS: Array<{ prefix: string; permission: PermissionKey }> = 
   { prefix: "/settings/branches", permission: "settings.company.view" },
   { prefix: "/settings/accounting-periods", permission: "settings.company.view" },
   { prefix: "/settings/company", permission: "settings.company.view" },
+  { prefix: "/settings/database", permission: "settings.company.view" },
+  { prefix: "/settings/about", permission: "settings.company.view" },
   { prefix: "/settings", permission: "settings.company.view" },
   { prefix: "/vouchers/settings", permission: "vouchers.settings" },
   { prefix: "/vouchers/opening-entry", permission: "vouchers.create" },

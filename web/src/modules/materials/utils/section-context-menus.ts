@@ -19,8 +19,13 @@ const MENUS: Record<string, ContextMenuItem[]> = {
     { id: "warehouses", label: "مستودعات", href: "/materials/warehouses" },
     {
       id: "stock-adjustment",
-      label: "تسوية جرد",
+      label: "تسوية جرد سريعة",
       href: "/materials/stock-adjustment/new",
+    },
+    {
+      id: "inventory-advanced",
+      label: "فواتير جرد (تالف/فروق)",
+      href: "/invoices",
     },
     {
       id: "bulk-import",
@@ -86,6 +91,7 @@ const MENUS: Record<string, ContextMenuItem[]> = {
     { id: "settings", label: "نظرة عامة", href: "/settings" },
     { id: "company", label: "بيانات الشركة", href: "/settings/company" },
     { id: "branches", label: "الفروع", href: "/settings/branches" },
+    { id: "database", label: "قاعدة البيانات", href: "/settings/database" },
   ],
 };
 

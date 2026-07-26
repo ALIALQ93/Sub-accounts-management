@@ -193,6 +193,10 @@ export default function StockAdjustmentPage() {
         <Link href="/materials/stock-adjustment/batch" className="text-blue-800 underline">
           تسوية مجمّعة
         </Link>
+        . للحالات المتقدمة (تالف / عجز / فائض كفاتورة) استخدم{" "}
+        <Link href="/invoices" className="text-blue-800 underline">
+          فاتورة جردية
+        </Link>
         .
       </p>
 

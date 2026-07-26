@@ -93,10 +93,13 @@
 --    • سياسات RLS لأنماط فواتير نقاط البيع
 --
 -- 10) التقارير المخزنية والتجارية (دوال SQL)
---    • get_inventory_balance / get_inventory_movement_ledger
+--    • get_inventory_balance / get_inventory_movement_ledger (+ رصيد افتتاحي بالفترة)
 --    • get_inventory_analysis (نواقص/راكد)
---    • get_cogs_report / get_inventory_movements_summary
+--    • get_cogs_report (إيراد من line_amount + تكلفة مرتجع بسعر الإخراج)
+--    • get_inventory_movements_summary
 --    • get_purchase_lines_report / get_sales_lines_report
+--    • get_trial_balance مع فلتر فرع + assert_can_view_reports
+--    • open_items_view بالعملة الأساسية + get_schema_setup_status لويزارد /setup
 --
 -- 11) المصادقة والحوكمة والأمان
 --    • profiles + أدوار؛ أول مستخدم = admin
@@ -115,7 +118,7 @@
 --   2. متغيرات البيئة: NEXT_PUBLIC_SUPABASE_URL + PUBLISHABLE_KEY
 --      (اختياري) SUPABASE_SERVICE_ROLE_KEY لإدارة المستخدمين من الواجهة
 --   3. /login → أول مستخدم يصبح admin
---   4. /setup أو /settings/company ثم الفروع والفترات والصلاحيات
+--   4. /setup (يبدأ بخطوة تهيئة قاعدة البيانات ثم الشركة…)
 --   5. إعدادات السندات والمواد وأنماط الفواتير / نقاط البيع
 --   6. (اختياري) 03_test_cases.sql للتحقق من سيناريوهات السندات
 -- =============================================================================

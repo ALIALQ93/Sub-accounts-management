@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,6 +8,7 @@ import {
 } from "@/components/open-in-new-tab-link";
 import { AccountMultiSelectField } from "@/modules/accounts/components/account-multi-select-field";
 import { AccountStatementSection } from "@/modules/accounts/components/account-statement-section";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   buildAccountStatementShareParams,
@@ -214,6 +215,7 @@ export default function AccountStatementReportPage() {
   };
 
   return (
+    <ReportsAccessGate>
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -357,5 +359,6 @@ export default function AccountStatementReportPage() {
         </section>
       )}
     </main>
+    </ReportsAccessGate>
   );
 }

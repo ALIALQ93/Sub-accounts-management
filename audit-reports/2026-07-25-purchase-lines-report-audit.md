@@ -1,5 +1,7 @@
 # تدقيق دقيق — تقرير المشتريات التفصيلي (Purchase Lines)
 
+> **حالة المعالجة (2026-07-26):** #3 إشارة مرتجع المشتريات في `summarize()` ✓؛ صلاحية الواجهة ✓ (`ReportsAccessGate`). فصل/استبعاد `opening_stock` من الصافي لا يزال اختيارياً مفتوحاً.
+
 منهجية: قراءة الكود الفعلي لشاشة `web/src/app/reports/purchase-lines/page.tsx` وطبقة الخدمة `web/src/modules/reports/services/purchase-lines-report-api.ts`، وتتبّع دالة `get_purchase_lines_report()` عبر `database/build_setup_all.ps1` إلى تعريفها الفعلي بـ`database/patch_inventory_phase6.sql` — **مُعرَّفة مرة واحدة فقط** بكامل قاعدة الكود، لا تعارض إصدارات. كجزء من نطاق التدقيق، تحقّقت **مجدداً من الصفر** (وليس بالاعتماد على `AUDIT_INVOICES_JOURNAL.md` كما هو) من حالة الخلل الموصوف فيه (البند 1: "فاتورة الشراء بخصم سطري تُنتج قيداً غير متوازن ولا تُرحَّل إطلاقاً") بقراءة النسخة **الفعّالة اليوم** من `post_invoice()`، عبر تتبّع ترتيب الباتشات بـ`build_setup_all.ps1` (`patch_post_invoice.sql` ← `patch_invoice_line_adjustments.sql` ← `patch_invoice_pricing_cost.sql`، الأخير هو الفعّال لأنه آخرها بالقائمة).
 
 ---

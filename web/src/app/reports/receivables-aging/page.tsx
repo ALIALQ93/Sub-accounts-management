@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   BUCKET_LABELS,
@@ -88,7 +89,24 @@ export default function ReceivablesAgingPage() {
     [filteredRows],
   );
 
+  const customerTotal = useMemo(
+    () =>
+      filteredRows
+        .filter((row) => row.party_type === "customer")
+        .reduce((sum, row) => sum + row.open_amount, 0),
+    [filteredRows],
+  );
+
+  const vendorTotal = useMemo(
+    () =>
+      filteredRows
+        .filter((row) => row.party_type === "vendor")
+        .reduce((sum, row) => sum + row.open_amount, 0),
+    [filteredRows],
+  );
+
   return (
+    <ReportsAccessGate>
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
@@ -96,7 +114,7 @@ export default function ReceivablesAgingPage() {
         </h1>
         <p className="mt-1 text-sm text-slate-600">
           حركات مفتوحة من <code className="text-xs">open_items_view</code> —
-          حسب تاريخ الاستحقاق. مرتبط بفواتير آجل وإغلاق الحركات.
+          حسب تاريخ الاستحقاق. المبالغ بالعملة الأساسية للشركة.
         </p>
       </div>
 
@@ -150,10 +168,21 @@ export default function ReceivablesAgingPage() {
           </div>
         ))}
         <div className="rounded-xl border border-[var(--brand-navy)]/20 bg-[var(--brand-navy)]/5 p-3 shadow-sm sm:col-span-2 lg:col-span-1">
-          <p className="text-xs text-[var(--brand-navy)]">الإجمالي</p>
-          <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--brand-navy)]">
-            {grandTotal.toFixed(2)}
-          </p>
+          {partyFilter === "all" ? (
+            <>
+              <p className="text-xs text-[var(--brand-navy)]">ذمم مدينة / دائنة</p>
+              <p className="mt-1 font-mono text-sm font-semibold tabular-nums text-[var(--brand-navy)]">
+                {customerTotal.toFixed(2)} / {vendorTotal.toFixed(2)}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-[var(--brand-navy)]">الإجمالي</p>
+              <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-[var(--brand-navy)]">
+                {grandTotal.toFixed(2)}
+              </p>
+            </>
+          )}
         </div>
       </section>
 
@@ -285,5 +314,6 @@ export default function ReceivablesAgingPage() {
         )}
       </section>
     </main>
+    </ReportsAccessGate>
   );
 }

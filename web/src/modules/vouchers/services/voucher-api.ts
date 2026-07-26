@@ -427,6 +427,8 @@ export const voucherApi = {
         total_credit: 0,
         closing_balance: 0,
         account_summaries: [],
+        truncated: false,
+        line_limit: 5000,
       };
     }
 
@@ -488,8 +490,12 @@ export const voucherApi = {
             closing_balance: 0,
           };
         }),
+        truncated: false,
+        line_limit: 5000,
       };
     }
+
+    const STATEMENT_LINE_LIMIT = 5000;
 
     const openingByAccount = new Map<string, number>();
     for (const accountId of scopedAccountIds) {
@@ -504,7 +510,9 @@ export const voucherApi = {
         )
         .in("account_id", scopedAccountIds)
         .eq("journal_entries.status", "posted")
-        .lt("journal_entries.entry_date", fromDate);
+        .lt("journal_entries.entry_date", fromDate)
+        .order("entry_date", { foreignTable: "journal_entries", ascending: true })
+        .limit(STATEMENT_LINE_LIMIT);
 
       if (costCenterId) {
         openingQuery = openingQuery.eq("cost_center_id", costCenterId);
@@ -562,7 +570,9 @@ export const voucherApi = {
       )
       .in("account_id", scopedAccountIds)
       .eq("journal_entries.status", "posted")
-      .limit(5000);
+      .order("entry_date", { foreignTable: "journal_entries", ascending: true })
+      .order("entry_no", { foreignTable: "journal_entries", ascending: true })
+      .limit(STATEMENT_LINE_LIMIT);
 
     if (costCenterId) {
       query = query.eq("cost_center_id", costCenterId);
@@ -601,6 +611,7 @@ export const voucherApi = {
     };
 
     const rawLines = (data ?? []) as RawRow[];
+    const truncated = rawLines.length >= STATEMENT_LINE_LIMIT;
     rawLines.sort((a, b) => {
       const dateA = a.journal_entries?.entry_date ?? "";
       const dateB = b.journal_entries?.entry_date ?? "";
@@ -621,6 +632,14 @@ export const voucherApi = {
           .filter((id): id is string => Boolean(id)),
       ),
     ];
+    const invoiceIds = [
+      ...new Set(
+        rawLines
+          .filter((row) => row.journal_entries?.source_type === "invoice")
+          .map((row) => row.journal_entries?.source_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
 
     const voucherMetaById = new Map<
       string,
@@ -637,6 +656,21 @@ export const voucherApi = {
         voucherMetaById.set((voucher as { id: string }).id, {
           voucher_no: (voucher as { voucher_no: string }).voucher_no,
           description: (voucher as { description: string | null }).description,
+        });
+      }
+    }
+
+    const invoiceMetaById = new Map<string, { invoice_no: string }>();
+    if (invoiceIds.length > 0) {
+      const { data: invoices, error: invoiceError } = await supabase
+        .from("invoices")
+        .select("id, invoice_no")
+        .in("id", invoiceIds);
+      throwIfSupabaseError(invoiceError);
+
+      for (const invoice of invoices ?? []) {
+        invoiceMetaById.set((invoice as { id: string }).id, {
+          invoice_no: (invoice as { invoice_no: string }).invoice_no,
         });
       }
     }
@@ -707,6 +741,10 @@ export const voucherApi = {
         sourceType === "voucher" && sourceId
           ? voucherMetaById.get(sourceId)
           : undefined;
+      const invoiceMeta =
+        sourceType === "invoice" && sourceId
+          ? invoiceMetaById.get(sourceId)
+          : undefined;
 
       lines.push({
         id: row.id,
@@ -737,7 +775,8 @@ export const voucherApi = {
         running_balance: running,
         source_type: sourceType,
         source_id: sourceId,
-        voucher_no: voucherMeta?.voucher_no ?? null,
+        voucher_no:
+          voucherMeta?.voucher_no ?? invoiceMeta?.invoice_no ?? null,
         cost_center_id: row.cost_center_id ?? null,
         cost_center_code: costCenter?.code ?? null,
         cost_center_name: costCenter?.name_ar ?? null,
@@ -780,6 +819,8 @@ export const voucherApi = {
       total_credit,
       closing_balance: opening_balance + total_debit - total_credit,
       account_summaries,
+      truncated,
+      line_limit: STATEMENT_LINE_LIMIT,
     };
   },
 
@@ -940,6 +981,7 @@ export const voucherApi = {
       accountId,
       accountSubtree = true,
       costCenterId,
+      branchId,
     } = params;
 
     const { data, error } = await supabase.rpc("get_trial_balance", {
@@ -949,6 +991,7 @@ export const voucherApi = {
       p_account_id: accountId || null,
       p_account_subtree: accountSubtree,
       p_cost_center_id: costCenterId || null,
+      p_branch_id: branchId || null,
     });
     throwIfSupabaseError(error);
 

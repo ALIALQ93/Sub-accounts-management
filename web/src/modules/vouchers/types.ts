@@ -274,6 +274,7 @@ export interface TrialBalanceParams {
   accountId?: string;
   accountSubtree?: boolean;
   costCenterId?: string;
+  branchId?: string;
   periodId?: string;
 }
 

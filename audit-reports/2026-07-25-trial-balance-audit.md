@@ -1,5 +1,7 @@
 # تدقيق دقيق — ميزان المراجعة (Trial Balance)
 
+> **حالة المعالجة (2026-07-26):** #1 فلتر فرع ✓ (`p_branch_id` + واجهة). #2 صلاحية ✓ (`assert_can_view_reports` / `ReportsAccessGate`). رابط كشف العملة وفرق القيد الافتتاحي ما زالا مفتوحين كتحسينات.
+
 منهجية: قراءة الكود الفعلي (SQL + TypeScript) — الشاشة `web/src/app/reports/trial-balance/page.tsx`، طبقة العرض `web/src/modules/reports/utils/trial-balance-utils.ts`، ودالة `get_trial_balance()` كما تُستدعى فعلياً عبر `voucherApi.listTrialBalanceRows` (`web/src/modules/vouchers/services/voucher-api.ts:934-958`). الاعتماد على `database/setup_all.sql` كناتج البناء الفعلي حسب `database/build_setup_all.ps1` — بما أن `get_trial_balance` مُعاد تعريفها (`create or replace`) ثلاث مرات في الملفات المصدر (`01_schema.sql`, `patch_trial_balance_opening.sql`)، فآخر نسخة تفوز حسب ترتيب دمج الباتشات، وهي الموجودة عند `setup_all.sql:6387-6501` (تعليق التوثيق عندها يؤكد أنها فعلاً الأخيرة: "opening_entry_balance منفصل عن حركة الفترة"). لا تُعاد مسألتا خلط عملة الحساب/الأساس (✓ محلولة) ولا مشكلة السعر الحيّ بوضع `native`/`all` (موثّقة بـ`audit-reports/2026-07-25-currencies-audit.md`) — التركيز هنا على ما لم يُغطَّ بالتقريرين.
 
 ---

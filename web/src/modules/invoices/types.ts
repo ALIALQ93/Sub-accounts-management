@@ -9,7 +9,20 @@ export type InvoiceCommercialKind =
   | "return_purchase"
   | "opening_stock"
   | "manufacturing"
-  | "disassembly";
+  | "disassembly"
+  | "inventory_scrap"
+  | "inventory_shortage"
+  | "inventory_surplus";
+
+export type DisassemblyCostMode =
+  | "allocate_from_parent"
+  | "components_at_current_cost";
+
+export type InvoiceNatureGroup =
+  | "commercial"
+  | "logistics"
+  | "transform"
+  | "inventory";
 
 export type ManufacturingLineRole = "consume" | "produce";
 
@@ -62,6 +75,8 @@ export interface InvoicePattern {
   pricing_material_mode: string | null;
   pricing_cost_mode: string | null;
   pricing_consumed_mode: string | null;
+  disassembly_cost_mode: string | null;
+  freight_affects_material_cost: boolean;
   track_expiry_on_lines: boolean;
   track_serial_on_lines: boolean;
   enforce_stock_availability: boolean;

@@ -1,5 +1,7 @@
 # تدقيق دقيق — تقرير كلفة البضاعة المباعة (COGS)
 
+> **حالة المعالجة (2026-07-26):** #1 عمود الإيراد ✓ — `sales_amount` من `invoice_material_lines.line_amount`. #2 تكلفة مرتجع المبيعات ✓ — تريغر + **تصحيح بأثر رجعي** لكل حركات `return_sale` الموجودة (`patch_reports_audit_fix2.sql`).
+
 منهجية: قراءة الكود الفعلي (SQL + TypeScript) مباشرة، واعتماد `database/setup_all.sql` كمرجع «الحقيقة المُصرَّفة» — لأن ترتيب تطبيق الـpatches الفعلي (`database/build_setup_all.ps1`) يعني أن **آخر `create or replace` يفوز**، وليس أول نتيجة بحث نصي. تتبّعت تحديداً تعريفات `get_cogs_report`، `post_invoice()`، `inventory_movements_apply_invoice_line_cost()`، `calc_inbound_inventory_amount`، `calc_outbound_unit_cost`/`calc_outbound_line_total_cost` عبر عدة إعادات تعريف للتأكد من النسخة الفعّالة فعلياً في قاعدة بيانات مُهيّأة بـ`setup_all.sql`.
 
 النطاق: `web/src/app/reports/cogs/page.tsx`، `web/src/modules/reports/services/cogs-report-api.ts`، ودالة `get_cogs_report` (`database/setup_all.sql:8045-8194`، من `patch_inventory_phase4.sql`).

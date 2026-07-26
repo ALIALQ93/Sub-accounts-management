@@ -88,4 +88,7 @@ export interface AccountStatementResult {
   total_credit: number;
   closing_balance: number;
   account_summaries: AccountStatementAccountSummary[];
+  /** True when period lines were capped by the fetch limit (totals may be incomplete). */
+  truncated?: boolean;
+  line_limit?: number;
 }

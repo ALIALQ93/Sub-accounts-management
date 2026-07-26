@@ -1,5 +1,7 @@
 # تدقيق دقيق — تقرير المبيعات التفصيلي (Sales Lines)
 
+> **حالة المعالجة (2026-07-26):** #2 إشارة المرتجعات في `summarize()` ✓؛ #1 صلاحية الواجهة ✓ (`ReportsAccessGate` / `reports.view`). فحص صلاحية داخل RPC لا يزال مفتوحاً.
+
 منهجية: قراءة الكود الفعلي لشاشة `web/src/app/reports/sales-lines/page.tsx` وطبقة الخدمة `web/src/modules/reports/services/sales-lines-report-api.ts`، وتتبّع دالة `get_sales_lines_report()` عبر `database/build_setup_all.ps1` إلى تعريفها الفعلي بـ`database/patch_inventory_phase7.sql` — دالة **مُعرَّفة مرة واحدة فقط** بكامل قاعدة الكود (لا تعارض "آخر create-or-replace يفوز" هنا). كما تتبّعت المحفزات التي تُنتج `line_amount`/`discount_amount`/`quantity_base` المصدر (`invoice_material_lines_apply_quantities`, `patch_invoice_line_adjustments.sql:41-94`) لتقييم "هل الأرقام تطابق الفاتورة فعلاً"، وقارنت أسلوب الأزرار والتنبيهات بالنظام التصميمي المشترك (`web/src/app/globals.css`, `.btn`/`.btn-outline`، `var(--danger)`).
 
 ---

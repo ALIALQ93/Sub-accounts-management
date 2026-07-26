@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import { InventoryShortageAlert } from "@/modules/materials/components/inventory-shortage-alert";
 import { StuckTransfersAlert } from "@/modules/invoices/components/stuck-transfers-alert";
@@ -64,7 +65,7 @@ const REPORTS: ReportCard[] = [
   {
     title: "ملخص حركات المخزون",
     description:
-      "تجميع per نوع حركة ونوع فاتورة — مشتريات، مبيعات، مناقلة، تسوية.",
+      "تجميع حسب نوع حركة ونوع فاتورة — مشتريات، مبيعات، مناقلة، تسوية.",
     href: "/reports/inventory-movements",
     status: "available",
     phase: "جاهز",
@@ -131,6 +132,7 @@ export default function ReportsHubPage() {
   const upcoming = REPORTS.filter((report) => report.status === "soon");
 
   return (
+    <ReportsAccessGate>
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">
@@ -174,6 +176,7 @@ export default function ReportsHubPage() {
         </div>
       </section>
     </main>
+    </ReportsAccessGate>
   );
 }
 

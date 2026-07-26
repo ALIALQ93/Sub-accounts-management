@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -10,6 +10,7 @@ import { materialApi } from "@/modules/materials/services/material-api";
 import { warehouseMaterialLimitsApi } from "@/modules/materials/services/warehouse-material-limits-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
 import type { MaterialCategory } from "@/modules/materials/types";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   ANALYSIS_KIND_LABELS,
@@ -24,9 +25,11 @@ type ViewMode = "balance" | "ledger" | "analysis";
 
 export default function InventoryBalanceReportPage() {
   return (
+    <ReportsAccessGate>
     <Suspense fallback={<p className="p-4 text-sm text-slate-600">جاري التحميل...</p>}>
       <InventoryBalanceReportContent />
     </Suspense>
+    </ReportsAccessGate>
   );
 }
 

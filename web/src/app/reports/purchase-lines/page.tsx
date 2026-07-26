@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -7,6 +7,7 @@ import { PrintReportButton } from "@/components/print-report-button";
 import { branchApi, type BranchOption } from "@/modules/branches/services/branch-api";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   COMMERCIAL_KIND_LABELS,
@@ -135,6 +136,7 @@ export default function PurchaseLinesReportPage() {
   );
 
   return (
+    <ReportsAccessGate>
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="no-print flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -274,11 +276,11 @@ export default function PurchaseLinesReportPage() {
         <section className="grid gap-3 sm:grid-cols-4">
           <SummaryCard label="عدد الأسطر" value={String(totals.line_count)} />
           <SummaryCard
-            label="إجمالي كمية"
+            label="صافي كمية"
             value={totals.quantity_base.toFixed(4)}
           />
-          <SummaryCard label="إجمالي خصم" value={totals.discount_amount.toFixed(2)} />
-          <SummaryCard label="إجمالي مبلغ" value={totals.line_amount.toFixed(2)} />
+          <SummaryCard label="صافي خصم" value={totals.discount_amount.toFixed(2)} />
+          <SummaryCard label="صافي مبلغ" value={totals.line_amount.toFixed(2)} />
         </section>
       )}
 
@@ -363,6 +365,7 @@ export default function PurchaseLinesReportPage() {
         )}
       </section>
     </main>
+    </ReportsAccessGate>
   );
 }
 

@@ -99,7 +99,10 @@ begin
     return new;
   end if;
 
-  if new.movement_kind not in ('sale', 'transfer_out', 'return_purchase') then
+  if new.movement_kind not in (
+    'sale', 'transfer_out', 'return_purchase',
+    'inventory_scrap', 'inventory_shortage', 'adjustment'
+  ) then
     return new;
   end if;
 

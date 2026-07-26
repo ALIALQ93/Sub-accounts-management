@@ -2,6 +2,7 @@ import type { InventorySettingsFormValues } from "@/modules/materials/types";
 import type { CompanySettingsFormValues } from "@/modules/settings/types";
 
 export type SetupStepId =
+  | "database"
   | "company"
   | "admin"
   | "branch"
@@ -11,6 +12,11 @@ export type SetupStepId =
   | "finish";
 
 export const SETUP_STEPS: Array<{ id: SetupStepId; title: string; description: string }> = [
+  {
+    id: "database",
+    title: "تهيئة قاعدة البيانات",
+    description: "التحقق من تثبيت المخطط عبر setup_all",
+  },
   {
     id: "company",
     title: "بيانات الشركة",
@@ -48,6 +54,32 @@ export const SETUP_STEPS: Array<{ id: SetupStepId; title: string; description: s
   },
 ];
 
+export interface SchemaSetupCheck {
+  key: string;
+  label_ar: string;
+  ok: boolean;
+}
+
+export interface SchemaSetupSummary {
+  is_setup_complete: boolean;
+  company_name_ar: string;
+  root_accounts: number;
+  branches: number;
+  warehouses: number;
+  currencies: number;
+  materials: number;
+  posted_invoices: number;
+  inventory_movements: number;
+}
+
+export interface SchemaSetupStatus {
+  ok: boolean;
+  source: string;
+  checks: SchemaSetupCheck[];
+  message_ar: string;
+  summary?: SchemaSetupSummary | null;
+}
+
 export interface SetupBranchForm {
   branch_code: string;
   branch_name_ar: string;
@@ -75,6 +107,8 @@ export interface SetupWizardState {
   inventory: InventorySettingsFormValues;
   accountsAccepted: boolean;
   rootAccounts: RootAccountSummary[];
+  schemaStatus: SchemaSetupStatus | null;
+  schemaAccepted: boolean;
 }
 
 export const EMPTY_COMPANY_FORM: CompanySettingsFormValues = {

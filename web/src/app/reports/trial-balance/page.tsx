@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,7 +8,9 @@ import {
 } from "@/components/open-in-new-tab-link";
 import { AccountSearchField } from "@/modules/vouchers/components/account-search-field";
 import { CostCenterSearchField } from "@/modules/vouchers/components/cost-center-search-field";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
+import { branchApi, type BranchOption } from "@/modules/branches/services/branch-api";
 import {
   aggregateTrialBalanceTree,
   applyHideZeroRows,
@@ -67,6 +69,8 @@ export default function TrialBalancePage() {
     initial.accountSubtree !== false,
   );
   const [costCenterId, setCostCenterId] = useState(initial.costCenterId ?? "");
+  const [branchId, setBranchId] = useState(initial.branchId ?? "");
+  const [branches, setBranches] = useState<BranchOption[]>([]);
   const [periodId, setPeriodId] = useState(initial.periodId ?? "");
   const [periods, setPeriods] = useState<AccountingPeriod[]>([]);
   const [aggregateTree, setAggregateTree] = useState(initial.aggregateTree ?? false);
@@ -83,6 +87,7 @@ export default function TrialBalancePage() {
         accountId,
         accountSubtree,
         costCenterId,
+        branchId,
         periodId,
         aggregateTree,
         hideZero,
@@ -100,6 +105,7 @@ export default function TrialBalancePage() {
       accountId,
       accountSubtree,
       costCenterId,
+      branchId,
       periodId,
       aggregateTree,
       hideZero,
@@ -120,6 +126,7 @@ export default function TrialBalancePage() {
         accountId: accountId || undefined,
         accountSubtree,
         costCenterId: costCenterId || undefined,
+        branchId: branchId || undefined,
       });
       setRawRows(data);
     } catch (err) {
@@ -135,6 +142,7 @@ export default function TrialBalancePage() {
     accountId,
     accountSubtree,
     costCenterId,
+    branchId,
   ]);
 
   useEffect(() => {
@@ -142,18 +150,20 @@ export default function TrialBalancePage() {
 
     const loadMeta = async () => {
       try {
-        const [accountsData, currenciesData, centersData, periodsData] =
+        const [accountsData, currenciesData, centersData, periodsData, branchesData] =
           await Promise.all([
           voucherApi.listAllAccounts(),
           currencyApi.listActiveCurrencies(),
           voucherApi.listCostCenters(),
           accountingPeriodApi.listActivePeriodOptions(),
+          branchApi.listBranchOptions(),
         ]);
         if (cancelled) return;
         setAccounts(accountsData);
         setCurrencies(currenciesData);
         setCostCenters(centersData);
         setPeriods(periodsData);
+        setBranches(branchesData);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "فشل تحميل البيانات.");
@@ -235,6 +245,7 @@ export default function TrialBalancePage() {
           accountId,
           accountSubtree,
           costCenterId,
+          branchId,
           periodId,
           aggregateTree,
           hideZero,
@@ -249,6 +260,7 @@ export default function TrialBalancePage() {
       accountId,
       accountSubtree,
       costCenterId,
+      branchId,
       periodId,
       aggregateTree,
       hideZero,
@@ -268,6 +280,7 @@ export default function TrialBalancePage() {
     setAccountId("");
     setAccountSubtree(true);
     setCostCenterId("");
+    setBranchId("");
     setPeriodId("");
     setAggregateTree(false);
     setHideZero(false);
@@ -279,6 +292,7 @@ export default function TrialBalancePage() {
       accountId: undefined,
       accountSubtree: undefined,
       costCenterId: undefined,
+      branchId: undefined,
       periodId: undefined,
       tree: undefined,
       hideZero: undefined,
@@ -300,6 +314,7 @@ export default function TrialBalancePage() {
   const isBalanced = Math.abs(balanceDiff) <= 0.000001;
 
   return (
+    <ReportsAccessGate>
     <main className="mx-auto w-full max-w-7xl p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -425,7 +440,25 @@ export default function TrialBalancePage() {
             value={costCenterId}
             onChange={(id) => setCostCenterId(id)}
           />
-          <div className="flex flex-wrap items-end gap-4 text-sm">
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium text-slate-700">الفرع (اختياري)</span>
+            <select
+              className="rounded-md border border-slate-300 px-3 py-2"
+              value={branchId}
+              onChange={(event) => setBranchId(event.target.value)}
+            >
+              <option value="">كل الفروع</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.branch_code}
+                  {branch.name_ar ? ` — ${branch.name_ar}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-end gap-4 text-sm">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -451,7 +484,6 @@ export default function TrialBalancePage() {
               />
               <span>إخفاء الأرصدة الصفرية</span>
             </label>
-          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -640,5 +672,6 @@ export default function TrialBalancePage() {
         )}
       </section>
     </main>
+    </ReportsAccessGate>
   );
 }

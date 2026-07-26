@@ -13,6 +13,7 @@ export interface TrialBalanceQueryParams {
   accountId?: string;
   accountSubtree?: boolean;
   costCenterId?: string;
+  branchId?: string;
   periodId?: string;
   aggregateTree?: boolean;
   hideZero?: boolean;
@@ -279,6 +280,7 @@ export function buildTrialBalanceShareParams(
     accountId: params.accountId,
     accountSubtree: params.accountSubtree === false ? "0" : undefined,
     costCenterId: params.costCenterId,
+    branchId: params.branchId,
     periodId: params.periodId,
     tree: params.aggregateTree ? "1" : undefined,
     hideZero: params.hideZero ? "1" : undefined,
@@ -299,6 +301,7 @@ export function parseTrialBalanceShareParams(
     accountId: searchParams.get("accountId") ?? "",
     accountSubtree: searchParams.get("accountSubtree") !== "0",
     costCenterId: searchParams.get("costCenterId") ?? "",
+    branchId: searchParams.get("branchId") ?? "",
     periodId: searchParams.get("periodId") ?? "",
     aggregateTree: searchParams.get("tree") === "1",
     hideZero: searchParams.get("hideZero") === "1",

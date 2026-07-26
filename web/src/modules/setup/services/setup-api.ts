@@ -12,6 +12,7 @@ import type {
 } from "@/modules/settings/types";
 import type {
   RootAccountSummary,
+  SchemaSetupStatus,
   SetupAdminForm,
   SetupBranchForm,
   SetupWizardState,
@@ -23,6 +24,44 @@ function throwIfError(error: { message?: string } | null): void {
   if (error) {
     throw new Error(error.message || "حدث خطأ غير متوقع.");
   }
+}
+
+function mapSchemaStatus(raw: Record<string, unknown> | null): SchemaSetupStatus {
+  const checksRaw = Array.isArray(raw?.checks) ? raw.checks : [];
+  const summaryRaw =
+    raw?.summary && typeof raw.summary === "object"
+      ? (raw.summary as Record<string, unknown>)
+      : null;
+
+  return {
+    ok: Boolean(raw?.ok),
+    source: String(raw?.source ?? "setup_all"),
+    message_ar: String(
+      raw?.message_ar ??
+        "تعذّر قراءة حالة المخطط — تأكد من تشغيل database/setup_all.sql",
+    ),
+    checks: checksRaw.map((item) => {
+      const row = item as Record<string, unknown>;
+      return {
+        key: String(row.key ?? ""),
+        label_ar: String(row.label_ar ?? row.key ?? ""),
+        ok: Boolean(row.ok),
+      };
+    }),
+    summary: summaryRaw
+      ? {
+          is_setup_complete: Boolean(summaryRaw.is_setup_complete),
+          company_name_ar: String(summaryRaw.company_name_ar ?? ""),
+          root_accounts: Number(summaryRaw.root_accounts ?? 0),
+          branches: Number(summaryRaw.branches ?? 0),
+          warehouses: Number(summaryRaw.warehouses ?? 0),
+          currencies: Number(summaryRaw.currencies ?? 0),
+          materials: Number(summaryRaw.materials ?? 0),
+          posted_invoices: Number(summaryRaw.posted_invoices ?? 0),
+          inventory_movements: Number(summaryRaw.inventory_movements ?? 0),
+        }
+      : null,
+  };
 }
 
 export const setupApi = {
@@ -46,8 +85,23 @@ export const setupApi = {
     return true;
   },
 
+  async getSchemaSetupStatus(): Promise<SchemaSetupStatus> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("get_schema_setup_status");
+    if (error) {
+      return {
+        ok: false,
+        source: "setup_all",
+        checks: [],
+        message_ar:
+          "دالة التحقق غير متوفرة. في مرحلة البناء شغّل database/setup_all.sql ثم أعد المحاولة.",
+      };
+    }
+    return mapSchemaStatus((data ?? null) as Record<string, unknown> | null);
+  },
+
   async loadWizardState(): Promise<SetupWizardState> {
-    const [company, inventory, branches, warehouses, profile, rootAccounts] =
+    const [company, inventory, branches, warehouses, profile, rootAccounts, schemaStatus] =
       await Promise.all([
         settingsApi.getCompanySettings(),
         inventorySettingsApi.getSettings(),
@@ -55,6 +109,7 @@ export const setupApi = {
         warehouseApi.listWarehouses(),
         settingsApi.getCurrentProfile(),
         this.listRootAccounts(),
+        this.getSchemaSetupStatus(),
       ]);
 
     const head =
@@ -101,6 +156,8 @@ export const setupApi = {
       },
       accountsAccepted: false,
       rootAccounts,
+      schemaStatus,
+      schemaAccepted: schemaStatus.ok,
     };
   },
 
@@ -224,5 +281,7 @@ export function emptyWizardState(): SetupWizardState {
     inventory: { ...EMPTY_INVENTORY_FORM },
     accountsAccepted: false,
     rootAccounts: [],
+    schemaStatus: null,
+    schemaAccepted: false,
   };
 }

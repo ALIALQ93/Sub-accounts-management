@@ -78,6 +78,13 @@ export const MOVEMENT_KIND_LABELS: Record<string, string> = {
   return_purchase: "مرتجع مشتريات",
   opening_stock: "بضاعة أول المدة",
   adjustment: "تسوية جرد",
+  manufacture_consume: "تصنيع — استهلاك",
+  manufacture_produce: "تصنيع — إنتاج",
+  disassemble_consume: "تفكيك — استهلاك",
+  disassemble_produce: "تفكيك — إنتاج",
+  inventory_scrap: "إخراج تالف",
+  inventory_shortage: "عجز جرد",
+  inventory_surplus: "فائض جرد",
 };
 
 function mapBalanceRow(row: Record<string, unknown>): InventoryBalanceRow {
@@ -170,6 +177,8 @@ export const COMMERCIAL_KIND_LABELS: Record<string, string> = {
   opening_stock: "بضاعة أول المدة",
   stock_adjustment: "تسوية جرد",
   invoice: "فاتورة",
+  manufacturing: "تصنيع",
+  disassembly: "تفكيك",
 };
 
 function mapAnalysisRow(row: Record<string, unknown>): InventoryAnalysisRow {

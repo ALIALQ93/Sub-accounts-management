@@ -9,7 +9,8 @@ export function isInboundStockMovement(
     commercialKind === "purchase" ||
     commercialKind === "return_sale" ||
     commercialKind === "opening_stock" ||
-    commercialKind === "transfer_in"
+    commercialKind === "transfer_in" ||
+    commercialKind === "inventory_surplus"
   );
 }
 
@@ -23,7 +24,9 @@ export function isOutboundStockMovement(
   return (
     commercialKind === "sale" ||
     commercialKind === "return_purchase" ||
-    commercialKind === "transfer_out"
+    commercialKind === "transfer_out" ||
+    commercialKind === "inventory_scrap" ||
+    commercialKind === "inventory_shortage"
   );
 }
 

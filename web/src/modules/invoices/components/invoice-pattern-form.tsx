@@ -4,9 +4,11 @@ import { useMemo } from "react";
 import type { BranchOption, InvoicePatternFormValues, WarehouseOption } from "@/modules/invoices/services/invoice-pattern-api";
 import {
   COMMERCIAL_KIND_OPTIONS,
-  DIRECTION_OPTIONS,
+  DISASSEMBLY_COST_MODE_OPTIONS,
   NUMBERING_RESET_OPTIONS,
   SETTLEMENT_MODE_OPTIONS,
+  getDirectionLabel,
+  groupedCommercialKindOptions,
 } from "@/modules/invoices/utils/invoice-kind-config";
 import { formatInvoiceNo } from "@/modules/invoices/utils/format-invoice-no";
 import type { Currency } from "@/modules/currencies/types";
@@ -19,6 +21,7 @@ import {
   PRICING_CONSUMED_MODE_LABELS,
   PRICING_COST_MODE_LABELS,
   PRICING_MATERIAL_MODE_LABELS,
+  allowsLinePriceConsumed,
   defaultPricingConsumedMode,
   defaultPricingCostMode,
   defaultPricingMaterialMode,
@@ -137,9 +140,23 @@ export function InvoicePatternForm({
       warehouse_movement:
         kind === "opening_stock" ||
         kind === "manufacturing" ||
-        kind === "disassembly"
+        kind === "disassembly" ||
+        kind === "inventory_scrap" ||
+        kind === "inventory_shortage" ||
+        kind === "inventory_surplus" ||
+        kind === "transfer_out" ||
+        kind === "transfer_in"
           ? true
           : values.warehouse_movement,
+      pricing_material_mode: defaultPricingMaterialMode(kind),
+      pricing_cost_mode:
+        option?.direction === "input" ? defaultPricingCostMode() : null,
+      pricing_consumed_mode:
+        option?.direction === "output" ? defaultPricingConsumedMode() : null,
+      disassembly_cost_mode:
+        kind === "disassembly" ? "allocate_from_parent" : null,
+      freight_affects_material_cost:
+        kind === "transfer_in" ? true : values.freight_affects_material_cost,
       reference_settings: isReturn
         ? {
             ...values.reference_settings,
@@ -202,7 +219,7 @@ export function InvoicePatternForm({
             onChange={(e) => update({ name_en: e.target.value })}
           />
         </Field>
-        <Field label="النوع التجاري *">
+        <Field label="طبيعة الفاتورة *">
           <select
             required
             disabled={formDisabled}
@@ -210,29 +227,27 @@ export function InvoicePatternForm({
             value={values.commercial_kind}
             onChange={(e) => onCommercialKindChange(e.target.value)}
           >
-            {COMMERCIAL_KIND_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
+            {groupedCommercialKindOptions().map((group) => (
+              <optgroup key={group.group} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </Field>
-        <Field label="الاتجاه *">
-          <select
-            required
-            disabled={formDisabled}
-            className={inputClass}
-            value={values.direction}
-            onChange={(e) =>
-              update({ direction: e.target.value as InvoicePatternFormValues["direction"] })
-            }
-          >
-            {DIRECTION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        <Field label="الاتجاه (من الطبيعة)">
+          <input
+            disabled
+            readOnly
+            className={`${inputClass} bg-slate-50 text-slate-600`}
+            value={getDirectionLabel(values.direction)}
+          />
+          <span className="mt-1 block text-xs text-slate-500">
+            يُشتق تلقائياً من طبيعة الفاتورة ولا يُعدَّل يدوياً.
+          </span>
         </Field>
         <Field label="ترتيب العرض">
           <input
@@ -703,22 +718,75 @@ export function InvoicePatternForm({
                     })
                   }
                 >
-                  {Object.entries(PRICING_CONSUMED_MODE_LABELS).map(
-                    ([value, label]) => (
+                  {Object.entries(PRICING_CONSUMED_MODE_LABELS)
+                    .filter(
+                      ([value]) =>
+                        value !== "line_price" ||
+                        allowsLinePriceConsumed(values.commercial_kind),
+                    )
+                    .map(([value, label]) => (
                       <option key={value} value={value}>
                         {label}
                       </option>
-                    ),
-                  )}
+                    ))}
                 </select>
               </Field>
               <p className="text-xs text-slate-500 md:col-span-2">
-                ينطبق على فواتير الإخراج: مبيعات، مرتجع مشتريات، مناقلة صادرة. «تكلفة
-                الدفعة» تُستخدم عند تفعيل فصل التكلفة بالصلاحية أو التسلسلي في إعدادات
-                المخزون. خيار «معياري / سعر شراء البطاقة» هنا مستقل عن إعداد الشركة
-                «آخر شراء» (غير مُنفَّذ حالياً).
+                ينطبق على فواتير الإخراج. خيار «سعر السطر» غير متاح للمبيعات/التالف
+                حتى لا يُعاد تكليف المخزون بسعر البيع. «تكلفة الدفعة» عند فصل
+                الصلاحية/التسلسلي في إعدادات المخزون.
               </p>
             </>
+          )}
+
+          {values.commercial_kind === "disassembly" && (
+            <Field label="سياسة تكلفة التفكيك" className="md:col-span-2">
+              <select
+                disabled={formDisabled}
+                className={inputClass}
+                value={
+                  values.disassembly_cost_mode ?? "allocate_from_parent"
+                }
+                onChange={(e) =>
+                  update({
+                    disassembly_cost_mode: e.target.value || "allocate_from_parent",
+                  })
+                }
+              >
+                {DISASSEMBLY_COST_MODE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-500">
+                {
+                  DISASSEMBLY_COST_MODE_OPTIONS.find(
+                    (o) =>
+                      o.value ===
+                      (values.disassembly_cost_mode ?? "allocate_from_parent"),
+                  )?.hint
+                }
+              </span>
+            </Field>
+          )}
+
+          {values.commercial_kind === "transfer_in" && (
+            <div className="flex flex-wrap items-center gap-4 md:col-span-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  disabled={formDisabled}
+                  checked={values.freight_affects_material_cost}
+                  onChange={(e) =>
+                    update({
+                      freight_affects_material_cost: e.target.checked,
+                    })
+                  }
+                />
+                تحميل الحسابات الإضافية (نقل/أجور) على تكلفة المواد المستلمة
+              </label>
+            </div>
           )}
         </Section>
       )}

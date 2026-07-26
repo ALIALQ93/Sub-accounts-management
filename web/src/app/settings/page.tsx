@@ -36,6 +36,12 @@ const LINKS: Array<{
     permission: "settings.company.view",
   },
   {
+    href: "/settings/database",
+    title: "قاعدة البيانات",
+    description: "جاهزية المخطط، إحصاءات سريعة، ومصدر التهيئة setup_all.",
+    permission: "settings.company.view",
+  },
+  {
     href: "/vouchers/settings",
     title: "إعدادات السندات",
     description: "الترقيم التلقائي، الحسابات الافتراضية، مراكز الكلفة.",

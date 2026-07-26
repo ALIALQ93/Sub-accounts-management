@@ -105,6 +105,19 @@ export default function SetupWizardPage() {
     setError("");
     try {
       switch (step.id as SetupStepId) {
+        case "database": {
+          const status = await setupApi.getSchemaSetupStatus();
+          setState((current) => ({
+            ...current,
+            schemaStatus: status,
+            schemaAccepted: status.ok,
+          }));
+          if (!status.ok) {
+            throw new Error(status.message_ar);
+          }
+          goNext();
+          break;
+        }
         case "company": {
           if (!state.company.legal_name_ar.trim()) {
             throw new Error("اسم الشركة بالعربية مطلوب.");
@@ -227,6 +240,83 @@ export default function SetupWizardPage() {
           )}
 
           <div className="mt-5 grid gap-4">
+            {step.id === "database" && (
+              <>
+                <div
+                  className={`rounded-lg border px-4 py-3 text-sm ${
+                    state.schemaStatus?.ok
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                      : "border-amber-200 bg-amber-50 text-amber-950"
+                  }`}
+                >
+                  {state.schemaStatus?.message_ar ??
+                    "جاري التحقق من جاهزية المخطط…"}
+                </div>
+
+                <p className="text-sm text-slate-600">
+                  مصدر الحقيقة للتهيئة في مرحلة البناء هو ملف واحد:{" "}
+                  <code className="text-xs">database/setup_all.sql</code>
+                  . لا تعتمد على ترقيعات متفرقة إذا كان مقبولاً إعادة ضبط
+                  القاعدة.
+                </p>
+
+                <ul className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  {(state.schemaStatus?.checks ?? []).map((check) => (
+                    <li
+                      key={check.key}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span>{check.label_ar}</span>
+                      <span
+                        className={
+                          check.ok
+                            ? "font-medium text-emerald-700"
+                            : "font-medium text-[var(--danger)]"
+                        }
+                      >
+                        {check.ok ? "جاهز" : "ناقص"}
+                      </span>
+                    </li>
+                  ))}
+                  {(state.schemaStatus?.checks.length ?? 0) === 0 && (
+                    <li className="text-slate-500">لا نتائج تحقق بعد.</li>
+                  )}
+                </ul>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm"
+                    disabled={!isAdmin || isSaving}
+                    onClick={() => {
+                      void (async () => {
+                        setIsSaving(true);
+                        setError("");
+                        try {
+                          const status = await setupApi.getSchemaSetupStatus();
+                          setState((current) => ({
+                            ...current,
+                            schemaStatus: status,
+                            schemaAccepted: status.ok,
+                          }));
+                        } catch (err) {
+                          setError(
+                            err instanceof Error
+                              ? err.message
+                              : "فشل إعادة التحقق.",
+                          );
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      })();
+                    }}
+                  >
+                    إعادة التحقق
+                  </button>
+                </div>
+              </>
+            )}
+
             {step.id === "company" && (
               <>
                 <label className="grid gap-1 text-sm">
@@ -636,6 +726,14 @@ export default function SetupWizardPage() {
             {step.id === "finish" && (
               <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
                 <p>
+                  <span className="text-slate-500">المخطط:</span>{" "}
+                  <strong>
+                    {state.schemaStatus?.ok
+                      ? "جاهز (setup_all)"
+                      : "غير مكتمل — أعد التهيئة"}
+                  </strong>
+                </p>
+                <p>
                   <span className="text-slate-500">الشركة:</span>{" "}
                   <strong>{state.company.legal_name_ar || "—"}</strong>
                 </p>
@@ -697,7 +795,7 @@ export default function SetupWizardPage() {
                 ? "جاري الحفظ..."
                 : step.id === "finish"
                   ? "إتمام الإعداد"
-                  : step.id === "opening"
+                  : step.id === "opening" || step.id === "database"
                     ? "متابعة"
                     : "حفظ ومتابعة"}
             </button>

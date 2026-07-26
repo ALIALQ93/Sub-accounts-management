@@ -128,7 +128,20 @@ stable
 security definer
 set search_path = public
 as $$
-  with filtered as (
+  with opening as (
+    select
+      im.material_id,
+      im.warehouse_id,
+      coalesce(sum(im.quantity_base_delta), 0)::numeric(18, 6) as opening_qty
+    from public.inventory_movements im
+    where p_from_date is not null
+      and im.movement_date < p_from_date
+      and (p_material_id is null or im.material_id = p_material_id)
+      and (p_warehouse_id is null or im.warehouse_id = p_warehouse_id)
+      and (p_branch_id is null or im.branch_id = p_branch_id)
+    group by im.material_id, im.warehouse_id
+  ),
+  filtered as (
     select
       im.id as movement_id,
       im.movement_date,
@@ -145,11 +158,15 @@ as $$
       round((im.quantity_base_delta * coalesce(im.unit_cost, 0))::numeric, 2) as line_value,
       im.source_type,
       im.source_id,
-      im.created_at
+      im.created_at,
+      coalesce(o.opening_qty, 0)::numeric(18, 6) as opening_qty
     from public.inventory_movements im
     inner join public.materials m on m.id = im.material_id
     inner join public.warehouses w on w.id = im.warehouse_id
     inner join public.branches b on b.id = im.branch_id
+    left join opening o
+      on o.material_id = im.material_id
+     and o.warehouse_id = im.warehouse_id
     where (p_from_date is null or im.movement_date >= p_from_date)
       and (p_to_date is null or im.movement_date <= p_to_date)
       and (p_material_id is null or im.material_id = p_material_id)
@@ -170,10 +187,13 @@ as $$
     f.quantity_base_delta,
     f.unit_cost,
     f.line_value,
-    sum(f.quantity_base_delta) over (
-      partition by f.material_id, f.warehouse_id
-      order by f.movement_date, f.created_at, f.movement_id
-      rows between unbounded preceding and current row
+    (
+      f.opening_qty
+      + sum(f.quantity_base_delta) over (
+          partition by f.material_id, f.warehouse_id
+          order by f.movement_date, f.created_at, f.movement_id
+          rows between unbounded preceding and current row
+        )
     )::numeric(18, 6) as running_balance_base,
     f.source_type,
     f.source_id,
@@ -183,7 +203,7 @@ as $$
 $$;
 
 comment on function public.get_inventory_movement_ledger is
-  'دفتر حركات مخزون مع رصيد تراكمي per مادة/مستودع';
+  'دفتر حركات مخزون مع رصيد تراكمي يشمل الرصيد قبل فترة الفلتر حسب مادة/مستودع';
 
 -- ---------------------------------------------------------------------------
 -- تسوية جردية مباشرة (فروقات عدّ فعلي ↔ نظامي)

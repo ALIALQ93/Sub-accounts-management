@@ -1,5 +1,7 @@
 # تدقيق دقيق — تقرير أعمار الذمم (Receivables/Payables Aging)
 
+> **حالة المعالجة (2026-07-26):** #1 فشل embed عبر `party_id` ✓ — جلب أسماء الأطراف يدوياً بدون PostgREST embed؛ معالجة `PGRST200`. #2 خلط العملات ✓ — `open_items_view` يحسب بالعملة الأساسية (`debit_base` / `applied_amount_base`). فصل إجمالي عند «الكل» ✓ (مدينة/دائنة منفصلان).
+
 منهجية: قراءة الكود الفعلي لشاشة `web/src/app/reports/receivables-aging/page.tsx` وطبقة الخدمة `web/src/modules/reports/services/open-items-report-api.ts`، وتتبّع `open_items_view` عبر `database/build_setup_all.ps1` إلى نسخته **الفعّالة اليوم** (`patch_settlement_foundation.sql:104-172`، مطابق لما وثّقه `2026-07-25-open-movements-audit.md`). النطاق هنا محصور بمسار هذا التقرير تحديداً (`openItemsReportApi.listAgingRows()` + `page.tsx`) — وليس شاشة الحركات المفتوحة المستقلة. تحقّقت بشكل ملموس (وليس نظرياً) من مخاوف خلط العملة وربط `party_id` المذكورة بتدقيقات اليوم الأخرى، عبر قراءة استعلام `.select()` الفعلي المُرسَل لـPostgREST وتتبّع تعريف عمود `party_id` من أصله.
 
 ---

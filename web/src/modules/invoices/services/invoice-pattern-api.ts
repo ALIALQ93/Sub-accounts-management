@@ -94,6 +94,8 @@ export interface InvoicePatternFormValues {
   pricing_material_mode: string | null;
   pricing_cost_mode: string | null;
   pricing_consumed_mode: string | null;
+  disassembly_cost_mode: string | null;
+  freight_affects_material_cost: boolean;
   track_expiry_on_lines: boolean;
   track_serial_on_lines: boolean;
   enforce_stock_availability: boolean;
@@ -174,6 +176,14 @@ function buildPatternPayload(values: InvoicePatternFormValues) {
       values.warehouse_movement && values.direction === "output"
         ? values.pricing_consumed_mode
         : null,
+    disassembly_cost_mode:
+      values.commercial_kind === "disassembly"
+        ? values.disassembly_cost_mode || "allocate_from_parent"
+        : null,
+    freight_affects_material_cost:
+      values.commercial_kind === "transfer_in"
+        ? values.freight_affects_material_cost
+        : true,
     track_expiry_on_lines: values.warehouse_movement
       ? values.track_expiry_on_lines
       : false,
@@ -451,6 +461,13 @@ export function patternToFormValues(
     pricing_consumed_mode:
       pattern.pricing_consumed_mode ??
       (pattern.direction === "output" ? defaultPricingConsumedMode() : null),
+    disassembly_cost_mode:
+      pattern.disassembly_cost_mode ??
+      (pattern.commercial_kind === "disassembly"
+        ? "allocate_from_parent"
+        : null),
+    freight_affects_material_cost:
+      pattern.freight_affects_material_cost ?? true,
     track_expiry_on_lines: pattern.track_expiry_on_lines ?? true,
     track_serial_on_lines: pattern.track_serial_on_lines ?? true,
     enforce_stock_availability: pattern.enforce_stock_availability ?? true,
@@ -527,6 +544,8 @@ export const DEFAULT_INVOICE_PATTERN_FORM: InvoicePatternFormValues = {
   pricing_material_mode: "sale",
   pricing_cost_mode: null,
   pricing_consumed_mode: "weighted_avg",
+  disassembly_cost_mode: null,
+  freight_affects_material_cost: true,
   track_expiry_on_lines: true,
   track_serial_on_lines: true,
   enforce_stock_availability: true,

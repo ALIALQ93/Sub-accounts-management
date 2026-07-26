@@ -68,8 +68,9 @@ export const APP_NAV_SECTIONS: NavSection[] = [
       { href: "/materials/warehouses", label: "المستودعات" },
       { href: "/materials/warehouse-limits", label: "حدود المخزون" },
       { href: "/materials/settings", label: "إعدادات الجرد" },
-      { href: "/materials/stock-adjustment/new", label: "تسوية جرد" },
+      { href: "/materials/stock-adjustment/new", label: "تسوية جرد سريعة" },
       { href: "/materials/stock-adjustment/batch", label: "تسوية مجمّعة" },
+      { href: "/invoices", label: "فواتير جرد (تالف/فروق)" },
     ],
   },
   {
@@ -161,6 +162,7 @@ export const APP_NAV_SECTIONS: NavSection[] = [
         label: "الصلاحيات",
         permission: "settings.permissions.manage",
       },
+      { href: "/settings/database", label: "قاعدة البيانات" },
       { href: "/settings/about", label: "عن البرنامج" },
     ],
   },

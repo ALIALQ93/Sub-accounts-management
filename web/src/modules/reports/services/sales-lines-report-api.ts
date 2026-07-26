@@ -91,12 +91,15 @@ export const salesLinesReportApi = {
 
   summarize(rows: SalesLineReportRow[]) {
     return rows.reduce(
-      (acc, row) => ({
-        line_count: acc.line_count + 1,
-        quantity_base: acc.quantity_base + row.quantity_base,
-        line_amount: acc.line_amount + row.line_amount,
-        discount_amount: acc.discount_amount + row.discount_amount,
-      }),
+      (acc, row) => {
+        const sign = row.commercial_kind === "return_sale" ? -1 : 1;
+        return {
+          line_count: acc.line_count + 1,
+          quantity_base: acc.quantity_base + sign * row.quantity_base,
+          line_amount: acc.line_amount + sign * row.line_amount,
+          discount_amount: acc.discount_amount + sign * row.discount_amount,
+        };
+      },
       {
         line_count: 0,
         quantity_base: 0,

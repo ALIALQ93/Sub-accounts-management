@@ -39,7 +39,10 @@ export function defaultPricingMaterialMode(
 ): PricingMaterialMode {
   if (
     commercialKind === "manufacturing" ||
-    commercialKind === "disassembly"
+    commercialKind === "disassembly" ||
+    commercialKind === "inventory_scrap" ||
+    commercialKind === "inventory_shortage" ||
+    commercialKind === "inventory_surplus"
   ) {
     return "none";
   }
@@ -62,11 +65,31 @@ export function defaultPricingConsumedMode(): PricingConsumedMode {
   return "weighted_avg";
 }
 
+/** line_price على المبيعات/التالف يلوّث المتوسط — غير موصى/ممنوع في المحرك */
+export function allowsLinePriceConsumed(commercialKind: string): boolean {
+  return (
+    commercialKind !== "sale" &&
+    commercialKind !== "inventory_scrap" &&
+    commercialKind !== "inventory_shortage"
+  );
+}
+
 export function isInboundCommercialKind(commercialKind: string): boolean {
   return (
     commercialKind === "purchase" ||
     commercialKind === "return_sale" ||
     commercialKind === "opening_stock" ||
-    commercialKind === "transfer_in"
+    commercialKind === "transfer_in" ||
+    commercialKind === "inventory_surplus"
+  );
+}
+
+export function isOutboundCommercialKind(commercialKind: string): boolean {
+  return (
+    commercialKind === "sale" ||
+    commercialKind === "return_purchase" ||
+    commercialKind === "transfer_out" ||
+    commercialKind === "inventory_scrap" ||
+    commercialKind === "inventory_shortage"
   );
 }

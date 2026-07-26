@@ -1,5 +1,7 @@
 # تدقيق دقيق — تقرير رصيد المخزون (Inventory Balance)
 
+> **حالة المعالجة (2026-07-26):** #1 رصيد دفتر الحركة مع فلتر تاريخ ✓ — `get_inventory_movement_ledger` يضيف رصيد ما قبل `p_from_date` عبر `patch_reports_audit_fix.sql`. صلاحية الواجهة ✓.
+
 منهجية: قراءة الكود الفعلي (SQL + TypeScript) مباشرة، واعتماد `database/setup_all.sql` كمرجع «الحقيقة المُصرَّفة» — النسخة الفعّالة من أي دالة هي آخر `create or replace` بترتيب تطبيق الـpatches الحقيقي (`database/build_setup_all.ps1`)، وليست أول نتيجة بحث نصي. تتبّعت `get_inventory_balance`، `get_inventory_movement_ledger`، `get_inventory_analysis` (لها 3 إعادات تعريف — تحققت من أن النسخة الفعّالة هي الأخيرة بـ`patch_inventory_phase5.sql`)، والفهارس الفعلية على `inventory_movements`.
 
 النطاق: `web/src/app/reports/inventory-balance/page.tsx` (3 أوضاع عرض: رصيد مجمّع / دفتر حركة / نواقص-راكد) و`web/src/modules/reports/services/inventory-report-api.ts`.

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { ExportCsvButton } from "@/components/export-csv-button";
@@ -6,6 +6,7 @@ import { PrintReportButton } from "@/components/print-report-button";
 import { branchApi, type BranchOption } from "@/modules/branches/services/branch-api";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   COMMERCIAL_KIND_LABELS,
@@ -118,12 +119,13 @@ export default function InventoryMovementsReportPage() {
   );
 
   return (
+    <ReportsAccessGate>
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--brand-navy)]">ملخص حركات المخزون</h1>
           <p className="mt-1 text-sm text-slate-600">
-            مجمّع per نوع حركة ونوع فاتورة (مبيعات، مشتريات، مناقلة، تسوية…).
+            مجمّع حسب نوع حركة ونوع فاتورة (مبيعات، مشتريات، مناقلة، تسوية…).
           </p>
         </div>
         <div className="no-print flex flex-wrap gap-2">
@@ -293,6 +295,7 @@ export default function InventoryMovementsReportPage() {
         )}
       </section>
     </main>
+    </ReportsAccessGate>
   );
 }
 

@@ -1,5 +1,7 @@
 # تدقيق دقيق — تقرير حركات المخزون (Inventory Movements)
 
+> **حالة المعالجة (2026-07-26):** #2 تسميات تصنيع/تفكيك ✓؛ نص «حسب» بدل «per» ✓؛ صلاحية الواجهة ✓. الصفحة ما زالت ملخصاً مجمّعاً (بلا drill-down) — مقصود حالياً مع رابط دفتر الحركة في تقرير الرصيد.
+
 منهجية: قراءة الكود الفعلي (SQL + TypeScript) مباشرة، واعتماد `database/setup_all.sql` كمرجع «الحقيقة المُصرَّفة» — النسخة الفعّالة من أي دالة هي آخر `create or replace` بترتيب تطبيق الـpatches الحقيقي (`database/build_setup_all.ps1`)، وليست أول نتيجة بحث نصي. تتبّعت `get_inventory_movements_summary`، قيد `movement_kind` النهائي على الجدول، و`MOVEMENT_KIND_LABELS`/`COMMERCIAL_KIND_LABELS` بالواجهة.
 
 النطاق: `web/src/app/reports/inventory-movements/page.tsx` (الصفحة المخصصة الوحيدة لهذا المسار) و`database/setup_all.sql:8373-8425` (`get_inventory_movements_summary`، من `patch_inventory_phase5.sql`).

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -7,6 +7,7 @@ import { PrintReportButton } from "@/components/print-report-button";
 import { branchApi, type BranchOption } from "@/modules/branches/services/branch-api";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { warehouseApi } from "@/modules/materials/services/warehouse-api";
+import { ReportsAccessGate } from "@/modules/reports/components/reports-access-gate";
 import { ReportsNav } from "@/modules/reports/components/reports-nav";
 import {
   cogsReportApi,
@@ -116,6 +117,7 @@ export default function CogsReportPage() {
   );
 
   return (
+    <ReportsAccessGate>
     <main className="report-print-area mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -242,7 +244,7 @@ export default function CogsReportPage() {
 
       {!isLoading && filtered.length > 0 && (
         <section className="grid gap-3 sm:grid-cols-4">
-          <SummaryCard label="مبيعات (إيراد)" value={totals.sales_amount.toFixed(2)} />
+          <SummaryCard label="صافي إيراد" value={totals.sales_amount.toFixed(2)} />
           <SummaryCard label="تكلفة مبيعات" value={totals.cogs_amount.toFixed(2)} />
           <SummaryCard label="مرتجع تكلفة" value={totals.return_cogs_amount.toFixed(2)} />
           <SummaryCard label="صافي COGS" value={totals.net_cogs.toFixed(2)} />
@@ -265,6 +267,7 @@ export default function CogsReportPage() {
         )}
       </section>
     </main>
+    </ReportsAccessGate>
   );
 }
 
@@ -296,7 +299,7 @@ function CogsTable({
             {groupBy === "invoice" && <th>التاريخ</th>}
             <th>كمية مبيعات</th>
             <th>كمية مرتجع</th>
-            <th>إيراد</th>
+            <th>صافي إيراد</th>
             <th>COGS</th>
             <th>مرتجع COGS</th>
             <th>صافي</th>

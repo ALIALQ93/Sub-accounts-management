@@ -4,7 +4,11 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 function isMissingView(error: PostgrestError | null): boolean {
-  return error?.code === "42P01" || error?.code === "PGRST205";
+  return (
+    error?.code === "42P01" ||
+    error?.code === "PGRST205" ||
+    error?.code === "PGRST200"
+  );
 }
 
 export type AgingBucketKey =
@@ -76,13 +80,44 @@ type ViewRow = {
   open_amount: number;
   due_date: string | null;
   source_invoice_id: string | null;
-  customers: { name_ar: string } | { name_ar: string }[] | null;
-  vendors: { name_ar: string } | { name_ar: string }[] | null;
 };
 
-function firstRelation<T>(value: T | T[] | null | undefined): T | null {
-  if (!value) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
+async function loadPartyNames(
+  customerIds: string[],
+  vendorIds: string[],
+): Promise<Map<string, string>> {
+  const supabase = getSupabaseClient();
+  const names = new Map<string, string>();
+
+  if (customerIds.length > 0) {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, name_ar")
+      .in("id", customerIds);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      names.set(
+        (row as { id: string }).id,
+        (row as { name_ar: string }).name_ar,
+      );
+    }
+  }
+
+  if (vendorIds.length > 0) {
+    const { data, error } = await supabase
+      .from("vendors")
+      .select("id, name_ar")
+      .in("id", vendorIds);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      names.set(
+        (row as { id: string }).id,
+        (row as { name_ar: string }).name_ar,
+      );
+    }
+  }
+
+  return names;
 }
 
 export const openItemsReportApi = {
@@ -91,6 +126,7 @@ export const openItemsReportApi = {
   }): Promise<AgingOpenItemRow[]> {
     const supabase = getSupabaseClient();
 
+    // party_id is polymorphic (no FK) — do not embed customers/vendors via PostgREST.
     let query = supabase
       .from("open_items_view")
       .select(
@@ -105,9 +141,7 @@ export const openItemsReportApi = {
         cost_center_code,
         open_amount,
         due_date,
-        source_invoice_id,
-        customers ( name_ar ),
-        vendors ( name_ar )
+        source_invoice_id
       `,
       )
       .gt("open_amount", 0)
@@ -121,10 +155,26 @@ export const openItemsReportApi = {
     if (isMissingView(error)) return [];
     if (error) throw new Error(error.message);
 
-    return ((data ?? []) as unknown as ViewRow[]).map((row) => {
+    const rows = (data ?? []) as unknown as ViewRow[];
+    const customerIds = [
+      ...new Set(
+        rows
+          .filter((row) => row.party_type === "customer" && row.party_id)
+          .map((row) => row.party_id as string),
+      ),
+    ];
+    const vendorIds = [
+      ...new Set(
+        rows
+          .filter((row) => row.party_type === "vendor" && row.party_id)
+          .map((row) => row.party_id as string),
+      ),
+    ];
+
+    const partyNames = await loadPartyNames(customerIds, vendorIds);
+
+    return rows.map((row) => {
       const { bucket, daysOverdue } = classifyAgingBucket(row.due_date);
-      const customer = firstRelation(row.customers);
-      const vendor = firstRelation(row.vendors);
 
       return {
         journal_line_id: row.journal_line_id,
@@ -132,7 +182,9 @@ export const openItemsReportApi = {
         entry_date: row.entry_date,
         party_type: row.party_type,
         party_id: row.party_id,
-        party_name_ar: customer?.name_ar ?? vendor?.name_ar ?? null,
+        party_name_ar: row.party_id
+          ? (partyNames.get(row.party_id) ?? null)
+          : null,
         account_code: row.account_code,
         account_name: row.account_name,
         cost_center_code: row.cost_center_code,
