@@ -1,6 +1,6 @@
 # قائمة تحقق — `inventory_movements` عند تعديل `post_invoice`
 
-أي تغيير على أعمدة الحركة (مثل `expiry_date` / `serial_number` / التكلفة) يستوجب مراجعة **كل** مواضع الإدراج في النسخة الفعّالة من `post_invoice()` داخل `patch_invoice_pricing_cost.sql` (وأي patch لاحق يعيد تعريفها).
+أي تغيير على أعمدة الحركة (مثل `expiry_date` / `serial_number` / التكلفة) يستوجب مراجعة **كل** مواضع الإدراج في `post_invoice()` — الدالة الوحيدة الآن بـ`database/setup_all.sql` (لم يعد هناك ملفات ترقيع منفصلة، عدّل بهذا الملف مباشرة).
 
 ## دلالة `movement_kind`
 
@@ -32,13 +32,15 @@
 ## تريغرز `BEFORE INSERT` (الترتيب الأبجدي مهم)
 
 1. `trg_inventory_movements_00_explode_composite` — تفجير مركّب
-2. `trg_inventory_movements_05_fill_tracking` — نسخ صلاحية/تسلسلي من سطر الفاتورة (**قبل** فحص الرصيد)
+2. `trg_inventory_movements_05_fill_tracking` — نسخ صلاحية/تسلسلي من سطر الفاتورة
 3. `trg_inventory_movements_apply_invoice_line_cost` — تكلفة السطر
-4. `trg_inventory_movements_enforce_stock` — رصيد + دفعة + قفل advisory
+4. `trg_inventory_movements_enforce_stock` — فحص رصيد المادة/المستودع فقط حالياً
 
 لا تُعد تسمية تريغر بدون التحقق أن `fill_tracking` يبقى قبل `enforce_stock`.
 
+> ⚠️ **تحقّق 2026-07-27 (`audit-reports/2026-07-26-materials-invoices-audit.md` بند 1):** النسخة الفعّالة حالياً من `inventory_movements_enforce_stock()` بـ`setup_all.sql` **لا تحتوي** قفل `pg_advisory_xact_lock` ولا فحص دفعة (`get_inventory_lot_balance`)، ولا تغطي `movement_kind` من نوع `manufacture_consume`/`disassemble_consume` — رغم أن نسخاً سابقة من نفس الدالة (بتاريخ Git) كانت تحتوي كل ذلك. راجع التقرير المذكور قبل الاعتماد على أي حماية غير فحص الرصيد الأساسي.
+
 ## تحويل الوحدات
 
-- SQL (مرجع الحفظ): `material_units_sync_conversion` في `patch_materials_card_v2.sql`
+- SQL (مرجع الحفظ): `material_units_sync_conversion` — بـ`database/setup_all.sql`
 - واجهة (معاينة): `web/src/modules/materials/utils/unit-conversion.ts` → `computeFactorToBase`
