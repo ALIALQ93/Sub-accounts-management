@@ -192,8 +192,12 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 2) open_items_view بالمبالغ الأساسية
 -- ---------------------------------------------------------------------------
+-- CREATE OR REPLACE لا يسمح بإدراج/إعادة تسمية أعمدة وسط التعريف
+-- (مثلاً currency_code قبل party_type) — يجب DROP ثم CREATE.
 
-create or replace view public.open_items_view
+drop view if exists public.open_items_view cascade;
+
+create view public.open_items_view
 with (security_invoker = true)
 as
 with line_allocations as (
@@ -276,6 +280,41 @@ where je.status = 'posted'
 
 comment on view public.open_items_view is
   'حركات مفتوحة — open_amount/original بالعملة الأساسية (debit_base − تخصيصات applied_amount_base)';
+
+grant select on public.open_items_view to authenticated;
+
+-- CASCADE أعلاه يسقط get_open_items (returns setof open_items_view) — إعادة إنشائها
+create or replace function public.get_open_items(
+  p_branch_id uuid default null,
+  p_cost_center_id uuid default null,
+  p_party_type varchar default null,
+  p_party_id uuid default null,
+  p_open_side varchar default null,
+  p_account_id uuid default null,
+  p_eligible_only boolean default false,
+  p_include_overdue_only boolean default false
+)
+returns setof public.open_items_view
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select oi.*
+  from public.open_items_view oi
+  where (p_branch_id is null or oi.branch_id = p_branch_id)
+    and (p_cost_center_id is null or oi.cost_center_id = p_cost_center_id)
+    and (p_party_type is null or oi.party_type = p_party_type)
+    and (p_party_id is null or oi.party_id = p_party_id)
+    and (p_open_side is null or oi.open_side = p_open_side)
+    and (p_account_id is null or oi.account_id = p_account_id)
+    and (not p_eligible_only or oi.is_eligible_for_payment)
+    and (not p_include_overdue_only or oi.is_overdue)
+  order by oi.due_date nulls last, oi.entry_date, oi.entry_no, oi.journal_line_id;
+$$;
+
+comment on function public.get_open_items is
+  'جلب الحركات المفتوحة — فلاتر فرع، CC، طرف، مدين/دائن، أهلية استحقاق';
 
 -- ---------------------------------------------------------------------------
 -- 3) ميزان المراجعة: فرع + صلاحية
