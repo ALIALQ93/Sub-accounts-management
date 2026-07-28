@@ -36,8 +36,10 @@
 --     → أطباق قائمة P-BURGER / P-MANSAF / P-CHICK-R / P-GRILL
 --   + طقم K-COMBO · تفكيك D-CHICK-WHOLE · تتبّع صلاحية/تسلسلي
 --
--- مستندات مرحّلة جاهزة (أرقام DEMO-*)
---   OPEN-YYYY-MAIN     قيد افتتاحي واضح (is_opening_entry)
+-- مستندات مرحّلة جاهزة (أرقام DEMO-* / OPEN-*)
+--   OPEN-YYYY-MAIN     قيد افتتاحي مالي (صندوق+بنك+ذمم / رأس مال) — بلا مخزون
+--   DEMO-OPS-001       فاتورة بضاعة أول المدة → مخزون + قيد (مدين 1201 / دائن 3101)
+--                      ثم يُعلَّم قيدها is_opening_entry لعمود الافتتاحي بميزان المراجعة
 --   DEMO-PUR-001       مشتريات → غرفة التبريد
 --   DEMO-TRO/TRI-COLD  مناقلة تبريد ↔ مطبخ (نفس الفرع)
 --   DEMO-MFG-PREP      تصنيع مرحلة 1 (تتبيل)
@@ -53,7 +55,8 @@
 --   1. Authentication → Email/Password
 --   2. NEXT_PUBLIC_SUPABASE_URL + PUBLISHABLE_KEY
 --   3. /login → أول مستخدم = admin
---   4. راجع: القيود الافتتاحية · الفواتير DEMO-* · بطاقات R-* و BOM · أرصدة المستودعات
+--   4. راجع أمام العميل: ميزان المراجعة (عمود افتتاحي) · DEMO-OPS-001 · سلسلة DEMO-*
+--      دليل العرض: database/TRIAL_SETUP.md
 -- =============================================================================
 
 -- =============================================================================
@@ -22135,15 +22138,28 @@ grant execute on function public.post_invoice(uuid) to authenticated;
 -- إعادة تعريف فحص الرصيد ليشمل الطبائع الجردية (عند تطبيق الـpatch منفرداً)
 -- ---------------------------------------------------------------------------
 
+-- =============================================================================
+-- AUDIT FIX 2026-07-27 (#1 materials-invoices): restore full stock guard
+-- Merges protections that were lost when this function was last redefined:
+--   • advisory lock on (material, warehouse) — concurrency under READ COMMITTED
+--   • manufacture_consume / disassemble_consume — were dropped from the kind list
+--   • lot balance via get_inventory_lot_balance when expiry/serial tracking applies
+--   • keeps scrap / shortage / adjustment coverage from this cost-policy pass
+-- Do not redefine later without preserving ALL of the above.
+-- =============================================================================
 create or replace function public.inventory_movements_enforce_stock()
 returns trigger
 language plpgsql
 as $$
 declare
   v_balance numeric(18, 6);
+  v_lot_balance numeric(18, 6);
   v_enforce boolean := true;
   v_material_code varchar;
   v_warehouse_code varchar;
+  v_has_expiry boolean;
+  v_has_serial boolean;
+  v_serial text;
 begin
   if new.quantity_base_delta >= 0 then
     return new;
@@ -22151,7 +22167,8 @@ begin
 
   if new.movement_kind not in (
     'sale', 'transfer_out', 'return_purchase',
-    'inventory_scrap', 'inventory_shortage', 'adjustment'
+    'inventory_scrap', 'inventory_shortage', 'adjustment',
+    'manufacture_consume', 'disassemble_consume'
   ) then
     return new;
   end if;
@@ -22168,6 +22185,22 @@ begin
     end if;
   end if;
 
+  -- Serialize balance checks for the same (material, warehouse) within the txn
+  perform pg_advisory_xact_lock(
+    hashtextextended(new.material_id::text || '|' || new.warehouse_id::text, 42)
+  );
+
+  select m.material_code, m.has_expiry_date, m.has_serial_number
+  into v_material_code, v_has_expiry, v_has_serial
+  from public.materials m
+  where m.id = new.material_id;
+
+  select w.warehouse_code into v_warehouse_code
+  from public.warehouses w
+  where w.id = new.warehouse_id;
+
+  v_serial := nullif(trim(coalesce(new.serial_number, '')), '');
+
   v_balance := public.get_material_warehouse_qty_balance(
     new.material_id,
     new.warehouse_id,
@@ -22175,12 +22208,6 @@ begin
   );
 
   if v_balance + new.quantity_base_delta < -0.000001 then
-    select m.material_code into v_material_code
-    from public.materials m where m.id = new.material_id;
-
-    select w.warehouse_code into v_warehouse_code
-    from public.warehouses w where w.id = new.warehouse_id;
-
     raise exception
       'Insufficient stock for material % in warehouse %. Available: %, requested: %.',
       coalesce(v_material_code, new.material_id::text),
@@ -22189,9 +22216,34 @@ begin
       abs(new.quantity_base_delta);
   end if;
 
+  if (coalesce(v_has_expiry, false) and new.expiry_date is not null)
+     or (coalesce(v_has_serial, false) and v_serial is not null) then
+    v_lot_balance := public.get_inventory_lot_balance(
+      new.material_id,
+      new.warehouse_id,
+      case when coalesce(v_has_expiry, false) then new.expiry_date else null end,
+      case when coalesce(v_has_serial, false) then v_serial else null end,
+      new.movement_date
+    );
+
+    if v_lot_balance + new.quantity_base_delta < -0.000001 then
+      raise exception
+        'Insufficient lot stock for material % in warehouse %. Expiry: %, serial: %, available: %, requested: %.',
+        coalesce(v_material_code, new.material_id::text),
+        coalesce(v_warehouse_code, new.warehouse_id::text),
+        coalesce(new.expiry_date::text, '—'),
+        coalesce(v_serial, '—'),
+        v_lot_balance,
+        abs(new.quantity_base_delta);
+    end if;
+  end if;
+
   return new;
 end;
 $$;
+
+comment on function public.inventory_movements_enforce_stock() is
+  'Canonical stock guard (2026-07-27): advisory lock on (material, warehouse); covers sale/transfer_out/return_purchase/scrap/shortage/adjustment/manufacture_consume/disassemble_consume; lot check when expiry/serial tracking applies. Do not redefine without preserving these protections.';
 
 -- =============================================================================
 -- BEGIN patch_material_category_cascade_deactivate.sql
@@ -24006,7 +24058,8 @@ begin
      or source_id in (
        'a0111111-1111-4111-8111-111111111111'::uuid,
        'a0222222-2222-4222-8222-222222222222'::uuid,
-       'a0333333-3333-4333-8333-333333333333'::uuid
+       'a0333333-3333-4333-8333-333333333333'::uuid,
+       'a0444444-4444-4444-8444-444444444444'::uuid
      );
 
   delete from public.journal_entry_lines jel
@@ -25095,142 +25148,20 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 9) رصيد افتتاحي مخزون (حركات مباشرة)
+-- 9) رصيد افتتاحي مخزون — عبر فاتورة بضاعة أول المدة (DEMO-OPS-001) في القسم 10-ج
 -- ---------------------------------------------------------------------------
-
-do $$
-declare
-  v_src uuid := 'a0111111-1111-4111-8111-111111111111'::uuid;
-  v_wh uuid;
-  v_br uuid;
-  v_cc uuid;
-  r record;
-begin
-  select id into v_wh from public.warehouses where warehouse_code = 'WH-MAIN';
-  select id into v_br from public.branches where branch_code = 'MAIN';
-  select id into v_cc from public.cost_centers where code = 'CC-KIT';
-
-  if exists (
-    select 1 from public.inventory_movements
-    where source_type = 'demo' and source_id = v_src
-  ) then
-    return;
-  end if;
-
-  for r in
-    select m.id as material_id, m.purchase_price, m.material_code,
-           case m.material_code
-             when 'M-LAMB' then 40
-             when 'M-CHICK' then 80
-             when 'M-RICE' then 100
-             when 'M-TOMATO' then 30
-             when 'M-ONION' then 25
-             when 'M-OIL' then 24
-             when 'M-COLA' then 120
-             when 'M-WATER' then 96
-             when 'M-BOX' then 200
-             when 'M-YOGURT' then 20
-             when 'M-LETTUCE' then 8
-             when 'M-BUN' then 80
-             when 'M-SPICE' then 5
-             when 'M-CHEESE' then 8
-             when 'M-CHICK-BRST' then 2
-             when 'M-CHICK-LEG' then 2
-             when 'M-CHICK-WING' then 1
-             when 'D-CHICK-WHOLE' then 20
-             -- الأطباق والمحضّرات تُنشأ عبر فواتير التصنيع التجريبية أدناه
-             else null
-           end as qty
-    from public.materials m
-    where m.material_code in (
-      'M-LAMB', 'M-CHICK', 'M-RICE', 'M-TOMATO', 'M-ONION', 'M-OIL',
-      'M-COLA', 'M-WATER', 'M-BOX',
-      'M-YOGURT', 'M-LETTUCE', 'M-BUN', 'M-SPICE', 'M-CHEESE',
-      'M-CHICK-BRST', 'M-CHICK-LEG', 'M-CHICK-WING',
-      'D-CHICK-WHOLE'
-    )
-  loop
-    if r.qty is null then
-      continue;
-    end if;
-    insert into public.inventory_movements (
-      movement_date, material_id, warehouse_id, branch_id, cost_center_id,
-      quantity_delta, quantity_base_delta, unit_cost, total_cost,
-      movement_kind, source_type, source_id
-    ) values (
-      current_date - 7,
-      r.material_id, v_wh, v_br, v_cc,
-      r.qty, r.qty,
-      r.purchase_price,
-      round((r.qty * r.purchase_price)::numeric, 2),
-      'opening_stock', 'demo', v_src
-    );
-  end loop;
-
-  -- دفعات صلاحية للجبن في المطبخ (تاريخ أقدم من فواتير التصنيع)
-  insert into public.inventory_movements (
-    movement_date, material_id, warehouse_id, branch_id, cost_center_id,
-    quantity_delta, quantity_base_delta, unit_cost, total_cost,
-    movement_kind, source_type, source_id, expiry_date
-  )
-  select
-    current_date - 12,
-    m.id, v_wh, v_br, v_cc,
-    x.qty, x.qty,
-    m.purchase_price,
-    round((x.qty * m.purchase_price)::numeric, 2),
-    'opening_stock', 'demo', 'a0222222-2222-4222-8222-222222222222'::uuid,
-    x.expiry
-  from public.materials m
-  cross join (
-    values
-      (4::numeric, (current_date + 12)),
-      (3::numeric, (current_date + 25))
-  ) as x(qty, expiry)
-  where m.material_code = 'M-CHEESE'
-    and not exists (
-      select 1 from public.inventory_movements im
-      where im.source_type = 'demo'
-        and im.source_id = 'a0222222-2222-4222-8222-222222222222'::uuid
-    );
-
-  -- موازين مطبخ بأرقام تسلسلية
-  insert into public.inventory_movements (
-    movement_date, material_id, warehouse_id, branch_id, cost_center_id,
-    quantity_delta, quantity_base_delta, unit_cost, total_cost,
-    movement_kind, source_type, source_id, serial_number
-  )
-  select
-    current_date - 3,
-    m.id, v_wh, v_br, v_cc,
-    1, 1,
-    m.purchase_price,
-    m.purchase_price,
-    'opening_stock', 'demo', 'a0333333-3333-4333-8333-333333333333'::uuid,
-    x.serial_no
-  from public.materials m
-  cross join (
-    values
-      ('SCALE-GG-001'),
-      ('SCALE-GG-002')
-  ) as x(serial_no)
-  where m.material_code = 'EQ-SCALE'
-    and not exists (
-      select 1 from public.inventory_movements im
-      where im.source_type = 'demo'
-        and im.source_id = 'a0333333-3333-4333-8333-333333333333'::uuid
-    );
-
-  perform public.lock_company_inventory_foundation((current_date - 7)::timestamptz);
-end $$;
+-- لا تُدرَج حركات inventory_movements مباشرة هنا. المسار الاحترافي للعرض:
+--   فاتورة commercial_kind = opening_stock → post_invoice → حركات + قيد يومية
+--   ثم تعليم القيد is_opening_entry لعمود الافتتاحي بميزان المراجعة.
 
 -- ---------------------------------------------------------------------------
 -- 10) قيد افتتاحي واضح + مستندات تشغيل تجريبية (مرحّلة)
 -- ---------------------------------------------------------------------------
 -- يتطلب تشغيل SQL كـ postgres/supabase_admin (تجاوز صلاحية الترحيل في البذور).
 -- التسلسل الزمني:
---   1/1   قيد افتتاحي
---   -10ش  مشتريات إلى غرفة التبريد
+--   1/1   قيد افتتاحي مالي OPEN-YYYY-MAIN (صندوق/بنك/ذمم)
+--   1/1   فاتورة بضاعة أول المدة DEMO-OPS-001 (مخزون)
+--   -10   مشتريات إلى غرفة التبريد
 --   -9    مناقلة تبريد → مطبخ (نفس الفرع)
 --   -7    تصنيع مرحلة 1 (تتبيل)
 --   -6    تصنيع مرحلة 2 (أطباق)
@@ -25238,7 +25169,7 @@ end $$;
 --   -2    مبيعات صالة
 -- ---------------------------------------------------------------------------
 
--- 10-أ) قيد افتتاحي محاسبي
+-- 10-أ) قيد افتتاحي محاسبي (بدون مخزون — المخزون من DEMO-OPS-001)
 do $$
 declare
   v_je uuid;
@@ -25246,7 +25177,6 @@ declare
   v_br uuid;
   v_cash uuid;
   v_bank uuid;
-  v_inv uuid;
   v_ar uuid;
   v_cap uuid;
   v_year int := extract(year from current_date)::int;
@@ -25263,7 +25193,6 @@ begin
   select id into v_br from public.branches where branch_code = 'MAIN';
   select id into v_cash from public.accounts where code = '1101';
   select id into v_bank from public.accounts where code = '1102';
-  select id into v_inv from public.accounts where code = '1201';
   select id into v_ar from public.accounts where code = '110301';
   select id into v_cap from public.accounts where code = '3101';
 
@@ -25272,19 +25201,19 @@ begin
   ) values (
     'OPEN-' || v_year::text || '-MAIN',
     make_date(v_year, 1, 1),
-    'قيد افتتاحي — أرصدة بداية السنة (صندوق + بنك + مخزون + ذمم / رأس مال)',
+    'قيد افتتاحي مالي — صندوق + بنك + ذمم / رأس مال (المخزون عبر DEMO-OPS-001)',
     'posted', 'demo_opening', v_br, true
   ) returning id into v_je;
 
+  -- 2,500,000 + 8,000,000 + 600,000 = 11,100,000
   insert into public.journal_entry_lines (
     journal_entry_id, account_id, debit, credit, debit_base, credit_base,
     currency_id, exchange_rate, line_description, branch_id
   ) values
     (v_je, v_cash, 2500000, 0, 2500000, 0, v_cur, 1, 'رصيد افتتاحي — صندوق', v_br),
     (v_je, v_bank, 8000000, 0, 8000000, 0, v_cur, 1, 'رصيد افتتاحي — بنك', v_br),
-    (v_je, v_inv,  3500000, 0, 3500000, 0, v_cur, 1, 'رصيد افتتاحي — مخزون غذائي', v_br),
     (v_je, v_ar,   600000, 0, 600000, 0, v_cur, 1, 'رصيد افتتاحي — ذمم شركات', v_br),
-    (v_je, v_cap,  0, 14600000, 0, 14600000, v_cur, 1, 'رأس المال الافتتاحي', v_br);
+    (v_je, v_cap,  0, 11100000, 0, 11100000, v_cur, 1, 'رأس المال الافتتاحي (مالي)', v_br);
 end $$;
 
 -- 10-ب) مساعد أسطر فاتورة + ترحيل المستندات
@@ -25299,7 +25228,8 @@ create or replace function public.demo_seed_add_line(
   p_unit_price numeric,
   p_mfg_role text default null,
   p_qty_received numeric default null,
-  p_expiry date default null
+  p_expiry date default null,
+  p_serial text default null
 )
 returns void
 language plpgsql
@@ -25309,8 +25239,11 @@ as $$
 declare
   v_mat uuid;
   v_unit uuid;
+  v_price numeric(18, 4);
 begin
-  select id into v_mat from public.materials where material_code = p_material_code;
+  select id, purchase_price into v_mat, v_price
+  from public.materials
+  where material_code = p_material_code;
   if v_mat is null then
     raise exception 'demo seed: material % missing', p_material_code;
   end if;
@@ -25319,15 +25252,17 @@ begin
   where material_id = v_mat and is_base_unit = true
   limit 1;
 
+  v_price := coalesce(p_unit_price, v_price);
+
   insert into public.invoice_material_lines (
     invoice_id, line_no, branch_id, cost_center_id, warehouse_id,
     material_id, material_unit_id, quantity, quantity_base, unit_price, line_amount,
-    manufacturing_role, qty_received, expiry_date
+    manufacturing_role, qty_received, expiry_date, serial_number
   ) values (
     p_invoice_id, p_line_no, p_branch_id, p_cc_id, p_warehouse_id,
-    v_mat, v_unit, p_qty, p_qty, p_unit_price,
-    round((p_qty * p_unit_price)::numeric, 2),
-    p_mfg_role, p_qty_received, p_expiry
+    v_mat, v_unit, p_qty, p_qty, v_price,
+    round((p_qty * v_price)::numeric, 2),
+    p_mfg_role, p_qty_received, p_expiry, nullif(trim(coalesce(p_serial, '')), '')
   );
 end;
 $$;
@@ -25345,9 +25280,11 @@ declare
   v_cogs uuid;
   v_sales uuid;
   v_cash uuid;
+  v_cap uuid;
   v_ap_meat uuid;
   v_vendor uuid;
   v_customer uuid;
+  v_pat_ops uuid;
   v_pat_pur uuid;
   v_pat_sal uuid;
   v_pat_tro uuid;
@@ -25355,7 +25292,15 @@ declare
   v_pat_mfg uuid;
   v_xfer uuid;
   v_inv uuid;
+  v_je uuid;
   v_no text;
+  v_year int := extract(year from current_date)::int;
+  -- تواريخ صلاحية موحّدة عبر سلسلة العرض
+  v_exp_cheese date := current_date + 12;  -- مطبخ / تصنيع
+  v_exp_cheese_cold date := current_date + 20; -- شراء تبريد (دفعة لاحقة)
+  v_exp_yogurt date := current_date + 5;
+  v_exp_lettuce date := current_date + 5;
+  v_exp_bun date := current_date + 4;
 begin
   if exists (select 1 from public.invoices where invoice_no like 'DEMO-%') then
     return;
@@ -25372,14 +25317,67 @@ begin
   select id into v_cogs from public.accounts where code = '5101';
   select id into v_sales from public.accounts where code = '4101';
   select id into v_cash from public.accounts where code = '1101';
+  select id into v_cap from public.accounts where code = '3101';
   select id into v_ap_meat from public.accounts where code = '210101';
   select id into v_vendor from public.vendors where vendor_code = 'V-MEAT';
   select id into v_customer from public.customers where customer_code = 'C-WALK';
+  select id into v_pat_ops from public.invoice_patterns where commercial_kind = 'opening_stock' limit 1;
   select id into v_pat_pur from public.invoice_patterns where commercial_kind = 'purchase' and name_ar = 'مشتريات';
   select id into v_pat_sal from public.invoice_patterns where commercial_kind = 'sale' and name_ar = 'مبيعات';
   select id into v_pat_tro from public.invoice_patterns where commercial_kind = 'transfer_out' limit 1;
   select id into v_pat_tri from public.invoice_patterns where commercial_kind = 'transfer_in' limit 1;
   select id into v_pat_mfg from public.invoice_patterns where commercial_kind = 'manufacturing' limit 1;
+
+  if v_pat_ops is null then
+    raise exception 'demo seed: opening_stock pattern missing';
+  end if;
+
+  -- —— بضاعة أول المدة (مسار نظام حقيقي) ——
+  v_no := 'DEMO-OPS-001';
+  insert into public.invoices (
+    pattern_id, invoice_no, invoice_date, branch_id, cost_center_id,
+    inventory_account_id, creditor_account_id,
+    settlement_mode, currency_id, exchange_rate, description, status
+  ) values (
+    v_pat_ops, v_no, make_date(v_year, 1, 1), v_br_main, v_cc,
+    v_inv_acct, v_cap,
+    'credit', v_cur, 1,
+    'عرض — بضاعة أول المدة (مطبخ رئيسي) — ترحيل ينشئ المخزون والقيد الافتتاحي للمخزون',
+    'draft'
+  ) returning id into v_inv;
+
+  -- كميات افتتاحية بالمطبخ؛ المواد ذات الصلاحية تحمل تاريخ دفعة متوافق مع التصنيع لاحقاً
+  perform public.demo_seed_add_line(v_inv, 1,  v_br_main, v_cc, v_wh_main, 'M-LAMB', 40, 18000);
+  perform public.demo_seed_add_line(v_inv, 2,  v_br_main, v_cc, v_wh_main, 'M-CHICK', 80, 4500);
+  perform public.demo_seed_add_line(v_inv, 3,  v_br_main, v_cc, v_wh_main, 'M-RICE', 100, 2500);
+  perform public.demo_seed_add_line(v_inv, 4,  v_br_main, v_cc, v_wh_main, 'M-TOMATO', 30, 1200);
+  perform public.demo_seed_add_line(v_inv, 5,  v_br_main, v_cc, v_wh_main, 'M-ONION', 25, 800);
+  perform public.demo_seed_add_line(v_inv, 6,  v_br_main, v_cc, v_wh_main, 'M-OIL', 24, 3500);
+  perform public.demo_seed_add_line(v_inv, 7,  v_br_main, v_cc, v_wh_main, 'M-COLA', 120, 400);
+  perform public.demo_seed_add_line(v_inv, 8,  v_br_main, v_cc, v_wh_main, 'M-WATER', 96, 200);
+  perform public.demo_seed_add_line(v_inv, 9,  v_br_main, v_cc, v_wh_main, 'M-BOX', 200, 150);
+  perform public.demo_seed_add_line(v_inv, 10, v_br_main, v_cc, v_wh_main, 'M-SPICE', 5, 12000);
+  perform public.demo_seed_add_line(v_inv, 11, v_br_main, v_cc, v_wh_main, 'M-YOGURT', 20, 2000, null, null, v_exp_yogurt);
+  perform public.demo_seed_add_line(v_inv, 12, v_br_main, v_cc, v_wh_main, 'M-LETTUCE', 8, 1500, null, null, v_exp_lettuce);
+  perform public.demo_seed_add_line(v_inv, 13, v_br_main, v_cc, v_wh_main, 'M-BUN', 80, 250, null, null, v_exp_bun);
+  perform public.demo_seed_add_line(v_inv, 14, v_br_main, v_cc, v_wh_main, 'M-CHEESE', 8, 9000, null, null, v_exp_cheese);
+  perform public.demo_seed_add_line(v_inv, 15, v_br_main, v_cc, v_wh_main, 'M-CHICK-BRST', 2, 6000);
+  perform public.demo_seed_add_line(v_inv, 16, v_br_main, v_cc, v_wh_main, 'M-CHICK-LEG', 2, 4500);
+  perform public.demo_seed_add_line(v_inv, 17, v_br_main, v_cc, v_wh_main, 'M-CHICK-WING', 1, 3500);
+  perform public.demo_seed_add_line(v_inv, 18, v_br_main, v_cc, v_wh_main, 'D-CHICK-WHOLE', 20, 4500);
+  perform public.demo_seed_add_line(v_inv, 19, v_br_main, v_cc, v_wh_main, 'EQ-SCALE', 1, 85000, null, null, null, 'SCALE-GG-001');
+  perform public.demo_seed_add_line(v_inv, 20, v_br_main, v_cc, v_wh_main, 'EQ-SCALE', 1, 85000, null, null, null, 'SCALE-GG-002');
+
+  perform public.post_invoice(v_inv);
+
+  select journal_entry_id into v_je from public.invoices where id = v_inv;
+  if v_je is null then
+    raise exception 'demo seed: DEMO-OPS-001 posted without journal_entry_id';
+  end if;
+  update public.journal_entries
+  set is_opening_entry = true,
+      description = 'بضاعة أول المدة — رصيد مخزون افتتاحي (DEMO-OPS-001)'
+  where id = v_je;
 
   -- —— مشتريات إلى غرفة التبريد ——
   v_no := 'DEMO-PUR-001';
@@ -25400,7 +25398,7 @@ begin
   perform public.demo_seed_add_line(v_inv, 3, v_br_main, v_cc, v_wh_cold, 'M-SPICE', 2, 12000);
   perform public.demo_seed_add_line(
     v_inv, 4, v_br_main, v_cc, v_wh_cold, 'M-CHEESE', 5, 9000,
-    null, null, current_date + 20
+    null, null, v_exp_cheese_cold
   );
   perform public.post_invoice(v_inv);
 
@@ -25422,7 +25420,7 @@ begin
   perform public.demo_seed_add_line(v_inv, 3, v_br_main, v_cc, v_wh_cold, 'M-SPICE', 1, 12000);
   perform public.demo_seed_add_line(
     v_inv, 4, v_br_main, v_cc, v_wh_cold, 'M-CHEESE', 3, 9000,
-    null, null, current_date + 20
+    null, null, v_exp_cheese_cold
   );
   perform public.post_invoice(v_inv);
 
@@ -25443,7 +25441,7 @@ begin
   perform public.demo_seed_add_line(v_inv, 3, v_br_main, v_cc, v_wh_main, 'M-SPICE', 1, 12000, null, 1);
   perform public.demo_seed_add_line(
     v_inv, 4, v_br_main, v_cc, v_wh_main, 'M-CHEESE', 3, 9000,
-    null, 3, current_date + 20
+    null, 3, v_exp_cheese_cold
   );
   perform public.post_invoice(v_inv);
 
@@ -25492,11 +25490,12 @@ begin
   perform public.demo_seed_add_line(v_inv, 2, v_br_main, v_cc, v_wh_main, 'R-LAMB-SEAS', 2, 19500, 'consume');
   perform public.demo_seed_add_line(v_inv, 3, v_br_main, v_cc, v_wh_main, 'R-CHICK-MAR', 10, 4800, 'consume');
   perform public.demo_seed_add_line(v_inv, 4, v_br_main, v_cc, v_wh_main, 'M-BUN', 25, 250, 'consume');
-  perform public.demo_seed_add_line(v_inv, 5, v_br_main, v_cc, v_wh_main, 'M-CHEESE', 0.5, 9000, 'consume', null, current_date + 20);
+  -- صلاحية الجبن/اللبن تطابق دفعات DEMO-OPS-001 (v_exp_*)
+  perform public.demo_seed_add_line(v_inv, 5, v_br_main, v_cc, v_wh_main, 'M-CHEESE', 0.5, 9000, 'consume', null, v_exp_cheese);
   perform public.demo_seed_add_line(v_inv, 6, v_br_main, v_cc, v_wh_main, 'M-LETTUCE', 0.4, 1500, 'consume');
   perform public.demo_seed_add_line(v_inv, 7, v_br_main, v_cc, v_wh_main, 'M-TOMATO', 0.8, 1200, 'consume');
   perform public.demo_seed_add_line(v_inv, 8, v_br_main, v_cc, v_wh_main, 'M-RICE', 4, 2500, 'consume');
-  perform public.demo_seed_add_line(v_inv, 9, v_br_main, v_cc, v_wh_main, 'M-YOGURT', 1.5, 2000, 'consume', null, current_date + 5);
+  perform public.demo_seed_add_line(v_inv, 9, v_br_main, v_cc, v_wh_main, 'M-YOGURT', 1.5, 2000, 'consume', null, v_exp_yogurt);
   perform public.demo_seed_add_line(v_inv, 10, v_br_main, v_cc, v_wh_main, 'M-ONION', 0.4, 800, 'consume');
   perform public.demo_seed_add_line(v_inv, 11, v_br_main, v_cc, v_wh_main, 'M-OIL', 0.3, 3500, 'consume');
 
@@ -25604,6 +25603,9 @@ end $$;
 drop function if exists public.demo_seed_add_line(
   uuid, int, uuid, uuid, uuid, text, numeric, numeric, text, numeric, date
 );
+drop function if exists public.demo_seed_add_line(
+  uuid, int, uuid, uuid, uuid, text, numeric, numeric, text, numeric, date, text
+);
 
 -- ---------------------------------------------------------------------------
 -- 11) قيود عرض إضافية (إيجار)
@@ -25645,9 +25647,11 @@ end $$;
 -- =============================================================================
 -- اكتمل عرض المطعم
 -- =============================================================================
--- سجّل أول مستخدم من /login (يصبح admin) ثم تصفّح:
---   قيد افتتاحي OPEN-YYYY-MAIN · فواتير DEMO-* · مواد R-* (تحضير) و P-* (أطباق)
---   سلسلة التصنيع: ني → متبّل (R-*) → طبق (P-*) · مناقلة تبريد↔مطبخ وبين الفروع
--- لإعادة التثبيت: setup_demo_restaurant.sql
+-- سجّل أول مستخدم من /login (يصبح admin) ثم تصفّح أمام العميل:
+--   OPEN-YYYY-MAIN (مالي) · DEMO-OPS-001 (بضاعة أول المدة) · سلسلة DEMO-*
+--   ميزان المراجعة: عمود افتتاحي من OPEN + قيد OPS المعلَّم is_opening_entry
+--   مواد R-* (تحضير) و P-* (أطباق) · نيء → تتبيل → طبق · مناقلات فروع
+-- قائمة تحقق العرض: database/TRIAL_SETUP.md
+-- لإعادة التثبيت: setup_demo_restaurant.sql كاملاً
 -- =============================================================================
 

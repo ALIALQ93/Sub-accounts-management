@@ -2,7 +2,7 @@
 
 دليل مختصر لتشغيل النظام قبل **التجربة الأولى** (إصدار `0.1.0+trial-1`).
 
-## 1) بيئة جديدة (موصى بها للتجربة)
+## 1) بيئة جديدة (موصى بها للتجربة / عرض العملاء)
 
 في **Supabase → SQL Editor** شغّل ملفاً واحداً كاملاً:
 
@@ -17,6 +17,22 @@ database/setup_demo_restaurant.sql
 للتثبيت بلا بيانات عرض (بيئة إنتاج فعلية لاحقاً): `database/setup_all.sql` بنفس الطريقة.
 
 > **2026-07-27:** لم يعد هناك نظام ترقيعات منفصل (`patch_*.sql`) — `setup_all.sql`/`setup_demo_restaurant.sql` كل واحد ملف واحد شامل. راجع `database/README.md` للتفاصيل.
+
+### قصة الافتتاحي في العرض (متسقة محاسبياً)
+
+| المستند | الدور |
+|---------|--------|
+| `OPEN-YYYY-MAIN` | قيد افتتاحي **مالي**: صندوق + بنك + ذمم / رأس مال (بدون مخزون) |
+| `DEMO-OPS-001` | فاتورة **بضاعة أول المدة** مرحّلة → كميات مخزون + قيد مدين 1201 / دائن 3101، معلَّم `is_opening_entry` |
+
+ثم سلسلة التشغيل: مشتريات تبريد → مناقلة مطبخ → تصنيع → مناقلة فرع → مبيعات.
+
+### قائمة تحقق سريعة أمام العميل
+
+1. **ميزان المراجعة** — عمود الرصيد الافتتاحي: صندوق/بنك/ذمم من `OPEN-*`، ومخزون 1201 من قيد `DEMO-OPS-001`.
+2. **الفواتير** — افتح `DEMO-OPS-001` (بضاعة أول المدة) ثم `DEMO-PUR-001` / `DEMO-MFG-*` / `DEMO-SAL-001`.
+3. **المخزون** — رصيد المطبخ يعكس OPS + الحركات اللاحقة؛ دفعات الجبن/اللبن لها تواريخ صلاحية متسقة.
+4. لا يُفترض وجود حركات `source_type = 'demo'` لرصيد أول المدة (المسار عبر فاتورة فقط).
 
 ---
 
@@ -53,6 +69,16 @@ from public.voucher_type_defaults;
 
 -- عدد الحسابات الجذر
 select count(*) as root_accounts from public.accounts where parent_id is null;
+
+-- اتساق عرض الافتتاحي
+select invoice_no, status, journal_entry_id is not null as has_je
+from public.invoices
+where invoice_no = 'DEMO-OPS-001';
+
+select entry_no, is_opening_entry, status
+from public.journal_entries
+where entry_no like 'OPEN-%-MAIN'
+   or id = (select journal_entry_id from public.invoices where invoice_no = 'DEMO-OPS-001');
 ```
 
 **المتوقع:**
@@ -60,6 +86,7 @@ select count(*) as root_accounts from public.accounts where parent_id is null;
 - عمود `amount_base` على `voucher_lines`
 - 7 حسابات جذر (1–7)
 - 3 أنواع سندات في `voucher_type_defaults`
+- `DEMO-OPS-001` مرحّلة مع قيد؛ قيد OPS و`OPEN-*-MAIN` بـ`is_opening_entry = true`
 
 ---
 
@@ -95,3 +122,4 @@ select count(*) as root_accounts from public.accounts where parent_id is null;
 - `docs/deploy-new-client.md` — نشر عميل جديد + نسخ احتياطي + ترقيات
 - `RELEASE_CHECKLIST.md` — قائمة تحقق ما قبل التجربة
 - `CHANGELOG.md` — سجل إصدارات التطبيق
+- `audit-reports/2026-07-26-materials-invoices-audit.md` — تدقيق المواد/الفواتير

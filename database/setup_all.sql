@@ -22077,15 +22077,28 @@ grant execute on function public.post_invoice(uuid) to authenticated;
 -- إعادة تعريف فحص الرصيد ليشمل الطبائع الجردية (عند تطبيق الـpatch منفرداً)
 -- ---------------------------------------------------------------------------
 
+-- =============================================================================
+-- AUDIT FIX 2026-07-27 (#1 materials-invoices): restore full stock guard
+-- Merges protections that were lost when this function was last redefined:
+--   • advisory lock on (material, warehouse) — concurrency under READ COMMITTED
+--   • manufacture_consume / disassemble_consume — were dropped from the kind list
+--   • lot balance via get_inventory_lot_balance when expiry/serial tracking applies
+--   • keeps scrap / shortage / adjustment coverage from this cost-policy pass
+-- Do not redefine later without preserving ALL of the above.
+-- =============================================================================
 create or replace function public.inventory_movements_enforce_stock()
 returns trigger
 language plpgsql
 as $$
 declare
   v_balance numeric(18, 6);
+  v_lot_balance numeric(18, 6);
   v_enforce boolean := true;
   v_material_code varchar;
   v_warehouse_code varchar;
+  v_has_expiry boolean;
+  v_has_serial boolean;
+  v_serial text;
 begin
   if new.quantity_base_delta >= 0 then
     return new;
@@ -22093,7 +22106,8 @@ begin
 
   if new.movement_kind not in (
     'sale', 'transfer_out', 'return_purchase',
-    'inventory_scrap', 'inventory_shortage', 'adjustment'
+    'inventory_scrap', 'inventory_shortage', 'adjustment',
+    'manufacture_consume', 'disassemble_consume'
   ) then
     return new;
   end if;
@@ -22110,6 +22124,22 @@ begin
     end if;
   end if;
 
+  -- Serialize balance checks for the same (material, warehouse) within the txn
+  perform pg_advisory_xact_lock(
+    hashtextextended(new.material_id::text || '|' || new.warehouse_id::text, 42)
+  );
+
+  select m.material_code, m.has_expiry_date, m.has_serial_number
+  into v_material_code, v_has_expiry, v_has_serial
+  from public.materials m
+  where m.id = new.material_id;
+
+  select w.warehouse_code into v_warehouse_code
+  from public.warehouses w
+  where w.id = new.warehouse_id;
+
+  v_serial := nullif(trim(coalesce(new.serial_number, '')), '');
+
   v_balance := public.get_material_warehouse_qty_balance(
     new.material_id,
     new.warehouse_id,
@@ -22117,12 +22147,6 @@ begin
   );
 
   if v_balance + new.quantity_base_delta < -0.000001 then
-    select m.material_code into v_material_code
-    from public.materials m where m.id = new.material_id;
-
-    select w.warehouse_code into v_warehouse_code
-    from public.warehouses w where w.id = new.warehouse_id;
-
     raise exception
       'Insufficient stock for material % in warehouse %. Available: %, requested: %.',
       coalesce(v_material_code, new.material_id::text),
@@ -22131,9 +22155,34 @@ begin
       abs(new.quantity_base_delta);
   end if;
 
+  if (coalesce(v_has_expiry, false) and new.expiry_date is not null)
+     or (coalesce(v_has_serial, false) and v_serial is not null) then
+    v_lot_balance := public.get_inventory_lot_balance(
+      new.material_id,
+      new.warehouse_id,
+      case when coalesce(v_has_expiry, false) then new.expiry_date else null end,
+      case when coalesce(v_has_serial, false) then v_serial else null end,
+      new.movement_date
+    );
+
+    if v_lot_balance + new.quantity_base_delta < -0.000001 then
+      raise exception
+        'Insufficient lot stock for material % in warehouse %. Expiry: %, serial: %, available: %, requested: %.',
+        coalesce(v_material_code, new.material_id::text),
+        coalesce(v_warehouse_code, new.warehouse_id::text),
+        coalesce(new.expiry_date::text, '—'),
+        coalesce(v_serial, '—'),
+        v_lot_balance,
+        abs(new.quantity_base_delta);
+    end if;
+  end if;
+
   return new;
 end;
 $$;
+
+comment on function public.inventory_movements_enforce_stock() is
+  'Canonical stock guard (2026-07-27): advisory lock on (material, warehouse); covers sale/transfer_out/return_purchase/scrap/shortage/adjustment/manufacture_consume/disassemble_consume; lot check when expiry/serial tracking applies. Do not redefine without preserving these protections.';
 
 -- =============================================================================
 -- BEGIN patch_material_category_cascade_deactivate.sql
