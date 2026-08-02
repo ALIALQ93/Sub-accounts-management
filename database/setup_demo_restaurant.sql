@@ -91,7 +91,7 @@
 --
 -- 1) التأسيس والمحاسبة العامة
 --    • عملات متعددة (IQD أساسية + USD/EUR/SYP/AED) + سجل أسعار تاريخي
---    • دليل حسابات هرمي (جذور 1–7، sub_code، قواعد postable/غير postable)
+--    • دليل حسابات هرمي عبر قوالب coa_templates (تطبيق عند التهيئة) + أدوار ختامية
 --    • مراكز كلفة (اختيارية على القيود/السندات)
 --    • قيود يومية بعملة وسعر صرف و debit_base / credit_base
 --    • ميزان مراجعة get_trial_balance (مع رصيد افتتاحي)
@@ -141,8 +141,8 @@
 --    • أسطر consume/produce + qty_damaged عند التفكيك
 --
 -- 8) الفواتير وأنماط المستندات
---    • أنماط invoice_patterns (مبيعات، مشتريات، مرتجعات، استلام، …)
---      + تصنيع وتفكيك + شروط ومواد/تصنيفات مسموحة + تسلسل ترقيم
+--    • كتالوج invoice_pattern_catalog → اختيار/تطبيق عند التهيئة إلى invoice_patterns
+--      (مبيعات/مشتريات/مرتجعات/مناقلة/تصنيع/تفكيك…) + شروط وترقيم
 --    • تسعير: pricing_material_mode / pricing_cost_mode / pricing_consumed_mode
 --    • خصم/إضافي على مستوى الفاتورة والسطر + تدوير
 --    • مراجع متعددة + إغلاق مرجع + مرتجعات بكميات مرتجعة
@@ -24533,7 +24533,8 @@ select public.apply_coa_template('simplified', 'commercial');
 select public.apply_selected_invoice_patterns(array[
   'sale', 'sale_cash', 'purchase', 'purchase_cash',
   'transfer_out', 'transfer_in',
-  'return_sale', 'return_purchase', 'opening_stock'
+  'return_sale', 'return_purchase', 'opening_stock',
+  'manufacturing', 'disassembly'
 ]::text[]);
 
 
@@ -25744,8 +25745,14 @@ begin
   select id into v_pat_tri from public.invoice_patterns where commercial_kind = 'transfer_in' limit 1;
   select id into v_pat_mfg from public.invoice_patterns where commercial_kind = 'manufacturing' limit 1;
 
-  if v_pat_ops is null then
-    raise exception 'demo seed: opening_stock pattern missing';
+  if v_pat_ops is null
+     or v_pat_pur is null
+     or v_pat_sal is null
+     or v_pat_tro is null
+     or v_pat_tri is null
+     or v_pat_mfg is null then
+    raise exception
+      'demo seed: required invoice patterns missing (ops/pur/sal/tro/tri/mfg). Ensure apply_selected_invoice_patterns ran.';
   end if;
 
   -- —— بضاعة أول المدة (مسار نظام حقيقي) ——
