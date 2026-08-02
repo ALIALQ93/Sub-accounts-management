@@ -42,6 +42,8 @@ interface InvoicePatternFormProps {
   inputPatterns: InvoicePatternListItem[];
   isSaving: boolean;
   disabled?: boolean;
+  /** عند وجود فواتير على النمط — تُقفل الحقول الجوهرية (#35) */
+  coreFieldsLocked?: boolean;
   error: string;
   onChange: (values: InvoicePatternFormValues) => void;
   onSubmit: () => void;
@@ -97,12 +99,14 @@ export function InvoicePatternForm({
   inputPatterns,
   isSaving,
   disabled = false,
+  coreFieldsLocked = false,
   error,
   onChange,
   onSubmit,
   onCancel,
 }: InvoicePatternFormProps) {
   const formDisabled = disabled || isSaving;
+  const coreDisabled = formDisabled || coreFieldsLocked;
 
   const numberingPreview = useMemo(() => {
     const year = new Date().getFullYear();
@@ -219,10 +223,16 @@ export function InvoicePatternForm({
             onChange={(e) => update({ name_en: e.target.value })}
           />
         </Field>
+        {coreFieldsLocked && (
+          <p className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+            يوجد فواتير مسجّلة على هذا النمط — الحقول الجوهرية (الطبيعة، حركة المخزون)
+            مقفولة. يمكن تعديل الاسم والافتراضات للفواتير الجديدة.
+          </p>
+        )}
         <Field label="طبيعة الفاتورة *">
           <select
             required
-            disabled={formDisabled}
+            disabled={coreDisabled}
             className={inputClass}
             value={values.commercial_kind}
             onChange={(e) => onCommercialKindChange(e.target.value)}
@@ -1118,7 +1128,7 @@ export function InvoicePatternForm({
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              disabled={formDisabled}
+              disabled={coreDisabled}
               checked={values.warehouse_movement}
               onChange={(e) => update({ warehouse_movement: e.target.checked })}
             />

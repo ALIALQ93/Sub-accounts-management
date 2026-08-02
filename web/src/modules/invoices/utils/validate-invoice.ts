@@ -9,6 +9,10 @@ import {
   isInboundStockMovement,
   isSerialRequiredOnLine,
 } from "@/modules/materials/utils/material-tracking-utils";
+import {
+  canDisassembleConsume,
+  canManufactureProduce,
+} from "@/modules/materials/utils/composite-mode";
 
 export interface InvoiceDiscountPolicy {
   enabled: boolean;
@@ -216,9 +220,9 @@ export function validateInvoice(context: InvoiceValidationContext): string | nul
         }
         if (
           line.manufacturing_role === "produce" &&
-          (material?.composite_mode ?? "kit") === "kit"
+          !canManufactureProduce(material?.composite_mode)
         ) {
-          return `${label}: منتج التصنيع يجب أن يكون «منتج نهائي» أو «قابل للتفكيك» وليس طقماً.`;
+          return `${label}: منتج التصنيع يجب أن يكون نصف مصنّع أو منتجاً نهائياً (وليس طقماً).`;
         }
       }
 
@@ -232,9 +236,9 @@ export function validateInvoice(context: InvoiceValidationContext): string | nul
         if (
           line.manufacturing_role === "consume" &&
           (material?.material_kind !== "composite" ||
-            (material.composite_mode ?? "kit") !== "disassemblable")
+            !canDisassembleConsume(material.composite_mode))
         ) {
-          return `${label}: سطر التفكيك يجب أن يكون مادة تجميعية قابلة للتفكيك.`;
+          return `${label}: سطر التفكيك يجب أن يكون مادة تجميعية قابلة للتفكيك (نصف مصنّع أو نهائي).`;
         }
         if (
           line.manufacturing_role === "produce" &&

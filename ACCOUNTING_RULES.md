@@ -4,7 +4,10 @@ This document defines the enforced rules for the chart of accounts and auto-gene
 
 ## Account Tree Rules
 
-- The chart starts with 7 root accounts:
+- The chart is created from a **COA template** at setup (`apply_coa_template`), not from a fixed seed of seven roots.
+- Ready templates include: `simplified` (legacy 1–7 + closing), `iq_unified`, `sy_unified`.
+- Closing roles (`trading`, `operating`, `profit_loss`, `balance_sheet`) are assigned in `account_system_roles` according to business nature (`commercial` / `industrial` / `service`).
+- The simplified template still uses roots:
   - `1` الموجودات
   - `2` الالتزامات
   - `3` حقوق الملكية
@@ -12,6 +15,7 @@ This document defines the enforced rules for the chart of accounts and auto-gene
   - `5` المشتريات
   - `6` المصاريف
   - `7` الايرادات
+  - plus closing under `39*`
 - User can add sub-accounts under any root or branch account.
 - Parent accounts must be non-postable (`is_postable = false`).
 - Leaf accounts can be postable (`is_postable = true`).

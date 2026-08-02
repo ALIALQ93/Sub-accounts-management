@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- setup_all.sql — إعداد كامل للنظام (ملف واحد)
 -- =============================================================================
 -- شغّل هذا الملف مرة واحدة في Supabase → SQL Editor لإعادة بناء القاعدة من الصفر.
@@ -74,7 +74,7 @@
 --
 -- 7) المواد التجميعية (BOM) والتصنيع والتفكيك
 --    • material_kind: normal | composite
---    • composite_mode: kit | finished | disassemblable
+--    • composite_mode: kit | semi | semi_disassemblable | finished | disassemblable
 --    • BOM متعدد المستويات material_bom_components + منع الدورات
 --    • أنماط فاتورة manufacturing / disassembly
 --    • أسطر consume/produce + qty_damaged عند التفكيك
@@ -149,6 +149,7 @@ drop table if exists public.invoice_pattern_allowed_categories cascade;
 drop table if exists public.invoice_pattern_conditions cascade;
 drop table if exists public.invoice_pattern_sequences cascade;
 drop table if exists public.invoice_patterns cascade;
+drop table if exists public.invoice_pattern_catalog cascade;
 drop table if exists public.warehouse_material_limits cascade;
 drop table if exists public.material_bom_components cascade;
 drop table if exists public.material_units cascade;
@@ -178,6 +179,10 @@ drop table if exists public.voucher_settings cascade;
 drop table if exists public.party_settings cascade;
 drop table if exists public.user_permissions cascade;
 drop table if exists public.company_settings cascade;
+drop table if exists public.account_system_roles cascade;
+drop table if exists public.coa_template_roles cascade;
+drop table if exists public.coa_template_accounts cascade;
+drop table if exists public.coa_templates cascade;
 drop table if exists public.profiles cascade;
 drop type if exists public.app_role cascade;
 drop table if exists public.journal_entry_lines cascade;
@@ -445,6 +450,59 @@ create table public.user_permissions (
 
 create index idx_user_permissions_key on public.user_permissions(permission_key);
 
+
+-- ---------------------------------------------------------------------------
+-- قوالب دليل الحسابات (#29–#33)
+-- ---------------------------------------------------------------------------
+
+create table public.coa_templates (
+  id uuid primary key default gen_random_uuid(),
+  code varchar(40) not null unique,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  standard varchar(40) not null,
+  version int not null default 1,
+  is_active boolean not null default true,
+  supports_natures text[] not null default array['commercial', 'industrial', 'service']::text[],
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create table public.coa_template_accounts (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references public.coa_templates(id) on delete cascade,
+  code varchar(30) not null,
+  parent_code varchar(30) null,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  level int not null default 1 check (level >= 1),
+  is_postable boolean not null default false,
+  account_class varchar(30) null,
+  sort_order int not null default 0,
+  unique (template_id, code)
+);
+
+create index idx_coa_template_accounts_template
+  on public.coa_template_accounts(template_id, sort_order, code);
+
+create table public.coa_template_roles (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references public.coa_templates(id) on delete cascade,
+  role varchar(40) not null
+    check (role in ('operating', 'trading', 'profit_loss', 'balance_sheet', 'retained_earnings')),
+  account_code varchar(30) not null,
+  required_for_natures text[] not null,
+  unique (template_id, role)
+);
+
+create table public.account_system_roles (
+  role varchar(40) primary key
+    check (role in ('operating', 'trading', 'profit_loss', 'balance_sheet', 'retained_earnings')),
+  account_id uuid not null unique references public.accounts(id) on delete restrict,
+  updated_at timestamptz not null default now()
+);
+
+
 create table public.company_settings (
   id int primary key default 1 check (id = 1),
   legal_name_ar text not null default 'شركتي',
@@ -457,6 +515,10 @@ create table public.company_settings (
     check (fiscal_year_start_month between 1 and 12),
   base_currency_id uuid null references public.currencies(id) on delete set null,
   logo_url text null,
+  business_nature varchar(20) null
+    check (business_nature is null or business_nature in ('commercial', 'industrial', 'service')),
+  coa_template_id uuid null references public.coa_templates(id) on delete set null,
+  coa_applied_at timestamptz null,
   is_setup_complete boolean not null default false,
   updated_at timestamptz not null default now()
 );
@@ -2647,15 +2709,112 @@ select
   'سعر ابتدائي'
 from public.currencies;
 
-insert into public.accounts (code, name_ar, parent_id, currency_id, level, is_postable, is_active)
+
+-- قوالب دليل الحسابات (لا تُزرع حسابات الشركة هنا — عبر apply_coa_template)
+insert into public.coa_templates (code, name_ar, name_en, standard, version, sort_order, supports_natures)
 values
-  ('1', 'الموجودات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
-  ('2', 'الالتزامات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
-  ('3', 'حقوق الملكية', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
-  ('4', 'المبيعات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
-  ('5', 'المشتريات', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
-  ('6', 'المصاريف', null, (select id from public.currencies where code = 'IQD'), 1, false, true),
-  ('7', 'الايرادات', null, (select id from public.currencies where code = 'IQD'), 1, false, true);
+  ('simplified', 'القالب المبسّط (1–7)', 'Simplified chart (1–7)', 'simplified', 1, 10,
+    array['commercial', 'industrial', 'service']::text[]),
+  ('iq_unified', 'الدليل المحاسبي العراقي الموحد (أساسي)', 'Iraqi unified COA (basic)', 'iq_unified', 1, 20,
+    array['commercial', 'industrial', 'service']::text[]),
+  ('sy_unified', 'الدليل المحاسبي السوري الموحد (أساسي)', 'Syrian unified COA (basic)', 'sy_unified', 1, 30,
+    array['commercial', 'industrial', 'service']::text[]);
+
+-- حسابات القالب المبسّط
+insert into public.coa_template_accounts (template_id, code, parent_code, name_ar, name_en, level, is_postable, account_class, sort_order)
+select t.id, x.code, x.parent_code, x.name_ar, x.name_en, x.level, x.is_postable, x.account_class, x.sort_order
+from public.coa_templates t
+cross join (values
+  ('1', null, 'الموجودات', 'Assets', 1, false, 'asset', 10),
+  ('2', null, 'الالتزامات', 'Liabilities', 1, false, 'liability', 20),
+  ('3', null, 'حقوق الملكية', 'Equity', 1, false, 'equity', 30),
+  ('4', null, 'المبيعات', 'Sales', 1, false, 'revenue', 40),
+  ('5', null, 'المشتريات', 'Purchases', 1, false, 'expense', 50),
+  ('6', null, 'المصاريف', 'Expenses', 1, false, 'expense', 60),
+  ('7', null, 'الايرادات', 'Income', 1, false, 'revenue', 70),
+  ('39', '3', 'الحسابات الختامية', 'Closing accounts', 2, false, 'closing', 80),
+  ('3901', '39', 'حساب المتاجرة', 'Trading account', 3, false, 'closing', 81),
+  ('3902', '39', 'حساب التشغيل', 'Operating account', 3, false, 'closing', 82),
+  ('3903', '39', 'أرباح وخسائر', 'Profit and loss', 3, false, 'closing', 83),
+  ('3904', '39', 'الميزانية', 'Balance sheet', 3, false, 'closing', 84)
+) as x(code, parent_code, name_ar, name_en, level, is_postable, account_class, sort_order)
+where t.code = 'simplified';
+
+insert into public.coa_template_roles (template_id, role, account_code, required_for_natures)
+select t.id, x.role, x.account_code, x.natures
+from public.coa_templates t
+cross join (values
+  ('trading', '3901', array['commercial', 'industrial']::text[]),
+  ('operating', '3902', array['industrial']::text[]),
+  ('profit_loss', '3903', array['commercial', 'industrial', 'service']::text[]),
+  ('balance_sheet', '3904', array['commercial', 'industrial', 'service']::text[])
+) as x(role, account_code, natures)
+where t.code = 'simplified';
+
+-- دليل عراقي أساسي
+insert into public.coa_template_accounts (template_id, code, parent_code, name_ar, name_en, level, is_postable, account_class, sort_order)
+select t.id, x.code, x.parent_code, x.name_ar, x.name_en, x.level, x.is_postable, x.account_class, x.sort_order
+from public.coa_templates t
+cross join (values
+  ('1', null, 'الأصول', 'Assets', 1, false, 'asset', 10),
+  ('11', '1', 'الأصول المتداولة', 'Current assets', 2, false, 'asset', 11),
+  ('12', '1', 'الأصول الثابتة', 'Fixed assets', 2, false, 'asset', 12),
+  ('2', null, 'الخصوم', 'Liabilities', 1, false, 'liability', 20),
+  ('21', '2', 'الخصوم المتداولة', 'Current liabilities', 2, false, 'liability', 21),
+  ('3', null, 'حقوق الملكية', 'Equity', 1, false, 'equity', 30),
+  ('4', null, 'المصروفات', 'Expenses', 1, false, 'expense', 40),
+  ('5', null, 'الإيرادات', 'Revenues', 1, false, 'revenue', 50),
+  ('9', null, 'الحسابات الختامية', 'Closing accounts', 1, false, 'closing', 90),
+  ('91', '9', 'حساب المتاجرة', 'Trading account', 2, false, 'closing', 91),
+  ('92', '9', 'حساب التشغيل', 'Operating account', 2, false, 'closing', 92),
+  ('93', '9', 'أرباح وخسائر', 'Profit and loss', 2, false, 'closing', 93),
+  ('94', '9', 'الميزانية', 'Balance sheet', 2, false, 'closing', 94)
+) as x(code, parent_code, name_ar, name_en, level, is_postable, account_class, sort_order)
+where t.code = 'iq_unified';
+
+insert into public.coa_template_roles (template_id, role, account_code, required_for_natures)
+select t.id, x.role, x.account_code, x.natures
+from public.coa_templates t
+cross join (values
+  ('trading', '91', array['commercial', 'industrial']::text[]),
+  ('operating', '92', array['industrial']::text[]),
+  ('profit_loss', '93', array['commercial', 'industrial', 'service']::text[]),
+  ('balance_sheet', '94', array['commercial', 'industrial', 'service']::text[])
+) as x(role, account_code, natures)
+where t.code = 'iq_unified';
+
+-- دليل سوري أساسي
+insert into public.coa_template_accounts (template_id, code, parent_code, name_ar, name_en, level, is_postable, account_class, sort_order)
+select t.id, x.code, x.parent_code, x.name_ar, x.name_en, x.level, x.is_postable, x.account_class, x.sort_order
+from public.coa_templates t
+cross join (values
+  ('1', null, 'الموجودات', 'Assets', 1, false, 'asset', 10),
+  ('11', '1', 'الموجودات المتداولة', 'Current assets', 2, false, 'asset', 11),
+  ('12', '1', 'الموجودات الثابتة', 'Fixed assets', 2, false, 'asset', 12),
+  ('2', null, 'المطلوبات', 'Liabilities', 1, false, 'liability', 20),
+  ('21', '2', 'المطلوبات المتداولة', 'Current liabilities', 2, false, 'liability', 21),
+  ('3', null, 'حقوق المساهمين', 'Equity', 1, false, 'equity', 30),
+  ('4', null, 'النفقات', 'Expenses', 1, false, 'expense', 40),
+  ('5', null, 'الإيرادات', 'Revenues', 1, false, 'revenue', 50),
+  ('8', null, 'الحسابات الختامية', 'Closing accounts', 1, false, 'closing', 80),
+  ('81', '8', 'المتاجرة', 'Trading', 2, false, 'closing', 81),
+  ('82', '8', 'التشغيل', 'Operating', 2, false, 'closing', 82),
+  ('83', '8', 'الأرباح والخسائر', 'Profit and loss', 2, false, 'closing', 83),
+  ('84', '8', 'الميزانية', 'Balance sheet', 2, false, 'closing', 84)
+) as x(code, parent_code, name_ar, name_en, level, is_postable, account_class, sort_order)
+where t.code = 'sy_unified';
+
+insert into public.coa_template_roles (template_id, role, account_code, required_for_natures)
+select t.id, x.role, x.account_code, x.natures
+from public.coa_templates t
+cross join (values
+  ('trading', '81', array['commercial', 'industrial']::text[]),
+  ('operating', '82', array['industrial']::text[]),
+  ('profit_loss', '83', array['commercial', 'industrial', 'service']::text[]),
+  ('balance_sheet', '84', array['commercial', 'industrial', 'service']::text[])
+) as x(role, account_code, natures)
+where t.code = 'sy_unified';
+
 
 insert into public.party_settings (id)
 values (1);
@@ -2700,6 +2859,28 @@ where c.is_base = true;
 alter table public.currencies enable row level security;
 alter table public.currency_rate_history enable row level security;
 alter table public.accounts enable row level security;
+
+alter table public.coa_templates enable row level security;
+alter table public.coa_template_accounts enable row level security;
+alter table public.coa_template_roles enable row level security;
+alter table public.account_system_roles enable row level security;
+
+drop policy if exists "coa_templates_select_all" on public.coa_templates;
+create policy "coa_templates_select_all" on public.coa_templates
+  for select to authenticated using (true);
+
+drop policy if exists "coa_template_accounts_select_all" on public.coa_template_accounts;
+create policy "coa_template_accounts_select_all" on public.coa_template_accounts
+  for select to authenticated using (true);
+
+drop policy if exists "coa_template_roles_select_all" on public.coa_template_roles;
+create policy "coa_template_roles_select_all" on public.coa_template_roles
+  for select to authenticated using (true);
+
+drop policy if exists "account_system_roles_select_all" on public.account_system_roles;
+create policy "account_system_roles_select_all" on public.account_system_roles
+  for select to authenticated using (true);
+
 alter table public.cost_centers enable row level security;
 alter table public.journal_entries enable row level security;
 alter table public.journal_entry_lines enable row level security;
@@ -3952,6 +4133,36 @@ create index if not exists idx_vouchers_branch_id on public.vouchers(branch_id);
 -- أنماط الفواتير
 -- ---------------------------------------------------------------------------
 
+
+-- ---------------------------------------------------------------------------
+-- كتالوج أنماط الفواتير (#34) — قوالب اختيار عند التهيئة
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.invoice_pattern_catalog (
+  id uuid primary key default gen_random_uuid(),
+  code varchar(40) not null unique,
+  name_ar varchar(200) not null,
+  name_en varchar(200) null,
+  direction varchar(10) not null
+    check (direction in ('input', 'output')),
+  commercial_kind varchar(30) not null,
+  is_return boolean not null default false,
+  is_opening_stock boolean not null default false,
+  sort_order int not null default 0,
+  is_active boolean not null default true,
+  paired_catalog_code varchar(40) null,
+  defaults jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_invoice_pattern_catalog_active_sort
+  on public.invoice_pattern_catalog(is_active, sort_order);
+
+alter table public.invoice_pattern_catalog enable row level security;
+drop policy if exists "invoice_pattern_catalog_select_all" on public.invoice_pattern_catalog;
+create policy "invoice_pattern_catalog_select_all" on public.invoice_pattern_catalog
+  for select to authenticated using (true);
+
 create table if not exists public.invoice_patterns (
   id uuid primary key default gen_random_uuid(),
   pattern_no int generated by default as identity,
@@ -3965,6 +4176,7 @@ create table if not exists public.invoice_patterns (
   is_opening_stock boolean not null default false,
   is_active boolean not null default true,
   sort_order int not null default 0,
+  catalog_id uuid null references public.invoice_pattern_catalog(id) on delete set null,
 
   default_branch_id uuid null references public.branches(id) on delete set null,
   default_cost_center_id uuid null references public.cost_centers(id) on delete set null,
@@ -4659,134 +4871,45 @@ create policy "inventory_movements_insert_all" on public.inventory_movements
   for insert to authenticated with check (true);
 
 -- =============================================================================
--- BEGIN patch_invoice_seeds.sql
+-- BEGIN patch_invoice_seeds.sql  → كتالوج أنماط (#34) لا زرع على الشركة
 -- =============================================================================
--- =============================================================================
--- patch_invoice_seeds.sql — أنماط فواتير جاهزة (§12)
--- =============================================================================
--- يتطلب: patch_invoices.sql
--- الحسابات الافتراضية NULL — يُضبط من الواجهة أو الإعداد الأولي
+-- الحسابات الافتراضية NULL — تُضبط من الواجهة أو الإعداد الأولي بعد الاختيار
 -- =============================================================================
 
--- مبيعات
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, default_settlement_mode, payment_terms_enabled,
-  default_payment_terms_days, warehouse_movement, cc_on_goods, cc_on_party,
-  sort_order
-)
-select
-  'مبيعات', 'Sales', 'output', 'sale',
-  'SAL', 'credit', true, 90, true, true, true, 10
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'sale' and name_ar = 'مبيعات'
-);
+insert into public.invoice_pattern_catalog (
+  code, name_ar, name_en, direction, commercial_kind, is_return, is_opening_stock,
+  sort_order, paired_catalog_code, defaults
+) values
+  ('sale', 'مبيعات', 'Sales', 'output', 'sale', false, false, 10, null,
+    '{"numbering_prefix":"SAL","default_settlement_mode":"credit","payment_terms_enabled":true,"default_payment_terms_days":90,"warehouse_movement":true,"cc_on_goods":true,"cc_on_party":true}'::jsonb),
+  ('sale_cash', 'مبيعات نقدي', 'Cash Sales', 'output', 'sale', false, false, 11, null,
+    '{"numbering_prefix":"SAL-C","default_settlement_mode":"cash","payment_terms_enabled":false,"warehouse_movement":true,"cc_on_goods":true,"cc_on_party":true}'::jsonb),
+  ('purchase', 'مشتريات', 'Purchases', 'input', 'purchase', false, false, 20, null,
+    '{"numbering_prefix":"PUR","default_settlement_mode":"credit","payment_terms_enabled":true,"default_payment_terms_days":60,"warehouse_movement":true}'::jsonb),
+  ('purchase_cash', 'مشتريات نقدي', 'Cash Purchases', 'input', 'purchase', false, false, 21, null,
+    '{"numbering_prefix":"PUR-C","default_settlement_mode":"cash","payment_terms_enabled":false,"warehouse_movement":true}'::jsonb),
+  ('transfer_out', 'مناقلة — إخراج', 'Transfer Out', 'output', 'transfer_out', false, false, 30, 'transfer_in',
+    '{"numbering_prefix":"TRO","warehouse_movement":true,"generate_journal":true}'::jsonb),
+  ('transfer_in', 'مناقلة — إدخال', 'Transfer In', 'input', 'transfer_in', false, false, 40, null,
+    '{"numbering_prefix":"TRI","warehouse_movement":true,"generate_journal":true}'::jsonb),
+  ('return_sale', 'مرتجع مبيعات', 'Sales Return', 'input', 'return_sale', true, false, 50, null,
+    '{"numbering_prefix":"RSR","warehouse_movement":true}'::jsonb),
+  ('return_purchase', 'مرتجع مشتريات', 'Purchase Return', 'output', 'return_purchase', true, false, 60, null,
+    '{"numbering_prefix":"RPR","warehouse_movement":true}'::jsonb),
+  ('opening_stock', 'بضاعة أول المدة', 'Opening Stock', 'input', 'opening_stock', false, true, 70, null,
+    '{"numbering_prefix":"OPS","warehouse_movement":true}'::jsonb),
+  ('manufacturing', 'تصنيع', 'Manufacturing', 'output', 'manufacturing', false, false, 95, null,
+    '{"numbering_prefix":"MFG","warehouse_movement":true,"generate_journal":true,"pricing_consumed_mode":"weighted_avg","pricing_cost_mode":"line_net","pricing_material_mode":"none","enforce_stock_availability":true}'::jsonb),
+  ('disassembly', 'تفكيك', 'Disassembly', 'output', 'disassembly', false, false, 96, null,
+    '{"numbering_prefix":"DSA","warehouse_movement":true,"generate_journal":true,"pricing_consumed_mode":"weighted_avg","pricing_cost_mode":"line_net","pricing_material_mode":"none","enforce_stock_availability":true}'::jsonb),
+  ('inventory_scrap', 'إخراج تالف', 'Inventory Scrap', 'output', 'inventory_scrap', false, false, 85, null,
+    '{"numbering_prefix":"SCR","warehouse_movement":true,"generate_journal":true,"pricing_consumed_mode":"weighted_avg","pricing_material_mode":"none"}'::jsonb),
+  ('inventory_shortage', 'عجز جرد', 'Inventory Shortage', 'output', 'inventory_shortage', false, false, 86, null,
+    '{"numbering_prefix":"SHT","warehouse_movement":true,"generate_journal":true,"pricing_consumed_mode":"weighted_avg","pricing_material_mode":"none"}'::jsonb),
+  ('inventory_surplus', 'فائض جرد', 'Inventory Surplus', 'input', 'inventory_surplus', false, false, 87, null,
+    '{"numbering_prefix":"SUR","warehouse_movement":true,"generate_journal":true,"pricing_consumed_mode":"weighted_avg","pricing_cost_mode":"none","pricing_material_mode":"none"}'::jsonb)
+on conflict (code) do nothing;
 
--- مشتريات
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, default_settlement_mode, payment_terms_enabled,
-  default_payment_terms_days, warehouse_movement, sort_order
-)
-select
-  'مشتريات', 'Purchases', 'input', 'purchase',
-  'PUR', 'credit', true, 60, true, 20
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'purchase' and name_ar = 'مشتريات'
-);
-
--- مناقلة إخراج
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, warehouse_movement, generate_journal, sort_order
-)
-select
-  'مناقلة — إخراج', 'Transfer Out', 'output', 'transfer_out',
-  'TRO', true, true, 30
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'transfer_out'
-);
-
--- مناقلة إدخال
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, warehouse_movement, generate_journal, sort_order
-)
-select
-  'مناقلة — إدخال', 'Transfer In', 'input', 'transfer_in',
-  'TRI', true, true, 40
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'transfer_in'
-);
-
--- ربط out → in
-update public.invoice_patterns out_p
-set paired_input_pattern_id = in_p.id
-from public.invoice_patterns in_p
-where out_p.commercial_kind = 'transfer_out'
-  and in_p.commercial_kind = 'transfer_in'
-  and out_p.paired_input_pattern_id is null;
-
--- مرتجع مبيعات
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind, is_return,
-  numbering_prefix, warehouse_movement, sort_order
-)
-select
-  'مرتجع مبيعات', 'Sales Return', 'input', 'return_sale', true,
-  'RSR', true, 50
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'return_sale'
-);
-
--- مرتجع مشتريات
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind, is_return,
-  numbering_prefix, warehouse_movement, sort_order
-)
-select
-  'مرتجع مشتريات', 'Purchase Return', 'output', 'return_purchase', true,
-  'RPR', true, 60
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'return_purchase'
-);
-
--- بضاعة أول المدة
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind, is_opening_stock,
-  numbering_prefix, warehouse_movement, sort_order
-)
-select
-  'بضاعة أول المدة', 'Opening Stock', 'input', 'opening_stock', true,
-  'OPS', true, 70
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'opening_stock'
-);
-
--- نسخ نقدي (اختيارية)
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, default_settlement_mode, payment_terms_enabled,
-  warehouse_movement, cc_on_goods, cc_on_party, sort_order
-)
-select
-  'مبيعات نقدي', 'Cash Sales', 'output', 'sale',
-  'SAL-C', 'cash', false, true, true, true, 11
-where not exists (
-  select 1 from public.invoice_patterns where name_ar = 'مبيعات نقدي'
-);
-
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, default_settlement_mode, payment_terms_enabled,
-  warehouse_movement, sort_order
-)
-select
-  'مشتريات نقدي', 'Cash Purchases', 'input', 'purchase',
-  'PUR-C', 'cash', false, true, 21
-where not exists (
-  select 1 from public.invoice_patterns where name_ar = 'مشتريات نقدي'
-);
 
 -- =============================================================================
 -- BEGIN patch_invoice_reservation_discount.sql
@@ -12174,6 +12297,31 @@ comment on column public.company_inventory_settings.cost_per_expiry_date is
   'عند true: تكلفة الوحدة تُفصل per تاريخ انتهاء الصلاحية (دفعات صلاحية)';
 comment on column public.company_inventory_settings.cost_per_serial_number is
   'عند true: تكلفة الوحدة تُفصل per رقم تسلسلي (دفعات تسلسلية)';
+alter table public.company_inventory_settings
+  add column if not exists manufacturing_produce_expiry_policy varchar(30) not null default 'min_component';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'company_inventory_settings_mfg_expiry_policy_chk'
+  ) then
+    alter table public.company_inventory_settings
+      add constraint company_inventory_settings_mfg_expiry_policy_chk
+      check (
+        manufacturing_produce_expiry_policy in (
+          'min_component',
+          'production_plus_days',
+          'min_of_both',
+          'manual'
+        )
+      );
+  end if;
+end $$;
+
+comment on column public.company_inventory_settings.manufacturing_produce_expiry_policy is
+  'Suggest produce-line expiry on manufacturing: min_component | production_plus_days | min_of_both | manual (editable after foundation lock)';
+
 
 create or replace function public.company_inventory_settings_guard_locked()
 returns trigger
@@ -17112,21 +17260,7 @@ grant execute on function public.post_invoice_apply_manufacturing(
 -- 7) بذرة نمط تصنيع
 -- ---------------------------------------------------------------------------
 
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, warehouse_movement, generate_journal,
-  pricing_consumed_mode, pricing_cost_mode, pricing_material_mode,
-  enforce_stock_availability, sort_order
-)
-select
-  'تصنيع', 'Manufacturing', 'output', 'manufacturing',
-  'MFG', true, true,
-  'weighted_avg', 'line_net', 'none',
-  true, 95
-where not exists (
-  select 1 from public.invoice_patterns
-  where commercial_kind = 'manufacturing' and name_ar = 'تصنيع'
-);
+-- (نمط نُقل إلى invoice_pattern_catalog — يُختار عند التهيئة)
 
 insert into public.invoice_pattern_conditions (pattern_id, require_warehouse)
 select p.id, true
@@ -18112,9 +18246,11 @@ grant execute on function public.post_invoice(uuid) to authenticated;
 -- patch_composite_disassembly.sql (#50)
 -- =============================================================================
 -- أوضاع المادة التجميعية:
---   kit            — طقم يُفك عند البيع/الإخراج (السلوك السابق)
---   finished       — منتج نهائي بدون تفكيك (مثل برجر المطعم)
---   disassemblable — قابل لعملية تفكيك مع تسجيل مواد تالفة
+--   kit                 — طقم يُفك عند البيع/الإخراج
+--   semi                — نصف مصنّع بدون تفكيك
+--   semi_disassemblable — نصف مصنّع قابل للتفكيك
+--   finished            — منتج نهائي بدون تفكيك
+--   disassemblable      — منتج نهائي قابل للتفكيك (+ تالف)
 -- + نمط فاتورة «تفكيك» (عكس التصنيع جزئياً)
 -- يتطلب: patch_invoice_manufacturing.sql
 -- =============================================================================
@@ -18145,14 +18281,14 @@ begin
         )
         or (
           material_kind = 'composite'
-          and composite_mode in ('kit', 'finished', 'disassemblable')
+          and composite_mode in ('kit', 'semi', 'semi_disassemblable', 'finished', 'disassemblable')
         )
       );
   end if;
 end $$;
 
 comment on column public.materials.composite_mode is
-  'تجميعية فقط: kit=تفكيك عند الإخراج، finished=منتج نهائي، disassemblable=تفكيك مع تالف';
+  'تجميعية: kit|semi|semi_disassemblable|finished|disassemblable — مرحلة × قابلية تفكيك';
 
 -- عند التحويل لعادية امسح الوضع؛ عند التحويل لتجميعية بدون وضع → kit
 create or replace function public.materials_composite_mode_sync()
@@ -18416,8 +18552,8 @@ begin
   v_mode := nullif(trim(coalesce(p_material->>'composite_mode', '')), '');
   if v_kind = 'composite' then
     v_mode := coalesce(v_mode, 'kit');
-    if v_mode not in ('kit', 'finished', 'disassemblable') then
-      raise exception 'composite_mode must be kit, finished, or disassemblable.';
+    if v_mode not in ('kit', 'semi', 'semi_disassemblable', 'finished', 'disassemblable') then
+      raise exception 'composite_mode must be kit, semi, semi_disassemblable, finished, or disassemblable.';
     end if;
   else
     v_mode := null;
@@ -18692,7 +18828,7 @@ begin
     end if;
     if coalesce(v_row.composite_mode, 'kit') = 'kit' then
       raise exception
-        'Manufacturing produce line % (%) is a kit that explodes on outbound. Set composite_mode to finished or disassemblable.',
+        'Manufacturing produce line % (%) is a kit that explodes on outbound. Set composite_mode to semi/finished (optionally disassemblable).',
         v_row.line_no, v_row.material_code;
     end if;
   end loop;
@@ -18905,9 +19041,9 @@ begin
       and iml.manufacturing_role = 'consume'
   loop
     if v_row.material_kind is distinct from 'composite'
-       or coalesce(v_row.composite_mode, 'kit') is distinct from 'disassemblable' then
+       or coalesce(v_row.composite_mode, 'kit') not in ('disassemblable', 'semi_disassemblable') then
       raise exception
-        'Disassembly consume line % (%) must be a disassemblable composite material.',
+        'Disassembly consume line % (%) must be a disassemblable composite (finished or semi).',
         v_row.line_no, v_row.material_code;
     end if;
   end loop;
@@ -19095,21 +19231,7 @@ grant execute on function public.post_invoice_apply_disassembly(
 ) to authenticated;
 
 -- بذرة نمط تفكيك
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, warehouse_movement, generate_journal,
-  pricing_consumed_mode, pricing_cost_mode, pricing_material_mode,
-  enforce_stock_availability, sort_order
-)
-select
-  'تفكيك', 'Disassembly', 'output', 'disassembly',
-  'DSA', true, true,
-  'weighted_avg', 'line_net', 'none',
-  true, 96
-where not exists (
-  select 1 from public.invoice_patterns
-  where commercial_kind = 'disassembly' and name_ar = 'تفكيك'
-);
+-- (نمط نُقل إلى invoice_pattern_catalog — يُختار عند التهيئة)
 
 insert into public.invoice_pattern_conditions (pattern_id, require_warehouse)
 select p.id, true
@@ -20438,9 +20560,9 @@ begin
       and iml.manufacturing_role = 'consume'
   loop
     if v_row.material_kind is distinct from 'composite'
-       or coalesce(v_row.composite_mode, 'kit') is distinct from 'disassemblable' then
+       or coalesce(v_row.composite_mode, 'kit') not in ('disassemblable', 'semi_disassemblable') then
       raise exception
-        'Disassembly consume line % (%) must be a disassemblable composite material.',
+        'Disassembly consume line % (%) must be a disassemblable composite (finished or semi).',
         v_row.line_no, v_row.material_code;
     end if;
   end loop;
@@ -21035,44 +21157,11 @@ comment on function public.post_stock_adjustment(
 -- بذور أنماط جردية متقدمة
 -- ---------------------------------------------------------------------------
 
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, warehouse_movement, generate_journal, sort_order,
-  pricing_consumed_mode, pricing_material_mode
-)
-select
-  'إخراج تالف', 'Inventory Scrap', 'output', 'inventory_scrap',
-  'SCR', true, true, 85,
-  'weighted_avg', 'none'
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'inventory_scrap'
-);
+-- (نمط نُقل إلى invoice_pattern_catalog — يُختار عند التهيئة)
 
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, warehouse_movement, generate_journal, sort_order,
-  pricing_consumed_mode, pricing_material_mode
-)
-select
-  'عجز جرد', 'Inventory Shortage', 'output', 'inventory_shortage',
-  'SHT', true, true, 86,
-  'weighted_avg', 'none'
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'inventory_shortage'
-);
+-- (نمط نُقل إلى invoice_pattern_catalog — يُختار عند التهيئة)
 
-insert into public.invoice_patterns (
-  name_ar, name_en, direction, commercial_kind,
-  numbering_prefix, warehouse_movement, generate_journal, sort_order,
-  pricing_consumed_mode, pricing_cost_mode, pricing_material_mode
-)
-select
-  'فائض جرد', 'Inventory Surplus', 'input', 'inventory_surplus',
-  'SUR', true, true, 87,
-  'weighted_avg', 'none', 'none'
-where not exists (
-  select 1 from public.invoice_patterns where commercial_kind = 'inventory_surplus'
-);
+-- (نمط نُقل إلى invoice_pattern_catalog — يُختار عند التهيئة)
 
 update public.invoice_patterns
 set freight_affects_material_cost = true
@@ -23620,6 +23709,305 @@ $$;
 -- مصدر الحقيقة للتهيئة: database/setup_all.sql (إعادة بناء كاملة في مرحلة البناء).
 -- =============================================================================
 
+
+-- =============================================================================
+-- قوالب الدليل + اختيار أنماط الفواتير — RPCs (#29–#35)
+-- =============================================================================
+
+create or replace function public.apply_coa_template(
+  p_template_code text,
+  p_nature text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_template public.coa_templates%rowtype;
+  v_currency_id uuid;
+  v_has_journals boolean;
+  v_role record;
+  v_acc_id uuid;
+  v_code_map jsonb := '{}'::jsonb;
+  v_row record;
+  v_parent_id uuid;
+  v_created int := 0;
+begin
+  if p_nature is null or p_nature not in ('commercial', 'industrial', 'service') then
+    raise exception 'طبيعة الشركة غير صالحة: %', p_nature;
+  end if;
+
+  select * into v_template
+  from public.coa_templates t
+  where t.code = p_template_code and t.is_active = true;
+
+  if not found then
+    raise exception 'قالب دليل الحسابات غير موجود: %', p_template_code;
+  end if;
+
+  if not (p_nature = any (v_template.supports_natures)) then
+    raise exception 'القالب % لا يدعم طبيعة الشركة %', p_template_code, p_nature;
+  end if;
+
+  v_has_journals := exists (select 1 from public.journal_entry_lines limit 1);
+  if v_has_journals and exists (
+    select 1 from public.company_settings cs where cs.id = 1 and cs.coa_template_id is not null
+  ) then
+    raise exception 'لا يمكن تغيير قالب دليل الحسابات بعد وجود عمليات محاسبية';
+  end if;
+
+  if exists (select 1 from public.accounts) then
+    if v_has_journals then
+      raise exception 'لا يمكن إعادة تطبيق القالب مع وجود قيود محاسبية';
+    end if;
+    delete from public.account_system_roles;
+    -- فك مراجع اختيارية شائعة قبل الحذف
+    update public.party_settings set
+      customer_parent_account_id = null,
+      vendor_parent_account_id = null
+    where id = 1;
+    delete from public.accounts;
+  end if;
+
+  select c.id into v_currency_id
+  from public.currencies c
+  where c.is_base = true
+  limit 1;
+
+  if v_currency_id is null then
+    select c.id into v_currency_id from public.currencies c where c.code = 'IQD' limit 1;
+  end if;
+
+  for v_row in
+    select *
+    from public.coa_template_accounts a
+    where a.template_id = v_template.id
+    order by a.level, a.sort_order, a.code
+  loop
+    -- تخطّي حساب التشغيل إن لم تكن الطبيعة صناعية
+    if v_row.code in (
+      select r.account_code
+      from public.coa_template_roles r
+      where r.template_id = v_template.id
+        and r.role = 'operating'
+    ) and p_nature <> 'industrial' then
+      continue;
+    end if;
+
+    -- تخطّي المتاجرة للخدمي
+    if v_row.code in (
+      select r.account_code
+      from public.coa_template_roles r
+      where r.template_id = v_template.id
+        and r.role = 'trading'
+    ) and p_nature = 'service' then
+      continue;
+    end if;
+
+    v_parent_id := null;
+    if v_row.parent_code is not null then
+      v_parent_id := (v_code_map ->> v_row.parent_code)::uuid;
+      if v_parent_id is null then
+        -- الأب قد يكون حساب تشغيل/متاجرة متخطى — تخطّي الفرع
+        continue;
+      end if;
+    end if;
+
+    insert into public.accounts (code, name_ar, name_en, parent_id, currency_id, level, is_postable, is_active)
+    values (
+      v_row.code, v_row.name_ar, v_row.name_en, v_parent_id, v_currency_id,
+      v_row.level, v_row.is_postable, true
+    )
+    returning id into v_acc_id;
+
+    v_code_map := v_code_map || jsonb_build_object(v_row.code, v_acc_id);
+    v_created := v_created + 1;
+  end loop;
+
+  delete from public.account_system_roles;
+
+  for v_role in
+    select r.*
+    from public.coa_template_roles r
+    where r.template_id = v_template.id
+      and p_nature = any (r.required_for_natures)
+  loop
+    v_acc_id := (v_code_map ->> v_role.account_code)::uuid;
+    if v_acc_id is null then
+      raise exception 'تعذّر ربط الدور % بالحساب %', v_role.role, v_role.account_code;
+    end if;
+    insert into public.account_system_roles (role, account_id)
+    values (v_role.role, v_acc_id);
+  end loop;
+
+  update public.company_settings
+  set
+    business_nature = p_nature,
+    coa_template_id = v_template.id,
+    coa_applied_at = now(),
+    updated_at = now()
+  where id = 1;
+
+  return jsonb_build_object(
+    'ok', true,
+    'template_code', v_template.code,
+    'nature', p_nature,
+    'accounts_created', v_created,
+    'roles', (select jsonb_agg(role order by role) from public.account_system_roles)
+  );
+end;
+$$;
+
+comment on function public.apply_coa_template(text, text) is
+  'تطبيق قالب دليل حسابات + أدوار ختامية حسب طبيعة الشركة';
+
+revoke all on function public.apply_coa_template(text, text) from public;
+grant execute on function public.apply_coa_template(text, text) to authenticated;
+
+create or replace function public.apply_selected_invoice_patterns(p_codes text[])
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_codes text[] := coalesce(p_codes, array[]::text[]);
+  v_code text;
+  v_cat public.invoice_pattern_catalog%rowtype;
+  v_pair public.invoice_pattern_catalog%rowtype;
+  v_id uuid;
+  v_pair_id uuid;
+  v_created int := 0;
+  v_d jsonb;
+begin
+  -- أضف الزوج المتلازم للمناقلة
+  if 'transfer_out' = any (v_codes) and not ('transfer_in' = any (v_codes)) then
+    v_codes := array_append(v_codes, 'transfer_in');
+  end if;
+  if 'transfer_in' = any (v_codes) and not ('transfer_out' = any (v_codes)) then
+    v_codes := array_append(v_codes, 'transfer_out');
+  end if;
+
+  foreach v_code in array v_codes
+  loop
+    select * into v_cat
+    from public.invoice_pattern_catalog c
+    where c.code = v_code and c.is_active = true;
+
+    if not found then
+      raise exception 'نمط غير موجود في الكتالوج: %', v_code;
+    end if;
+
+    if exists (
+      select 1 from public.invoice_patterns p where p.catalog_id = v_cat.id
+    ) then
+      continue;
+    end if;
+
+    v_d := coalesce(v_cat.defaults, '{}'::jsonb);
+
+    insert into public.invoice_patterns (
+      name_ar, name_en, direction, commercial_kind, is_return, is_opening_stock,
+      catalog_id, sort_order, numbering_prefix,
+      default_settlement_mode, payment_terms_enabled, default_payment_terms_days,
+      warehouse_movement, cc_on_goods, cc_on_party, generate_journal,
+      pricing_consumed_mode, pricing_cost_mode, pricing_material_mode,
+      enforce_stock_availability
+    ) values (
+      v_cat.name_ar,
+      v_cat.name_en,
+      v_cat.direction,
+      v_cat.commercial_kind,
+      v_cat.is_return,
+      v_cat.is_opening_stock,
+      v_cat.id,
+      v_cat.sort_order,
+      coalesce(v_d->>'numbering_prefix', 'INV'),
+      coalesce(v_d->>'default_settlement_mode', 'credit'),
+      coalesce((v_d->>'payment_terms_enabled')::boolean, false),
+      nullif(v_d->>'default_payment_terms_days', '')::int,
+      coalesce((v_d->>'warehouse_movement')::boolean, false),
+      coalesce((v_d->>'cc_on_goods')::boolean, false),
+      coalesce((v_d->>'cc_on_party')::boolean, false),
+      coalesce((v_d->>'generate_journal')::boolean, true),
+      v_d->>'pricing_consumed_mode',
+      v_d->>'pricing_cost_mode',
+      v_d->>'pricing_material_mode',
+      coalesce((v_d->>'enforce_stock_availability')::boolean, false)
+    )
+    returning id into v_id;
+
+    v_created := v_created + 1;
+  end loop;
+
+  -- ربط مناقلة out → in
+  update public.invoice_patterns out_p
+  set paired_input_pattern_id = in_p.id
+  from public.invoice_patterns in_p
+  where out_p.commercial_kind = 'transfer_out'
+    and in_p.commercial_kind = 'transfer_in'
+    and out_p.paired_input_pattern_id is null;
+
+  return jsonb_build_object('ok', true, 'created', v_created, 'codes', to_jsonb(v_codes));
+end;
+$$;
+
+comment on function public.apply_selected_invoice_patterns(text[]) is
+  'إنشاء أنماط فواتير للمنشأة من الكتالوج حسب اختيار المستخدم';
+
+revoke all on function public.apply_selected_invoice_patterns(text[]) from public;
+grant execute on function public.apply_selected_invoice_patterns(text[]) to authenticated;
+
+create or replace function public.invoice_pattern_has_invoices(p_pattern_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.invoices i where i.pattern_id = p_pattern_id limit 1
+  );
+$$;
+
+grant execute on function public.invoice_pattern_has_invoices(uuid) to authenticated;
+
+create or replace function public.enforce_invoice_pattern_locks()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if public.invoice_pattern_has_invoices(old.id) then
+      raise exception 'لا يمكن حذف نمط عليه فواتير — عطّل النمط بدلاً من ذلك';
+    end if;
+    return old;
+  end if;
+
+  if tg_op = 'UPDATE' and public.invoice_pattern_has_invoices(new.id) then
+    if new.direction is distinct from old.direction
+      or new.commercial_kind is distinct from old.commercial_kind
+      or new.is_return is distinct from old.is_return
+      or new.is_opening_stock is distinct from old.is_opening_stock
+      or new.warehouse_movement is distinct from old.warehouse_movement
+      or new.generate_journal is distinct from old.generate_journal
+      or new.catalog_id is distinct from old.catalog_id
+    then
+      raise exception 'لا يمكن تعديل الحقول الجوهرية لنمط عليه فواتير مسجّلة';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_enforce_invoice_pattern_locks on public.invoice_patterns;
+create trigger trg_enforce_invoice_pattern_locks
+  before update or delete on public.invoice_patterns
+  for each row execute function public.enforce_invoice_pattern_locks();
+
+
 create or replace function public.get_schema_setup_status()
 returns jsonb
 language plpgsql
@@ -23729,16 +24117,34 @@ begin
   );
   v_ok := v_ok and v_has;
 
-  -- جذور دليل الحسابات
-  v_has := (
-    select count(*) >= 7
-    from public.accounts a
-    where a.parent_id is null
-  );
+  -- قوالب دليل الحسابات
+  v_has := exists (select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'coa_templates');
   v_checks := v_checks || jsonb_build_array(
     jsonb_build_object(
-      'key', 'accounts.roots',
-      'label_ar', 'دليل الحسابات (جذور 1–7)',
+      'key', 'coa_templates',
+      'label_ar', 'جداول قوالب دليل الحسابات',
+      'ok', v_has
+    )
+  );
+  v_ok := v_ok and v_has;
+
+  v_has := exists (select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'invoice_pattern_catalog');
+  v_checks := v_checks || jsonb_build_array(
+    jsonb_build_object(
+      'key', 'invoice_pattern_catalog',
+      'label_ar', 'كتالوج أنماط الفواتير',
+      'ok', v_has
+    )
+  );
+  v_ok := v_ok and v_has;
+
+  v_has := to_regprocedure('public.apply_coa_template(text,text)') is not null;
+  v_checks := v_checks || jsonb_build_array(
+    jsonb_build_object(
+      'key', 'apply_coa_template',
+      'label_ar', 'دالة تطبيق قالب الدليل',
       'ok', v_has
     )
   );

@@ -244,7 +244,13 @@ export interface MaterialOption {
   name_en: string | null;
   category_id: string | null;
   material_kind?: "normal" | "composite";
-  composite_mode?: "kit" | "finished" | "disassemblable" | null;
+  composite_mode?:
+    | "kit"
+    | "semi"
+    | "semi_disassemblable"
+    | "finished"
+    | "disassemblable"
+    | null;
   sale_price: number;
   purchase_price: number;
   is_active: boolean;
@@ -252,6 +258,7 @@ export interface MaterialOption {
   has_expiry_date?: boolean;
   require_expiry_on_inbound?: boolean;
   require_expiry_on_outbound?: boolean;
+  expiry_days?: number | null;
   has_serial_number?: boolean;
   require_serial_on_inbound?: boolean;
   require_serial_on_outbound?: boolean;

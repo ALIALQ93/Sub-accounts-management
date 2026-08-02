@@ -299,6 +299,23 @@ export const invoicePatternApi = {
     return data as InvoicePattern;
   },
 
+  async patternHasInvoices(patternId: string): Promise<boolean> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("invoice_pattern_has_invoices", {
+      p_pattern_id: patternId,
+    });
+    if (error) {
+      // توافق خلفي إن لم تُحدَّث القاعدة بعد
+      const { count, error: countError } = await supabase
+        .from("invoices")
+        .select("id", { count: "exact", head: true })
+        .eq("pattern_id", patternId);
+      throwIfSupabaseError(countError);
+      return (count ?? 0) > 0;
+    }
+    return Boolean(data);
+  },
+
   async listAllowedMaterialIds(patternId: string): Promise<string[]> {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase

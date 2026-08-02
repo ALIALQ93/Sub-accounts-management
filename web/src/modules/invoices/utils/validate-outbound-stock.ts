@@ -6,6 +6,7 @@ import {
   lotBalancesKey,
 } from "@/modules/invoices/services/invoice-stock-api";
 import { isOutboundStockMovement } from "@/modules/materials/utils/material-tracking-utils";
+import { explodesOnOutbound } from "@/modules/materials/utils/composite-mode";
 
 export function stockBalanceKey(materialId: string, warehouseId: string): string {
   return `${materialId}|${warehouseId}`;
@@ -122,7 +123,7 @@ export function validateOutboundStockLines(params: {
     // المنتج النهائي / القابل للتفكيك: نفحص رصيد التجميعية نفسها
     if (
       material?.material_kind === "composite" &&
-      (material.composite_mode ?? "kit") === "kit" &&
+      explodesOnOutbound(material.composite_mode) &&
       commercialKind !== "manufacturing" &&
       commercialKind !== "disassembly"
     ) {

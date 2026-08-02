@@ -8,6 +8,7 @@ import { MaterialBulkImportModal } from "@/modules/materials/components/material
 import { materialApi } from "@/modules/materials/services/material-api";
 import { getSectionContextMenu } from "@/modules/materials/utils/section-context-menus";
 import type { MaterialListItem } from "@/modules/materials/types";
+import { compositeModeLabel } from "@/modules/materials/utils/composite-mode";
 import type { PermissionKey } from "@/modules/settings/permissions/permission-catalog";
 import { ContextMenu } from "@/modules/ui/context-menu";
 
@@ -177,9 +178,10 @@ export default function MaterialsPage() {
                         )}
                       </td>
                       <td className="text-xs text-slate-600">
-                        {material.material_kind === "composite"
-                          ? "تجميعية"
-                          : "عادية"}
+                        {compositeModeLabel(
+                          material.material_kind,
+                          material.composite_mode,
+                        )}
                       </td>
                       <td className="text-xs text-slate-600">
                         {material.category_name_ar ?? "—"}

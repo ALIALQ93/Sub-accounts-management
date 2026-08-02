@@ -7,7 +7,8 @@ import type {
   StatementFilter,
 } from "@/modules/accounts/types";
 
-const BALANCE_SHEET_ROOTS = new Set(["1", "2", "3"]);
+/** جذور الميزانية — تشمل الحسابات الختامية في القوالب العراقية/السورية (8/9) */
+const BALANCE_SHEET_ROOTS = new Set(["1", "2", "3", "8", "9"]);
 const INCOME_STATEMENT_ROOTS = new Set(["4", "5", "6", "7"]);
 
 export function buildAccountsById(

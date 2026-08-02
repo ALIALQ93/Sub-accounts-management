@@ -8,8 +8,17 @@ export type SetupStepId =
   | "branch"
   | "accounts"
   | "inventory"
+  | "invoice_patterns"
   | "opening"
   | "finish";
+
+export type BusinessNature = "commercial" | "industrial" | "service";
+
+export const BUSINESS_NATURE_LABELS: Record<BusinessNature, string> = {
+  commercial: "تجاري",
+  industrial: "صناعي",
+  service: "خدمي",
+};
 
 export const SETUP_STEPS: Array<{ id: SetupStepId; title: string; description: string }> = [
   {
@@ -35,12 +44,17 @@ export const SETUP_STEPS: Array<{ id: SetupStepId; title: string; description: s
   {
     id: "accounts",
     title: "دليل الحسابات",
-    description: "قبول القالب الافتراضي",
+    description: "طبيعة الشركة وقالب الدليل",
   },
   {
     id: "inventory",
     title: "إعدادات المخزون",
     description: "الجرد والتكلفة قبل أول ترحيل",
+  },
+  {
+    id: "invoice_patterns",
+    title: "أنماط الفواتير",
+    description: "اختيار الأنماط المطلوبة من الكتالوج",
   },
   {
     id: "opening",
@@ -93,8 +107,39 @@ export interface SetupAdminForm {
 }
 
 export interface RootAccountSummary {
-  account_code: string;
+  code: string;
   name_ar: string;
+}
+
+export interface CoaTemplateSummary {
+  id: string;
+  code: string;
+  name_ar: string;
+  name_en: string | null;
+  standard: string;
+  supports_natures: string[];
+  sort_order: number;
+}
+
+export interface CoaTemplateAccountPreview {
+  code: string;
+  parent_code: string | null;
+  name_ar: string;
+  level: number;
+  is_postable: boolean;
+}
+
+export interface InvoicePatternCatalogItem {
+  id: string;
+  code: string;
+  name_ar: string;
+  name_en: string | null;
+  direction: "input" | "output";
+  commercial_kind: string;
+  is_return: boolean;
+  is_opening_stock: boolean;
+  sort_order: number;
+  paired_catalog_code: string | null;
 }
 
 export interface SetupWizardState {
@@ -105,8 +150,15 @@ export interface SetupWizardState {
   branchId: string | null;
   warehouseId: string | null;
   inventory: InventorySettingsFormValues;
-  accountsAccepted: boolean;
+  businessNature: BusinessNature | "";
+  selectedCoaTemplateCode: string;
+  coaApplied: boolean;
+  coaTemplates: CoaTemplateSummary[];
+  templatePreview: CoaTemplateAccountPreview[];
   rootAccounts: RootAccountSummary[];
+  patternCatalog: InvoicePatternCatalogItem[];
+  selectedPatternCodes: string[];
+  patternsApplied: boolean;
   schemaStatus: SchemaSetupStatus | null;
   schemaAccepted: boolean;
 }
@@ -130,4 +182,5 @@ export const EMPTY_INVENTORY_FORM: InventorySettingsFormValues = {
   cost_per_cost_center: false,
   cost_per_expiry_date: false,
   cost_per_serial_number: false,
+  manufacturing_produce_expiry_policy: "min_component",
 };

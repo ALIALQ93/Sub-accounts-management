@@ -72,6 +72,7 @@ function emptyMaterialForm(
     has_expiry_date: false,
     require_expiry_on_inbound: false,
     require_expiry_on_outbound: false,
+    expiry_days: null,
     has_serial_number: false,
     require_serial_on_inbound: false,
     require_serial_on_outbound: false,

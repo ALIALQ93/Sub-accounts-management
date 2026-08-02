@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import type { MaterialOption, MaterialUnitOption } from "@/modules/invoices/types";
 import type { InvoiceMaterialLineInput } from "@/modules/invoices/services/invoice-api";
 import {
@@ -27,11 +27,19 @@ import {
   showSerialOnLine,
   isOutboundStockMovement,
 } from "@/modules/materials/utils/material-tracking-utils";
+import {
+  canDisassembleConsume,
+  canManufactureProduce,
+} from "@/modules/materials/utils/composite-mode";
+import { applyProduceExpirySuggestions } from "@/modules/invoices/utils/suggest-produce-expiry";
 import { materialBomApi } from "@/modules/materials/services/material-bom-api";
 import type { ManufacturingLineRole } from "@/modules/invoices/types";
+import type { ManufacturingProduceExpiryPolicy } from "@/modules/materials/types";
 
 export type DraftMaterialLine = InvoiceMaterialLineInput & {
   clientId: string;
+  /** صلاحية إنتاج معدّلة يدوياً — لا تُستبدل باقتراح السياسة */
+  expiry_manual?: boolean;
 };
 
 export interface MaterialLineAttributeFlags {
@@ -61,6 +69,9 @@ interface InvoiceMaterialLinesTableProps {
   showOutboundStock?: boolean;
   referenceLineCaps?: Record<string, number> | null;
   lineAttributes?: MaterialLineAttributeFlags;
+  /** سياسة اقتراح صلاحية الإنتاج (تصنيع) */
+  produceExpiryPolicy?: ManufacturingProduceExpiryPolicy;
+  invoiceDate?: string;
   onChange: (lines: DraftMaterialLine[]) => void;
   onMaterialSelected: (materialId: string) => Promise<MaterialUnitOption[]>;
 }
@@ -111,6 +122,8 @@ export function InvoiceMaterialLinesTable({
   showOutboundStock = false,
   referenceLineCaps = null,
   lineAttributes,
+  produceExpiryPolicy = "min_component",
+  invoiceDate = "",
   onChange,
   onMaterialSelected,
 }: InvoiceMaterialLinesTableProps) {
@@ -137,8 +150,7 @@ export function InvoiceMaterialLinesTable({
         .filter((m) => {
           if (!m.is_active || m.material_kind !== "composite") return false;
           if (isManufacturing) {
-            const mode = m.composite_mode ?? "kit";
-            return mode === "finished" || mode === "disassemblable";
+            return canManufactureProduce(m.composite_mode);
           }
           return true;
         })
@@ -157,7 +169,7 @@ export function InvoiceMaterialLinesTable({
           (m) =>
             m.is_active &&
             m.material_kind === "composite" &&
-            (m.composite_mode ?? "kit") === "disassemblable",
+            canDisassembleConsume(m.composite_mode),
         )
         .map((m) => ({
           id: m.id,
@@ -171,6 +183,33 @@ export function InvoiceMaterialLinesTable({
     () => new Map(materials.map((m) => [m.id, m])),
     [materials],
   );
+
+  useEffect(() => {
+    if (!isManufacturing || readOnly || !invoiceDate) return;
+    const suggested = applyProduceExpirySuggestions(
+      lines,
+      materialById,
+      produceExpiryPolicy,
+      invoiceDate,
+    );
+    if (suggested !== lines) onChange(suggested);
+    // نعيد الاقتراح عند تغيّر صلاحيات الاستهلاك / سياسة / تاريخ / مواد الإنتاج
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- مقارنة مرجعية عبر applyProduceExpirySuggestions
+  }, [
+    isManufacturing,
+    readOnly,
+    invoiceDate,
+    produceExpiryPolicy,
+    materialById,
+    lines
+      .filter((l) => l.manufacturing_role === "consume")
+      .map((l) => `${l.clientId}:${l.expiry_date ?? ""}`)
+      .join("|"),
+    lines
+      .filter((l) => l.manufacturing_role === "produce")
+      .map((l) => `${l.clientId}:${l.material_id}:${l.expiry_manual ? 1 : 0}`)
+      .join("|"),
+  ]);
 
   const showExpiryColumn = useMemo(
     () =>
@@ -823,6 +862,10 @@ export function InvoiceMaterialLinesTable({
                               onChange={(e) =>
                                 updateLine(line.clientId, {
                                   expiry_date: e.target.value || null,
+                                  expiry_manual:
+                                    line.manufacturing_role === "produce"
+                                      ? true
+                                      : line.expiry_manual,
                                 })
                               }
                             >
@@ -849,6 +892,10 @@ export function InvoiceMaterialLinesTable({
                             onChange={(e) =>
                               updateLine(line.clientId, {
                                 expiry_date: e.target.value || null,
+                                expiry_manual:
+                                  line.manufacturing_role === "produce"
+                                    ? true
+                                    : line.expiry_manual,
                               })
                             }
                           />
@@ -1088,6 +1135,30 @@ export function InvoiceMaterialLinesTable({
                 >
                   تحميل مكوّنات من البطاقة
                 </button>
+                {isManufacturing && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleared = lines.map((line) =>
+                        line.manufacturing_role === "produce"
+                          ? { ...line, expiry_manual: false }
+                          : line,
+                      );
+                      onChange(
+                        applyProduceExpirySuggestions(
+                          cleared,
+                          materialById,
+                          produceExpiryPolicy,
+                          invoiceDate,
+                        ),
+                      );
+                    }}
+                    className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-800"
+                    title="يعيد اقتراح صلاحية أسطر الإنتاج حسب إعدادات المخزون"
+                  >
+                    إعادة اقتراح صلاحية الإنتاج
+                  </button>
+                )}
               </>
             ) : (
               <button

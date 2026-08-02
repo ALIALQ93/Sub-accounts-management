@@ -46,6 +46,7 @@ export default function EditInvoicePatternPage() {
   const [inputPatterns, setInputPatterns] = useState<InvoicePatternListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [coreFieldsLocked, setCoreFieldsLocked] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export default function EditInvoicePatternPage() {
           materialsData,
           categoriesData,
           patternsData,
+          hasInvoices,
         ] = await Promise.all([
           invoicePatternApi.getInvoicePattern(id),
           invoicePatternApi.getPatternConditions(id),
@@ -80,9 +82,11 @@ export default function EditInvoicePatternPage() {
           materialApi.listMaterials(),
           materialApi.listMaterialCategories(),
           invoicePatternApi.listInvoicePatterns(),
+          invoicePatternApi.patternHasInvoices(id),
         ]);
         if (!cancelled) {
           setPattern(patternData);
+          setCoreFieldsLocked(hasInvoices);
           setValues(
             patternToFormValues(
               patternData,
@@ -169,6 +173,7 @@ export default function EditInvoicePatternPage() {
             inputPatterns={inputPatterns}
             isSaving={isSaving}
             disabled={!canEdit}
+            coreFieldsLocked={coreFieldsLocked}
             error={error}
             onChange={setValues}
             onSubmit={() => void onSubmit()}

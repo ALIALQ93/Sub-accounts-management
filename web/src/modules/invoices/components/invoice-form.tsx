@@ -34,6 +34,8 @@ import {
   type WarehouseOption,
 } from "@/modules/invoices/services/invoice-pattern-api";
 import { materialApi } from "@/modules/invoices/services/material-api";
+import { inventorySettingsApi } from "@/modules/materials/services/inventory-settings-api";
+import type { ManufacturingProduceExpiryPolicy } from "@/modules/materials/types";
 import { salesRepApi } from "@/modules/invoices/services/sales-rep-api";
 import { transferApi } from "@/modules/invoices/services/transfer-api";
 import type {
@@ -271,6 +273,8 @@ export function InvoiceForm({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [salesReps, setSalesReps] = useState<SalesRepOption[]>([]);
+  const [produceExpiryPolicy, setProduceExpiryPolicy] =
+    useState<ManufacturingProduceExpiryPolicy>("min_component");
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -523,6 +527,7 @@ export function InvoiceForm({
           voucherApi.listCustomers(),
           voucherApi.listVendors(),
           salesRepApi.listSalesReps().catch(() => []),
+          inventorySettingsApi.getSettings().catch(() => null),
         ]);
 
         if (mode === "edit" && invoiceId) {
@@ -537,6 +542,7 @@ export function InvoiceForm({
             customersData,
             vendorsData,
             salesRepsData,
+            invSettings,
           ] = await sharedLoads;
           if (cancelled) return;
 
@@ -553,6 +559,9 @@ export function InvoiceForm({
           setBranches(branchesData);
           setWarehouses(warehousesData);
           setMaterials(materialsData);
+          if (invSettings?.manufacturing_produce_expiry_policy) {
+            setProduceExpiryPolicy(invSettings.manufacturing_produce_expiry_policy);
+          }
           setAccounts(accountsData);
           setCurrencies(currenciesData);
           setCostCenters(centersData);
@@ -630,6 +639,7 @@ export function InvoiceForm({
           customersData,
           vendorsData,
           salesRepsData,
+          invSettings,
         ] = await Promise.all([
           invoicePatternApi.getInvoicePattern(patternId),
           invoicePatternApi.listBranches(),
@@ -641,6 +651,7 @@ export function InvoiceForm({
           voucherApi.listCustomers(),
           voucherApi.listVendors(),
           salesRepApi.listSalesReps().catch(() => []),
+          inventorySettingsApi.getSettings().catch(() => null),
         ]);
 
         if (cancelled) return;
@@ -655,6 +666,9 @@ export function InvoiceForm({
         setBranches(branchesData);
         setWarehouses(warehousesData);
         setMaterials(materialsData);
+        if (invSettings?.manufacturing_produce_expiry_policy) {
+          setProduceExpiryPolicy(invSettings.manufacturing_produce_expiry_policy);
+        }
         setAccounts(accountsData);
         setCurrencies(currenciesData);
         setCostCenters(centersData);
@@ -1199,7 +1213,9 @@ export function InvoiceForm({
         description: description || null,
         inventory_transfer_id: inventoryTransferId || null,
         transfer_role: invoiceTransferRole || null,
-        materialLines: materialLines.map(({ clientId: _c, ...line }) => line),
+        materialLines: materialLines.map(
+          ({ clientId: _c, expiry_manual: _m, ...line }) => line,
+        ),
         accountLines: accountLines.map(({ clientId: _c, ...line }) => line),
       });
 
@@ -1866,6 +1882,8 @@ export function InvoiceForm({
             showOutboundStock={showOutboundStock && !readOnly}
             referenceLineCaps={referenceLineCaps}
             lineAttributes={lineAttrFlags}
+            produceExpiryPolicy={produceExpiryPolicy}
+            invoiceDate={invoiceDate}
             onChange={setMaterialLines}
             onMaterialSelected={loadUnits}
           />

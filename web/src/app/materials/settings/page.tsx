@@ -6,6 +6,7 @@ import { inventorySettingsApi } from "@/modules/materials/services/inventory-set
 import type {
   CompanyInventorySettings,
   InventorySettingsFormValues,
+  ManufacturingProduceExpiryPolicy,
 } from "@/modules/materials/types";
 
 const INVENTORY_METHOD_LABELS = {
@@ -20,6 +21,14 @@ const COSTING_METHOD_LABELS = {
   standard: "تكلفة معيارية",
 } as const;
 
+const MFG_EXPIRY_POLICY_LABELS: Record<ManufacturingProduceExpiryPolicy, string> =
+  {
+    min_component: "أضيق صلاحية بين أسطر الاستهلاك",
+    production_plus_days: "تاريخ التصنيع + مدة أيام بطاقة المنتج",
+    min_of_both: "الأضيق بين أضيق مكوّن و(إنتاج+أيام)",
+    manual: "يدوي دائماً — بلا اقتراح تلقائي",
+  };
+
 function toFormValues(settings: CompanyInventorySettings): InventorySettingsFormValues {
   return {
     inventory_method: settings.inventory_method ?? "",
@@ -28,6 +37,8 @@ function toFormValues(settings: CompanyInventorySettings): InventorySettingsForm
     cost_per_cost_center: settings.cost_per_cost_center,
     cost_per_expiry_date: settings.cost_per_expiry_date ?? false,
     cost_per_serial_number: settings.cost_per_serial_number ?? false,
+    manufacturing_produce_expiry_policy:
+      settings.manufacturing_produce_expiry_policy ?? "min_component",
   };
 }
 
@@ -42,6 +53,7 @@ export default function InventorySettingsPage() {
     cost_per_cost_center: false,
     cost_per_expiry_date: false,
     cost_per_serial_number: false,
+    manufacturing_produce_expiry_policy: "min_component",
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -75,9 +87,9 @@ export default function InventorySettingsPage() {
 
   const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!canEdit || locked) return;
+    if (!canEdit) return;
 
-    if (!values.inventory_method || !values.costing_method) {
+    if (!locked && (!values.inventory_method || !values.costing_method)) {
       setError("طريقة الجرد ونظام التكلفة مطلوبان.");
       return;
     }
@@ -89,7 +101,11 @@ export default function InventorySettingsPage() {
       const updated = await inventorySettingsApi.updateSettings(values);
       setSettings(updated);
       setValues(toFormValues(updated));
-      setSuccess("تم حفظ إعدادات الجرد.");
+      setSuccess(
+        locked
+          ? "تم حفظ سياسة صلاحية ناتج التصنيع."
+          : "تم حفظ إعدادات الجرد.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "فشل حفظ الإعدادات.");
     } finally {
@@ -259,18 +275,53 @@ export default function InventorySettingsPage() {
               وإظهاره في نمط الفاتورة. يُستخدم عند ترحيل الحركات المخزنية.
             </p>
 
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">صلاحية ناتج التصنيع (افتراضي)</span>
+              <select
+                value={values.manufacturing_produce_expiry_policy}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    manufacturing_produce_expiry_policy: event.target
+                      .value as ManufacturingProduceExpiryPolicy,
+                  }))
+                }
+                disabled={!canEdit || isSaving}
+                className="rounded-md border border-slate-300 px-3 py-2"
+              >
+                {(
+                  Object.entries(MFG_EXPIRY_POLICY_LABELS) as [
+                    ManufacturingProduceExpiryPolicy,
+                    string,
+                  ][]
+                ).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-500">
+                يُقترح تلقائياً على سطر الإنتاج في فاتورة التصنيع، مع إبقاء الحقل
+                قابلاً لتعديل المستخدم. هذا الإعداد لا يُقفَل مع أساس الجرد.
+              </span>
+            </label>
+
             {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
             {success && (
               <p className="text-sm text-[var(--success)]">{success}</p>
             )}
 
-            {canEdit && !locked && (
+            {canEdit && (
               <button
                 type="submit"
                 disabled={isSaving}
                 className="btn btn-primary w-fit"
               >
-                {isSaving ? "جاري الحفظ..." : "حفظ الإعدادات"}
+                {isSaving
+                  ? "جاري الحفظ..."
+                  : locked
+                    ? "حفظ سياسة صلاحية التصنيع"
+                    : "حفظ الإعدادات"}
               </button>
             )}
           </form>

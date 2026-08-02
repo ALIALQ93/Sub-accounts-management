@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { SearchSelectField } from "@/modules/vouchers/components/search-select-field";
 import type { MaterialListItem } from "@/modules/materials/types";
+import { compositeModeLabel } from "@/modules/materials/utils/composite-mode";
 
 interface MaterialSearchFieldProps {
   label?: string;
@@ -27,15 +28,18 @@ export function MaterialSearchField({
 }: MaterialSearchFieldProps) {
   const options = useMemo(
     () =>
-      materials.map((material) => ({
-        id: material.id,
-        label:
-          material.material_kind === "composite"
-            ? `${material.material_code} — ${material.name_ar} (تجميعية)`
-            : `${material.material_code} — ${material.name_ar}`,
-        sublabel: material.category_name_ar ?? undefined,
-        searchText: `${material.material_code} ${material.name_ar} ${material.name_en ?? ""} ${material.category_code ?? ""} ${material.category_name_ar ?? ""}`,
-      })),
+      materials.map((material) => {
+        const kindLabel = compositeModeLabel(
+          material.material_kind,
+          material.composite_mode,
+        );
+        return {
+          id: material.id,
+          label: `${material.material_code} — ${material.name_ar} (${kindLabel})`,
+          sublabel: material.category_name_ar ?? undefined,
+          searchText: `${material.material_code} ${material.name_ar} ${material.name_en ?? ""} ${material.category_code ?? ""} ${material.category_name_ar ?? ""} ${kindLabel}`,
+        };
+      }),
     [materials],
   );
 

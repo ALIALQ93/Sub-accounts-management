@@ -1,6 +1,17 @@
 export type MaterialKind = "normal" | "composite";
-export type CompositeMode = "kit" | "finished" | "disassemblable";
+/** kit=طقم | semi=نصف مصنّع | semi_disassemblable=نصف قابل للتفكيك | finished=نهائي | disassemblable=نهائي قابل للتفكيك */
+export type CompositeMode =
+  | "kit"
+  | "semi"
+  | "semi_disassemblable"
+  | "finished"
+  | "disassemblable";
 export type UnitConversionOp = "multiply" | "divide";
+export type ManufacturingProduceExpiryPolicy =
+  | "min_component"
+  | "production_plus_days"
+  | "min_of_both"
+  | "manual";
 
 export interface UnitCatalogItem {
   id: string;
@@ -40,6 +51,7 @@ export interface Material {
   has_expiry_date: boolean;
   require_expiry_on_inbound: boolean;
   require_expiry_on_outbound: boolean;
+  expiry_days: number | null;
   has_serial_number: boolean;
   require_serial_on_inbound: boolean;
   require_serial_on_outbound: boolean;
@@ -74,6 +86,7 @@ export interface MaterialFormValues {
   has_expiry_date: boolean;
   require_expiry_on_inbound: boolean;
   require_expiry_on_outbound: boolean;
+  expiry_days: number | null;
   has_serial_number: boolean;
   require_serial_on_inbound: boolean;
   require_serial_on_outbound: boolean;
@@ -190,6 +203,8 @@ export interface CompanyInventorySettings {
   cost_per_cost_center: boolean;
   cost_per_expiry_date: boolean;
   cost_per_serial_number: boolean;
+  /** سياسة اقتراح صلاحية سطر الإنتاج عند التصنيع — قابلة للتعديل بعد قفل الأساس */
+  manufacturing_produce_expiry_policy: ManufacturingProduceExpiryPolicy;
   track_quantity_on_movement: boolean;
   foundation_locked: boolean;
   foundation_locked_at: string | null;
@@ -203,4 +218,5 @@ export interface InventorySettingsFormValues {
   cost_per_cost_center: boolean;
   cost_per_expiry_date: boolean;
   cost_per_serial_number: boolean;
+  manufacturing_produce_expiry_policy: ManufacturingProduceExpiryPolicy;
 }

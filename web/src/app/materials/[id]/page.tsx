@@ -19,6 +19,7 @@ import type {
 } from "@/modules/materials/types";
 import { voucherApi } from "@/modules/vouchers/services/voucher-api";
 import type { Account } from "@/modules/vouchers/types";
+import { compositeModeLabel } from "@/modules/materials/utils/composite-mode";
 
 function toFormValues(material: Material): MaterialFormValues {
   return {
@@ -46,6 +47,7 @@ function toFormValues(material: Material): MaterialFormValues {
     has_expiry_date: material.has_expiry_date,
     require_expiry_on_inbound: material.require_expiry_on_inbound,
     require_expiry_on_outbound: material.require_expiry_on_outbound,
+    expiry_days: material.expiry_days ?? null,
     has_serial_number: material.has_serial_number,
     require_serial_on_inbound: material.require_serial_on_inbound,
     require_serial_on_outbound: material.require_serial_on_outbound,
@@ -184,7 +186,9 @@ export default function EditMaterialPage() {
         {material && (
           <span className="ms-2 text-base font-normal text-slate-500">
             {material.material_code} — {material.name_ar}
-            {material.material_kind === "composite" ? " (تجميعية)" : ""}
+            {" ("}
+            {compositeModeLabel(material.material_kind, material.composite_mode)}
+            {")"}
           </span>
         )}
       </h1>

@@ -10,7 +10,9 @@ import type { Currency } from "@/modules/currencies/types";
 import { FISCAL_MONTHS } from "@/modules/settings/types";
 import { setupApi, emptyWizardState } from "@/modules/setup/services/setup-api";
 import {
+  BUSINESS_NATURE_LABELS,
   SETUP_STEPS,
+  type BusinessNature,
   type SetupStepId,
   type SetupWizardState,
 } from "@/modules/setup/types";
@@ -23,6 +25,13 @@ const INVENTORY_METHOD_LABELS = {
 const COSTING_METHOD_LABELS = {
   weighted_avg: "متوسط مرجح",
   standard: "تكلفة معيارية",
+} as const;
+
+const MFG_EXPIRY_POLICY_LABELS = {
+  min_component: "أضيق صلاحية بين أسطر الاستهلاك",
+  production_plus_days: "تاريخ التصنيع + أيام بطاقة المنتج",
+  min_of_both: "الأضيق بين المكوّنات و(إنتاج+أيام)",
+  manual: "يدوي — بلا اقتراح تلقائي",
 } as const;
 
 export default function SetupWizardPage() {
@@ -152,14 +161,35 @@ export default function SetupWizardPage() {
           break;
         }
         case "accounts": {
-          if (!state.accountsAccepted) {
-            throw new Error("يجب قبول دليل الحسابات الافتراضي للمتابعة.");
+          if (!state.businessNature) {
+            throw new Error("اختر طبيعة الشركة.");
           }
+          if (!state.selectedCoaTemplateCode) {
+            throw new Error("اختر قالب دليل الحسابات.");
+          }
+          await setupApi.applyCoaTemplate(
+            state.selectedCoaTemplateCode,
+            state.businessNature as BusinessNature,
+          );
+          const roots = await setupApi.listRootAccounts();
+          setState((current) => ({
+            ...current,
+            coaApplied: true,
+            rootAccounts: roots,
+          }));
           goNext();
           break;
         }
         case "inventory": {
           await setupApi.saveInventory(state.inventory);
+          goNext();
+          break;
+        }
+        case "invoice_patterns": {
+          if (state.selectedPatternCodes.length > 0) {
+            await setupApi.applySelectedInvoicePatterns(state.selectedPatternCodes);
+          }
+          setState((current) => ({ ...current, patternsApplied: true }));
           goNext();
           break;
         }
@@ -568,39 +598,181 @@ export default function SetupWizardPage() {
 
             {step.id === "accounts" && (
               <>
-                <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
-                  {state.rootAccounts.map((account) => (
-                    <li
-                      key={account.account_code}
-                      className="flex items-center justify-between px-3 py-2 text-sm"
-                    >
-                      <span className="font-medium text-[var(--brand-navy)]">
-                        {account.name_ar}
-                      </span>
-                      <span className="font-mono text-slate-500" dir="ltr">
-                        {account.account_code}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <label className="flex items-start gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={state.accountsAccepted}
+                <label className="grid gap-1 text-sm">
+                  <span className="font-medium">طبيعة الشركة *</span>
+                  <select
+                    value={state.businessNature}
                     onChange={(event) =>
                       setState((current) => ({
                         ...current,
-                        accountsAccepted: event.target.checked,
+                        businessNature: event.target.value as BusinessNature | "",
                       }))
                     }
+                    className="rounded-md border border-slate-300 px-3 py-2"
                     disabled={!isAdmin || isSaving}
-                    className="mt-1"
-                  />
-                  <span>
-                    أقبل دليل الحسابات الافتراضي (يمكن إضافة حسابات فرعية لاحقاً من
-                    شاشة الحسابات).
+                  >
+                    <option value="">— اختر —</option>
+                    {(Object.keys(BUSINESS_NATURE_LABELS) as BusinessNature[]).map(
+                      (key) => (
+                        <option key={key} value={key}>
+                          {BUSINESS_NATURE_LABELS[key]}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <span className="text-xs text-slate-500">
+                    تجاري: متاجرة + أ.خ + ميزانية · صناعي: + تشغيل · خدمي: أ.خ + ميزانية
                   </span>
                 </label>
+
+                <label className="grid gap-1 text-sm">
+                  <span className="font-medium">قالب دليل الحسابات *</span>
+                  <select
+                    value={state.selectedCoaTemplateCode}
+                    onChange={async (event) => {
+                      const code = event.target.value;
+                      const template = state.coaTemplates.find((t) => t.code === code);
+                      setState((current) => ({
+                        ...current,
+                        selectedCoaTemplateCode: code,
+                      }));
+                      if (template) {
+                        const preview = await setupApi.listTemplateAccounts(template.id);
+                        setState((current) => ({
+                          ...current,
+                          templatePreview: preview,
+                        }));
+                      }
+                    }}
+                    className="rounded-md border border-slate-300 px-3 py-2"
+                    disabled={!isAdmin || isSaving}
+                  >
+                    {state.coaTemplates
+                      .filter(
+                        (t) =>
+                          !state.businessNature ||
+                          t.supports_natures.includes(state.businessNature),
+                      )
+                      .map((template) => (
+                        <option key={template.id} value={template.code}>
+                          {template.name_ar}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                {state.templatePreview.length > 0 && (
+                  <div className="max-h-56 overflow-auto rounded-lg border border-slate-200">
+                    <ul className="divide-y divide-slate-100 text-sm">
+                      {state.templatePreview.map((account) => (
+                        <li
+                          key={account.code}
+                          className="flex items-center justify-between px-3 py-1.5"
+                          style={{ paddingInlineStart: `${8 + account.level * 12}px` }}
+                        >
+                          <span className="text-[var(--brand-navy)]">{account.name_ar}</span>
+                          <span className="font-mono text-xs text-slate-500" dir="ltr">
+                            {account.code}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {state.coaApplied && state.rootAccounts.length > 0 && (
+                  <p className="text-xs text-emerald-700">
+                    تم تطبيق قالب سابقاً — إعادة التطبيق ستستبدل الدليل إن لم توجد قيود.
+                  </p>
+                )}
+              </>
+            )}
+
+            {step.id === "invoice_patterns" && (
+              <>
+                <p className="text-sm text-slate-600">
+                  اختر الأنماط التي تحتاجها الآن. يمكن إضافة المزيد لاحقاً من شاشة أنماط
+                  الفواتير. لا يُزرع الكتالوج كاملاً تلقائياً.
+                </p>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <button
+                    type="button"
+                    className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50"
+                    disabled={!isAdmin || isSaving}
+                    onClick={() =>
+                      setState((current) => ({
+                        ...current,
+                        selectedPatternCodes: current.patternCatalog.map((p) => p.code),
+                      }))
+                    }
+                  >
+                    تحديد الكل
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-50"
+                    disabled={!isAdmin || isSaving}
+                    onClick={() =>
+                      setState((current) => ({
+                        ...current,
+                        selectedPatternCodes: [],
+                      }))
+                    }
+                  >
+                    إلغاء التحديد
+                  </button>
+                </div>
+                <ul className="max-h-72 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
+                  {state.patternCatalog.map((item) => {
+                    const checked = state.selectedPatternCodes.includes(item.code);
+                    return (
+                      <li key={item.code}>
+                        <label className="flex cursor-pointer items-start gap-2 px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={checked}
+                            disabled={!isAdmin || isSaving}
+                            onChange={(event) => {
+                              setState((current) => {
+                                const next = new Set(current.selectedPatternCodes);
+                                if (event.target.checked) {
+                                  next.add(item.code);
+                                  if (item.paired_catalog_code) {
+                                    next.add(item.paired_catalog_code);
+                                  }
+                                  if (item.code === "transfer_in") {
+                                    next.add("transfer_out");
+                                  }
+                                } else {
+                                  next.delete(item.code);
+                                }
+                                return {
+                                  ...current,
+                                  selectedPatternCodes: Array.from(next),
+                                };
+                              });
+                            }}
+                          />
+                          <span className="flex-1">
+                            <span className="font-medium text-[var(--brand-navy)]">
+                              {item.name_ar}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-slate-500">
+                              {item.commercial_kind}
+                              {item.is_opening_stock ? " · بضاعة أول المدة" : ""}
+                              {item.is_return ? " · مرتجع" : ""}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="text-xs text-slate-500">
+                  المحدد: {state.selectedPatternCodes.length} — يمكن المتابعة بدون اختيار
+                  وإضافة الأنماط لاحقاً.
+                </p>
               </>
             )}
 
@@ -697,6 +869,39 @@ export default function SetupWizardPage() {
                   />
                   تكلفة مختلفة لكل مركز كلفة
                 </label>
+                <label className="grid gap-1 text-sm">
+                  <span className="font-medium">صلاحية ناتج التصنيع (افتراضي)</span>
+                  <select
+                    value={state.inventory.manufacturing_produce_expiry_policy}
+                    onChange={(event) =>
+                      setState((current) => ({
+                        ...current,
+                        inventory: {
+                          ...current.inventory,
+                          manufacturing_produce_expiry_policy: event.target
+                            .value as SetupWizardState["inventory"]["manufacturing_produce_expiry_policy"],
+                        },
+                      }))
+                    }
+                    className="rounded-md border border-slate-300 px-3 py-2"
+                    disabled={!isAdmin || isSaving}
+                  >
+                    {(
+                      Object.entries(MFG_EXPIRY_POLICY_LABELS) as [
+                        keyof typeof MFG_EXPIRY_POLICY_LABELS,
+                        string,
+                      ][]
+                    ).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-slate-500">
+                    يُقترح على سطر الإنتاج في فاتورة التصنيع مع إبقاء التعديل اليدوي.
+                    يمكن تغييره لاحقاً من إعدادات المخزون حتى بعد قفل الأساس.
+                  </span>
+                </label>
               </>
             )}
 
@@ -748,6 +953,24 @@ export default function SetupWizardPage() {
                   </strong>
                 </p>
                 <p>
+                  <span className="text-slate-500">دليل الحسابات:</span>{" "}
+                  <strong>
+                    {state.businessNature
+                      ? BUSINESS_NATURE_LABELS[state.businessNature as BusinessNature]
+                      : "—"}
+                    {" / "}
+                    {state.selectedCoaTemplateCode || "—"}
+                  </strong>
+                </p>
+                <p>
+                  <span className="text-slate-500">أنماط الفواتير:</span>{" "}
+                  <strong>
+                    {state.selectedPatternCodes.length > 0
+                      ? `${state.selectedPatternCodes.length} نمط`
+                      : "لم يُختر (يمكن لاحقاً)"}
+                  </strong>
+                </p>
+                <p>
                   <span className="text-slate-500">الجرد / التكلفة:</span>{" "}
                   <strong>
                     {state.inventory.inventory_method
@@ -761,6 +984,16 @@ export default function SetupWizardPage() {
                           state.inventory.costing_method as keyof typeof COSTING_METHOD_LABELS
                         ]
                       : "—"}
+                  </strong>
+                </p>
+                <p>
+                  <span className="text-slate-500">صلاحية ناتج التصنيع:</span>{" "}
+                  <strong>
+                    {
+                      MFG_EXPIRY_POLICY_LABELS[
+                        state.inventory.manufacturing_produce_expiry_policy
+                      ]
+                    }
                   </strong>
                 </p>
                 <p className="text-xs text-slate-500">

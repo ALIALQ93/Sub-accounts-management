@@ -9,6 +9,12 @@ import { UnitFormModal } from "@/modules/materials/components/unit-form-modal";
 import { materialApi } from "@/modules/materials/services/material-api";
 import { unitApi } from "@/modules/materials/services/unit-api";
 import { computeFactorToBase } from "@/modules/materials/utils/unit-conversion";
+import {
+  compositeModeHint,
+  materialFromUi,
+  uiFromMaterial,
+  type MaterialLifecycleUi,
+} from "@/modules/materials/utils/composite-mode";
 import type {
   MaterialBomFormValues,
   MaterialCategory,
@@ -617,59 +623,85 @@ export function MaterialForm({
           <label className="grid gap-1 text-sm">
             <span className="font-medium">نوع المادة</span>
             <select
-              value={values.material_kind}
+              value={
+                uiFromMaterial(values.material_kind, values.composite_mode)
+                  .lifecycle
+              }
               onChange={(event) => {
-                const kind = event.target.value as "normal" | "composite";
+                const lifecycle = event.target.value as MaterialLifecycleUi;
+                const { disassemblable } = uiFromMaterial(
+                  values.material_kind,
+                  values.composite_mode,
+                );
+                const next = materialFromUi(
+                  lifecycle,
+                  lifecycle === "semi" || lifecycle === "finished"
+                    ? disassemblable
+                    : false,
+                );
                 setValues((current) => ({
                   ...current,
-                  material_kind: kind,
-                  composite_mode:
-                    kind === "composite"
-                      ? current.composite_mode ?? "kit"
-                      : null,
+                  material_kind: next.material_kind,
+                  composite_mode: next.composite_mode,
                 }));
-                if (kind === "normal") setBomRows([]);
-                if (kind === "composite" && activeTab === "bom") {
-                  /* keep */
-                } else if (kind !== "composite" && activeTab === "bom") {
+                if (next.material_kind === "normal") setBomRows([]);
+                if (
+                  next.material_kind !== "composite" &&
+                  activeTab === "bom"
+                ) {
                   setActiveTab("specifications");
                 }
               }}
               disabled={!canEdit || isSaving}
               className="rounded-md border border-slate-300 px-3 py-2"
             >
-              <option value="normal">عادية</option>
-              <option value="composite">تجميعية</option>
+              <option value="simple">بسيطة</option>
+              <option value="kit">طقم — يُفك عند البيع/الإخراج</option>
+              <option value="semi">نصف مصنّع</option>
+              <option value="finished">منتج نهائي</option>
             </select>
           </label>
-          {values.material_kind === "composite" && (
-            <label className="grid gap-1 text-sm md:col-span-2">
-              <span className="font-medium">سلوك التجميع / التفكيك</span>
+          {(uiFromMaterial(values.material_kind, values.composite_mode)
+            .lifecycle === "semi" ||
+            uiFromMaterial(values.material_kind, values.composite_mode)
+              .lifecycle === "finished") && (
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">قابلية التفكيك</span>
               <select
-                value={values.composite_mode ?? "kit"}
-                onChange={(event) =>
+                value={
+                  uiFromMaterial(values.material_kind, values.composite_mode)
+                    .disassemblable
+                    ? "yes"
+                    : "no"
+                }
+                onChange={(event) => {
+                  const lifecycle = uiFromMaterial(
+                    values.material_kind,
+                    values.composite_mode,
+                  ).lifecycle;
+                  if (lifecycle !== "semi" && lifecycle !== "finished") return;
+                  const next = materialFromUi(
+                    lifecycle,
+                    event.target.value === "yes",
+                  );
                   setValues((current) => ({
                     ...current,
-                    composite_mode: event.target.value as
-                      | "kit"
-                      | "finished"
-                      | "disassemblable",
-                  }))
-                }
+                    material_kind: next.material_kind,
+                    composite_mode: next.composite_mode,
+                  }));
+                }}
                 disabled={!canEdit || isSaving}
                 className="rounded-md border border-slate-300 px-3 py-2"
               >
-                <option value="kit">
-                  طقم — يُفك عند البيع/الإخراج (استهلاك المكوّنات)
-                </option>
-                <option value="finished">
-                  منتج نهائي — بدون تفكيك (مثل برجر المطعم)
-                </option>
-                <option value="disassemblable">
-                  قابل للتفكيك — فصل المكوّنات مع تسجيل التالف
-                </option>
+                <option value="no">غير قابل للتفكيك</option>
+                <option value="yes">قابل للتفكيك</option>
               </select>
             </label>
+          )}
+          {values.material_kind === "composite" && (
+            <p className="md:col-span-2 text-xs text-slate-600">
+              {compositeModeHint(values.composite_mode)}
+            </p>
           )}
         </div>
       </section>
@@ -811,11 +843,7 @@ export function MaterialForm({
               </label>
               {values.material_kind === "composite" && (
                 <p className="md:col-span-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  {values.composite_mode === "finished"
-                    ? "منتج نهائي: يُخزَّن رصيد للمادة التجميعية نفسها ولا تُفك عند البيع. مناسب للتصنيع (مطاعم)."
-                    : values.composite_mode === "disassemblable"
-                      ? "قابل للتفكيك: يُخزَّن كمنتج مجمّع، ويمكن تفكيكه لاحقاً عبر فاتورة «تفكيك» مع تحديد الكميات التالفة."
-                      : "طقم: عند البيع/الإخراج يُستهلك مخزون المكوّنات وفق بطاقة التجميع — لا يُخزَّن رصيد للأب."}
+                  {compositeModeHint(values.composite_mode)}
                 </p>
               )}
             </div>
@@ -1191,6 +1219,9 @@ export function MaterialForm({
                           require_expiry_on_outbound: event.target.checked
                             ? current.require_expiry_on_outbound
                             : false,
+                          expiry_days: event.target.checked
+                            ? current.expiry_days
+                            : null,
                         }))
                       }
                       disabled={!canEdit || isSaving}
@@ -1224,6 +1255,31 @@ export function MaterialForm({
                       disabled={!canEdit || isSaving || !values.has_expiry_date}
                     />
                     <span>إجبار تاريخ انتهاء الصلاحية عند الإخراج</span>
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    <span className="font-medium">مدة الصلاحية الافتراضية (أيام)</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={values.expiry_days ?? ""}
+                      onChange={(event) =>
+                        setValues((current) => ({
+                          ...current,
+                          expiry_days:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                        }))
+                      }
+                      disabled={!canEdit || isSaving || !values.has_expiry_date}
+                      className="rounded-md border border-slate-300 px-3 py-2 font-mono"
+                      placeholder="مثال: 2"
+                    />
+                    <span className="text-xs text-slate-500">
+                      تُستخدم عند سياسة التصنيع «تاريخ الإنتاج + أيام» أو «الأضيق
+                      بينهما».
+                    </span>
                   </label>
                 </div>
               </fieldset>

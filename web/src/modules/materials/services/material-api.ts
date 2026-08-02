@@ -11,6 +11,7 @@ import type {
   MaterialUnitFormValues,
 } from "@/modules/materials/types";
 import { computeFactorToBase } from "@/modules/materials/utils/unit-conversion";
+import { parseCompositeMode } from "@/modules/materials/utils/composite-mode";
 import type { PostgrestError } from "@supabase/supabase-js";
 
 function throwIfSupabaseError(error: PostgrestError | null): void {
@@ -142,12 +143,7 @@ function mapMaterial(row: Material & { min_stock?: number | null }): Material {
   return {
     ...row,
     material_kind: row.material_kind === "composite" ? "composite" : "normal",
-    composite_mode:
-      mode === "finished" || mode === "disassemblable" || mode === "kit"
-        ? mode
-        : row.material_kind === "composite"
-          ? "kit"
-          : null,
+    composite_mode: parseCompositeMode(mode, row.material_kind),
     purchase_price: Number(row.purchase_price),
     sale_price: Number(row.sale_price),
     min_stock: Number(row.min_stock ?? 0),
@@ -162,6 +158,10 @@ function mapMaterial(row: Material & { min_stock?: number | null }): Material {
     has_expiry_date: Boolean(row.has_expiry_date),
     require_expiry_on_inbound: Boolean(row.require_expiry_on_inbound),
     require_expiry_on_outbound: Boolean(row.require_expiry_on_outbound),
+    expiry_days:
+      row.expiry_days == null || Number.isNaN(Number(row.expiry_days))
+        ? null
+        : Number(row.expiry_days),
     has_serial_number: Boolean(row.has_serial_number),
     require_serial_on_inbound: Boolean(row.require_serial_on_inbound),
     require_serial_on_outbound: Boolean(row.require_serial_on_outbound),
@@ -222,7 +222,11 @@ function buildMaterialInsertPayload(
     has_expiry_date: payload.has_expiry_date,
     require_expiry_on_inbound: payload.require_expiry_on_inbound,
     require_expiry_on_outbound: payload.require_expiry_on_outbound,
-    expiry_days: null,
+    expiry_days: payload.has_expiry_date
+      ? payload.expiry_days != null && payload.expiry_days > 0
+        ? payload.expiry_days
+        : null
+      : null,
     has_serial_number: payload.has_serial_number,
     require_serial_on_inbound: payload.require_serial_on_inbound,
     require_serial_on_outbound: payload.require_serial_on_outbound,
@@ -340,6 +344,14 @@ function buildMaterialPatch(
   }
   if (payload.require_expiry_on_outbound != null) {
     patch.require_expiry_on_outbound = payload.require_expiry_on_outbound;
+  }
+  if (payload.expiry_days !== undefined) {
+    patch.expiry_days =
+      payload.has_expiry_date === false
+        ? null
+        : payload.expiry_days != null && payload.expiry_days > 0
+          ? payload.expiry_days
+          : null;
   }
   if (payload.has_serial_number != null) {
     patch.has_serial_number = payload.has_serial_number;

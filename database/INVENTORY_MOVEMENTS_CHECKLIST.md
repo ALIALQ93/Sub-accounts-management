@@ -14,8 +14,25 @@
 | `return_purchase` | إخراج (−) | مرتجع مشتريات |
 | `opening_stock` | إدخال (+) | رصيد افتتاحي |
 | `adjustment` | ± | تسوية مخزون |
+| `manufacture_consume` | إخراج (−) | تصنيع — استهلاك مكوّن |
+| `manufacture_produce` | إدخال (+) | تصنيع — إدخال منتج (semi/finished ± تفكيك) |
+| `disassemble_consume` | إخراج (−) | تفكيك — إخراج منتج قابل للتفكيك |
+| `disassemble_produce` | إدخال (+) | تفكيك — إدخال مكوّن مسترد |
 
 الرصيد والتكلفة = `SUM` لحظي على هذا الدفتر (لا يوجد جدول رصيد مُخزَّن حالياً).
+
+## `composite_mode` (بطاقة المادة)
+
+| القيمة | المرحلة | تفكيك؟ | بيع | produce تصنيع |
+|--------|---------|--------|-----|----------------|
+| `null` (+ `normal`) | بسيطة | — | ممكن | لا |
+| `kit` | طقم | — | تفجير BOM | لا |
+| `semi` | نصف مصنّع | لا | نادر | نعم |
+| `semi_disassemblable` | نصف مصنّع | نعم | نادر | نعم |
+| `finished` | نهائي | لا | وحدة | نعم |
+| `disassemblable` | نهائي | نعم | وحدة | نعم |
+
+صلاحية ناتج التصنيع تُقترح حسب `company_inventory_settings.manufacturing_produce_expiry_policy` مع تعديل يدوي على سطر الإنتاج.
 
 ## مواضع الإدراج في `post_invoice` (تحقق يدوياً)
 
@@ -27,11 +44,13 @@
 4. مناقلة واردة (`transfer_in`) — راعِ `qty_received` و`quantity_base_delta`
 5. مرتجع بيع (`return_sale`)
 6. مرتجع شراء (`return_purchase`)
-7. أي مسار إضافي أُضيف لاحقاً في نفس الدالة
+7. تصنيع (`manufacture_consume` / `manufacture_produce`) عبر `post_invoice_apply_manufacturing`
+8. تفكيك (`disassemble_consume` / `disassemble_produce`) عبر `post_invoice_apply_disassembly`
+9. أي مسار إضافي أُضيف لاحقاً في نفس الدالة
 
 ## تريغرز `BEFORE INSERT` (الترتيب الأبجدي مهم)
 
-1. `trg_inventory_movements_00_explode_composite` — تفجير مركّب
+1. `trg_inventory_movements_00_explode_composite` — تفجير مركّب (**kit فقط**؛ يتخطّى حركات التصنيع/التفكيك)
 2. `trg_inventory_movements_05_fill_tracking` — نسخ صلاحية/تسلسلي من سطر الفاتورة
 3. `trg_inventory_movements_apply_invoice_line_cost` — تكلفة السطر
 4. `trg_inventory_movements_enforce_stock` — فحص رصيد المادة/المستودع فقط حالياً

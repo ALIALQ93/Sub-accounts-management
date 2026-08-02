@@ -11,6 +11,10 @@ import type {
   UserProfile,
 } from "@/modules/settings/types";
 import type {
+  BusinessNature,
+  CoaTemplateAccountPreview,
+  CoaTemplateSummary,
+  InvoicePatternCatalogItem,
   RootAccountSummary,
   SchemaSetupStatus,
   SetupAdminForm,
@@ -74,7 +78,6 @@ export const setupApi = {
       .maybeSingle();
 
     if (error) {
-      // عمود ناقص أو خطأ مؤقت — لا نُقفل النظام
       return true;
     }
 
@@ -100,17 +103,99 @@ export const setupApi = {
     return mapSchemaStatus((data ?? null) as Record<string, unknown> | null);
   },
 
+  async listCoaTemplates(): Promise<CoaTemplateSummary[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("coa_templates")
+      .select("id, code, name_ar, name_en, standard, supports_natures, sort_order")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    throwIfError(error);
+    return (data ?? []).map((row) => ({
+      id: String(row.id),
+      code: String(row.code),
+      name_ar: String(row.name_ar),
+      name_en: (row.name_en as string | null) ?? null,
+      standard: String(row.standard),
+      supports_natures: Array.isArray(row.supports_natures)
+        ? (row.supports_natures as string[])
+        : [],
+      sort_order: Number(row.sort_order ?? 0),
+    }));
+  },
+
+  async listTemplateAccounts(templateId: string): Promise<CoaTemplateAccountPreview[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("coa_template_accounts")
+      .select("code, parent_code, name_ar, level, is_postable")
+      .eq("template_id", templateId)
+      .order("sort_order", { ascending: true })
+      .order("code", { ascending: true });
+    throwIfError(error);
+    return (data ?? []).map((row) => ({
+      code: String(row.code),
+      parent_code: (row.parent_code as string | null) ?? null,
+      name_ar: String(row.name_ar),
+      level: Number(row.level ?? 1),
+      is_postable: Boolean(row.is_postable),
+    }));
+  },
+
+  async applyCoaTemplate(templateCode: string, nature: BusinessNature) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("apply_coa_template", {
+      p_template_code: templateCode,
+      p_nature: nature,
+    });
+    throwIfError(error);
+    return data as { ok?: boolean; accounts_created?: number; roles?: string[] };
+  },
+
+  async listPatternCatalog(): Promise<InvoicePatternCatalogItem[]> {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("invoice_pattern_catalog")
+      .select(
+        "id, code, name_ar, name_en, direction, commercial_kind, is_return, is_opening_stock, sort_order, paired_catalog_code",
+      )
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+    throwIfError(error);
+    return (data ?? []) as InvoicePatternCatalogItem[];
+  },
+
+  async applySelectedInvoicePatterns(codes: string[]) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.rpc("apply_selected_invoice_patterns", {
+      p_codes: codes,
+    });
+    throwIfError(error);
+    return data as { ok?: boolean; created?: number };
+  },
+
   async loadWizardState(): Promise<SetupWizardState> {
-    const [company, inventory, branches, warehouses, profile, rootAccounts, schemaStatus] =
-      await Promise.all([
-        settingsApi.getCompanySettings(),
-        inventorySettingsApi.getSettings(),
-        branchApi.listBranches(),
-        warehouseApi.listWarehouses(),
-        settingsApi.getCurrentProfile(),
-        this.listRootAccounts(),
-        this.getSchemaSetupStatus(),
-      ]);
+    const [
+      company,
+      inventory,
+      branches,
+      warehouses,
+      profile,
+      rootAccounts,
+      schemaStatus,
+      coaTemplates,
+      patternCatalog,
+    ] = await Promise.all([
+      settingsApi.getCompanySettings(),
+      inventorySettingsApi.getSettings(),
+      branchApi.listBranches(),
+      warehouseApi.listWarehouses(),
+      settingsApi.getCurrentProfile(),
+      this.listRootAccounts(),
+      this.getSchemaSetupStatus(),
+      this.listCoaTemplates(),
+      this.listPatternCatalog(),
+    ]);
 
     const head =
       branches.find((branch) => branch.is_head_office) ?? branches[0] ?? null;
@@ -120,6 +205,18 @@ export const setupApi = {
         : null) ??
       warehouses[0] ??
       null;
+
+    const nature = (company.business_nature ?? "") as BusinessNature | "";
+    const templateCode =
+      coaTemplates.find((t) => t.id === company.coa_template_id)?.code ??
+      coaTemplates[0]?.code ??
+      "simplified";
+
+    let templatePreview: CoaTemplateAccountPreview[] = [];
+    const selectedTemplate = coaTemplates.find((t) => t.code === templateCode);
+    if (selectedTemplate) {
+      templatePreview = await this.listTemplateAccounts(selectedTemplate.id);
+    }
 
     return {
       company: {
@@ -153,9 +250,18 @@ export const setupApi = {
         cost_per_cost_center: inventory.cost_per_cost_center,
         cost_per_expiry_date: inventory.cost_per_expiry_date ?? false,
         cost_per_serial_number: inventory.cost_per_serial_number ?? false,
+        manufacturing_produce_expiry_policy:
+          inventory.manufacturing_produce_expiry_policy ?? "min_component",
       },
-      accountsAccepted: false,
+      businessNature: nature,
+      selectedCoaTemplateCode: templateCode,
+      coaApplied: Boolean(company.coa_template_id),
+      coaTemplates,
+      templatePreview,
       rootAccounts,
+      patternCatalog,
+      selectedPatternCodes: [],
+      patternsApplied: false,
       schemaStatus,
       schemaAccepted: schemaStatus.ok,
     };
@@ -165,11 +271,14 @@ export const setupApi = {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase
       .from("accounts")
-      .select("account_code, name_ar")
+      .select("code, name_ar")
       .is("parent_id", null)
-      .order("account_code", { ascending: true });
+      .order("code", { ascending: true });
     throwIfError(error);
-    return (data ?? []) as RootAccountSummary[];
+    return (data ?? []).map((row) => ({
+      code: String(row.code),
+      name_ar: String(row.name_ar),
+    }));
   },
 
   async saveCompany(values: CompanySettingsFormValues): Promise<CompanySettings> {
@@ -279,8 +388,15 @@ export function emptyWizardState(): SetupWizardState {
     branchId: null,
     warehouseId: null,
     inventory: { ...EMPTY_INVENTORY_FORM },
-    accountsAccepted: false,
+    businessNature: "",
+    selectedCoaTemplateCode: "simplified",
+    coaApplied: false,
+    coaTemplates: [],
+    templatePreview: [],
     rootAccounts: [],
+    patternCatalog: [],
+    selectedPatternCodes: [],
+    patternsApplied: false,
     schemaStatus: null,
     schemaAccepted: false,
   };
